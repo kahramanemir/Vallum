@@ -3,6 +3,7 @@ mod ansi;
 mod audit;
 mod cli;
 mod executor;
+mod metrics;
 mod scrubber;
 mod truncator;
 mod whitespace;
