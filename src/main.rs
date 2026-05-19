@@ -4,6 +4,7 @@ mod audit;
 mod cli;
 mod executor;
 mod metrics;
+mod optimizer;
 mod scrubber;
 mod truncator;
 mod whitespace;

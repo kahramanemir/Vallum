@@ -1,0 +1,53 @@
+// src/optimizer/mod.rs
+pub mod git_status;
+
+pub trait CommandOptimizer {
+    fn name(&self) -> &'static str;
+    fn matches(&self, cmd: &str, args: &[String]) -> bool;
+    fn optimize(&self, input: &str) -> Option<String>;
+}
+
+pub fn dispatch(
+    cmd: &str,
+    args: &[String],
+    input: &str,
+) -> Option<(String, &'static str)> {
+    let optimizers: Vec<Box<dyn CommandOptimizer>> = vec![
+        Box::new(git_status::GitStatusOptimizer),
+    ];
+
+    for opt in &optimizers {
+        if opt.matches(cmd, args) {
+            if let Some(out) = opt.optimize(input) {
+                return Some((out, opt.name()));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct AlwaysMatch;
+    impl CommandOptimizer for AlwaysMatch {
+        fn name(&self) -> &'static str { "always_match" }
+        fn matches(&self, _cmd: &str, _args: &[String]) -> bool { true }
+        fn optimize(&self, input: &str) -> Option<String> { Some(format!("OPT:{}", input)) }
+    }
+
+    #[test]
+    fn returns_none_when_no_match() {
+        let result = dispatch("ls", &[], "foo");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn trait_dispatch_returns_name_and_output() {
+        let opt = AlwaysMatch;
+        assert!(opt.matches("anything", &[]));
+        assert_eq!(opt.optimize("x").unwrap(), "OPT:x");
+        assert_eq!(opt.name(), "always_match");
+    }
+}
