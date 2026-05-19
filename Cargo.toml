@@ -1,7 +1,14 @@
 [package]
 name = "vallum"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "A Rust CLI proxy between AI agents and your shell — sanitizes secrets, flags prompt injections, strips ANSI, compresses output, audits commands."
+repository = "https://github.com/kahramanemir/Vallum"
+readme = "README.md"
+authors = ["Emir Kahraman"]
+keywords = ["ai", "cli", "proxy", "security", "tokens"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
