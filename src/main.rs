@@ -6,6 +6,7 @@ mod executor;
 mod metrics;
 mod optimizer;
 mod scrubber;
+mod stats;
 mod truncator;
 mod whitespace;
 
