@@ -1,4 +1,5 @@
 // src/main.rs
+mod ansi;
 mod audit;
 mod cli;
 mod executor;
