@@ -2,7 +2,7 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "vallum", version = "0.1", about = "AI CLI Proxy")]
+#[command(name = "vallum", version = "0.2", about = "AI CLI Proxy")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -17,5 +17,11 @@ pub enum Commands {
         /// Arguments for the command
         #[arg(trailing_var_arg = true)]
         args: Vec<String>,
+    },
+    /// Show cumulative token savings report
+    Stats {
+        /// Delete all collected stats (prompts for confirmation)
+        #[arg(long)]
+        reset: bool,
     },
 }

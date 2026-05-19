@@ -35,5 +35,18 @@ fn main() {
                 Err(e) => eprintln!("Proxy Error: {}", e),
             }
         }
+        Commands::Stats { reset } => {
+            let path = metrics::stats_path();
+            if *reset {
+                if let Err(e) = stats::reset(&path) {
+                    eprintln!("Stats reset failed: {}", e);
+                }
+            } else {
+                match stats::aggregate(&path) {
+                    Ok(report) => stats::print_report(&report),
+                    Err(e) => eprintln!("Could not read stats: {}", e),
+                }
+            }
+        }
     }
 }
