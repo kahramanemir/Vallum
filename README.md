@@ -70,8 +70,8 @@ vallum run git status
 ## Roadmap
 
 - [x] v0.1 — MVP: execute, truncate, scrub, audit
-- [ ] v0.2 — streaming output, configurable secret patterns
-- [ ] v0.3 — config file, allow/deny lists, structured JSON logs
+- [x] v0.2 — ANSI strip, whitespace collapse, token metrics, per-command optimizer framework, `vallum stats`
+- [ ] v0.3 — exact tiktoken counting, more optimizers (cargo, npm), config file
 
 ## Name
 
