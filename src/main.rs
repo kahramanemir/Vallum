@@ -5,6 +5,7 @@ mod cli;
 mod executor;
 mod scrubber;
 mod truncator;
+mod whitespace;
 
 use clap::Parser;
 use cli::{Cli, Commands};
