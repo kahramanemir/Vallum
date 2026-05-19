@@ -1,7 +1,44 @@
 // src/metrics.rs
+use serde::Serialize;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 pub fn estimate_tokens(s: &str) -> usize {
     s.chars().count() / 4
+}
+
+#[derive(Serialize)]
+pub struct StatEntry {
+    pub ts: String,
+    pub cmd: String,
+    pub args: Vec<String>,
+    pub tokens_before: usize,
+    pub tokens_after: usize,
+    pub optimizer: Option<String>,
+    pub exit_code: i32,
+}
+
+pub fn stats_path() -> PathBuf {
+    if let Some(home) = dirs::home_dir() {
+        home.join(".vallum").join("stats.jsonl")
+    } else {
+        PathBuf::from("vallum-stats.jsonl")
+    }
+}
+
+pub fn append_stat_to(path: &Path, entry: &StatEntry) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    let line = serde_json::to_string(entry)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    writeln!(file, "{}", line)
+}
+
+pub fn append_stat(entry: &StatEntry) {
+    let _ = append_stat_to(&stats_path(), entry);
 }
 
 #[cfg(test)]
@@ -21,5 +58,30 @@ mod tests {
     #[test]
     fn estimate_unicode() {
         assert_eq!(estimate_tokens("Türkçe"), 1);
+    }
+
+    #[test]
+    fn append_stat_creates_file_and_dir() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join("vallum_test_metrics_append");
+        let _ = fs::remove_dir_all(&tmp);
+        let path = tmp.join("nested").join("stats.jsonl");
+
+        let entry = StatEntry {
+            ts: "2026-01-01T00:00:00Z".to_string(),
+            cmd: "ls".to_string(),
+            args: vec!["-la".to_string()],
+            tokens_before: 100,
+            tokens_after: 20,
+            optimizer: None,
+            exit_code: 0,
+        };
+
+        append_stat_to(&path, &entry).unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("\"cmd\":\"ls\""));
+        assert!(content.contains("\"tokens_before\":100"));
+        assert!(content.contains("\"tokens_after\":20"));
+        let _ = fs::remove_dir_all(&tmp);
     }
 }
