@@ -102,7 +102,10 @@ pub fn print_report(r: &Report) {
 }
 
 pub fn reset(path: &Path) -> std::io::Result<()> {
-    println!("This will delete all stats at {:?}. Type 'reset' to confirm.", path);
+    println!(
+        "This will delete all stats at {:?}. Type 'reset' to confirm.",
+        path
+    );
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
     if input.trim() == "reset" {

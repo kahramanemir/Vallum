@@ -12,6 +12,9 @@ pub struct Cli {
 pub enum Commands {
     /// Run a command through the proxy
     Run {
+        /// Emit structured JSON instead of plain text
+        #[arg(long)]
+        json: bool,
         /// The command to run
         cmd: String,
         /// Arguments for the command

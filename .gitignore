@@ -12,6 +12,8 @@
 
 # Vallum audit logs (may contain raw command output and secrets)
 *.log
+vallum-config.toml
+vallum-stats.jsonl
 
 # Superpowers internal state
 .superpowers/
