@@ -76,26 +76,25 @@ fn main() {
             let stripped = ansi::strip(&raw_output);
 
             let mut optimizer_name: Option<String> = None;
-            let processed = if metrics::estimate_tokens(&stripped)
-                < config.pipeline.min_optimize_tokens
-            {
-                // Small output: skip optimize/truncate; the security wrapper still applies.
-                whitespace::collapse(&stripped)
-            } else {
-                let after_optimize = match optimizer::dispatch(cmd, args, &stripped) {
-                    Some((out, name)) => {
-                        optimizer_name = Some(name.to_string());
-                        out
-                    }
-                    None => stripped.clone(),
+            let processed =
+                if metrics::estimate_tokens(&stripped) < config.pipeline.min_optimize_tokens {
+                    // Small output: skip optimize/truncate; the security wrapper still applies.
+                    whitespace::collapse(&stripped)
+                } else {
+                    let after_optimize = match optimizer::dispatch(cmd, args, &stripped) {
+                        Some((out, name)) => {
+                            optimizer_name = Some(name.to_string());
+                            out
+                        }
+                        None => stripped.clone(),
+                    };
+                    let collapsed = whitespace::collapse(&after_optimize);
+                    truncator::smart_truncate(
+                        &collapsed,
+                        config.pipeline.head_lines,
+                        config.pipeline.tail_lines,
+                    )
                 };
-                let collapsed = whitespace::collapse(&after_optimize);
-                truncator::smart_truncate(
-                    &collapsed,
-                    config.pipeline.head_lines,
-                    config.pipeline.tail_lines,
-                )
-            };
 
             let sanitized = scrubber::sanitize(&processed, &config.scrubber.extra_secret_patterns);
 

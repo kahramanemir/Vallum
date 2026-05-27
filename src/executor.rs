@@ -124,7 +124,10 @@ pub fn execute_command(
     }
 
     if total_bytes.load(Ordering::SeqCst) > max_output_bytes {
-        result.push_str(&format!("\n[output capped at {} bytes]\n", max_output_bytes));
+        result.push_str(&format!(
+            "\n[output capped at {} bytes]\n",
+            max_output_bytes
+        ));
     }
     if timed_out {
         result.push_str(&format!("\n[timed out after {}s]\n", timeout_secs));
