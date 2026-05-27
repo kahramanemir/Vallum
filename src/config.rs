@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 const CONFIG_ENV_VAR: &str = "VALLUM_CONFIG";
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct AppConfig {
     pub audit: AuditConfig,
@@ -29,7 +29,7 @@ pub struct PipelineConfig {
     pub tail_lines: usize,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct ScrubberConfig {
     pub extra_secret_patterns: Vec<RedactionRule>,
@@ -39,16 +39,6 @@ pub struct ScrubberConfig {
 pub struct RedactionRule {
     pub pattern: String,
     pub replacement: String,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            audit: AuditConfig::default(),
-            pipeline: PipelineConfig::default(),
-            scrubber: ScrubberConfig::default(),
-        }
-    }
 }
 
 impl Default for AuditConfig {
@@ -66,14 +56,6 @@ impl Default for PipelineConfig {
         Self {
             head_lines: 50,
             tail_lines: 50,
-        }
-    }
-}
-
-impl Default for ScrubberConfig {
-    fn default() -> Self {
-        Self {
-            extra_secret_patterns: Vec::new(),
         }
     }
 }

@@ -38,8 +38,8 @@ pub fn smart_truncate(input: &str, head_limit: usize, tail_limit: usize) -> Stri
     }
 
     result.push_str(&format!("[TAIL {} lines]\n", tail_limit));
-    for i in (total_lines - tail_limit)..total_lines {
-        result.push_str(lines[i]);
+    for line in &lines[total_lines - tail_limit..total_lines] {
+        result.push_str(line);
         result.push('\n');
     }
 
