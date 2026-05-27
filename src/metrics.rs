@@ -1,11 +1,12 @@
 // src/metrics.rs
+use crate::tokenizer::{HeuristicEstimator, TokenEstimator};
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn estimate_tokens(s: &str) -> usize {
-    s.chars().count() / 4
+    HeuristicEstimator.estimate(s)
 }
 
 #[derive(Serialize)]
