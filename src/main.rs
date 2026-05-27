@@ -46,7 +46,12 @@ fn main() {
 
             let cmd_context = format!("{} {:?}", cmd, args);
 
-            let (raw_output, exit_code) = match executor::execute_command(cmd, args) {
+            let (raw_output, exit_code) = match executor::execute_command(
+                cmd,
+                args,
+                config.pipeline.max_output_bytes,
+                config.pipeline.timeout_secs,
+            ) {
                 Ok(output) => output,
                 Err(e) => {
                     eprintln!("Proxy Error: {}", e);
