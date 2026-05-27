@@ -99,6 +99,7 @@ fn test_run_honors_configured_truncation() {
 [pipeline]
 head_lines = 1
 tail_lines = 1
+min_optimize_tokens = 0
 
 [audit]
 raw_enabled = false

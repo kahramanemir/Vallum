@@ -27,6 +27,7 @@ pub struct AuditConfig {
 pub struct PipelineConfig {
     pub head_lines: usize,
     pub tail_lines: usize,
+    pub min_optimize_tokens: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -56,6 +57,7 @@ impl Default for PipelineConfig {
         Self {
             head_lines: 50,
             tail_lines: 50,
+            min_optimize_tokens: 50,
         }
     }
 }
@@ -112,6 +114,7 @@ mod tests {
         assert!(config.audit.sanitized_enabled);
         assert_eq!(config.pipeline.head_lines, 50);
         assert_eq!(config.pipeline.tail_lines, 50);
+        assert_eq!(config.pipeline.min_optimize_tokens, 50);
         assert!(config.scrubber.extra_secret_patterns.is_empty());
     }
 
