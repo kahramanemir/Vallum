@@ -8,6 +8,7 @@ mod metrics;
 mod optimizer;
 mod scrubber;
 mod stats;
+mod tokenizer;
 mod truncator;
 mod whitespace;
 
