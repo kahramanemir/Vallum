@@ -48,7 +48,7 @@ impl Default for AuditConfig {
     fn default() -> Self {
         Self {
             log_dir: None,
-            raw_enabled: true,
+            raw_enabled: false,
             sanitized_enabled: true,
         }
     }
@@ -114,7 +114,7 @@ mod tests {
         let path = unique_temp_path("missing");
         let config = AppConfig::from_path(&path).unwrap();
 
-        assert!(config.audit.raw_enabled);
+        assert!(!config.audit.raw_enabled);
         assert!(config.audit.sanitized_enabled);
         assert_eq!(config.pipeline.head_lines, 50);
         assert_eq!(config.pipeline.tail_lines, 50);

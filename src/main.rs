@@ -4,6 +4,7 @@ mod audit;
 mod cli;
 mod config;
 mod executor;
+mod fsutil;
 mod metrics;
 mod optimizer;
 mod scrubber;

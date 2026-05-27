@@ -1,7 +1,7 @@
 // src/metrics.rs
 use crate::tokenizer::{HeuristicEstimator, TokenEstimator};
 use serde::Serialize;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -32,7 +32,7 @@ pub fn append_stat_to(path: &Path, entry: &StatEntry) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    let mut file = crate::fsutil::open_append_private(path)?;
     let line = serde_json::to_string(entry).map_err(std::io::Error::other)?;
     writeln!(file, "{}", line)
 }
