@@ -29,6 +29,16 @@ fn test_cli_help_lists_stats() {
 }
 
 #[test]
+fn test_cli_version_matches_cargo() {
+    let output = Command::new(vallum_bin())
+        .arg("--version")
+        .output()
+        .expect("Failed to execute command");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
 fn test_pipeline_strips_ansi_and_wraps_output() {
     // `\033` is the octal escape for ESC, accepted by both BSD and GNU printf.
     let output = std::process::Command::new(vallum_bin())

@@ -2,7 +2,7 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "vallum", version = "0.2", about = "AI CLI Proxy")]
+#[command(name = "vallum", version = env!("CARGO_PKG_VERSION"), about = "AI CLI Proxy")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
