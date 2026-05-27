@@ -1,46 +1,56 @@
+const CONTEXT: usize = 2;
+
+fn is_important(line: &str) -> bool {
+    let lower = line.to_lowercase();
+    lower.contains("error[")
+        || lower.contains("error:")
+        || lower.contains("panicked at")
+        || lower.contains("exception")
+        || lower.contains("fatal")
+        || line.contains("FAILED")
+}
+
 pub fn smart_truncate(input: &str, head_limit: usize, tail_limit: usize) -> String {
     let lines: Vec<&str> = input.lines().collect();
-    let total_lines = lines.len();
+    let total = lines.len();
 
-    if total_lines <= head_limit + tail_limit {
+    if total <= head_limit + tail_limit {
         return input.to_string();
     }
 
-    let mut result = String::new();
-    let mut error_lines = Vec::new();
-    let mut hidden_count = 0;
-
+    // Decide which indices to keep: head window, tail window, and any important
+    // line plus +/-CONTEXT lines around it.
+    let mut keep = vec![false; total];
+    for (i, slot) in keep.iter_mut().enumerate() {
+        if i < head_limit || i >= total - tail_limit {
+            *slot = true;
+        }
+    }
     for (i, line) in lines.iter().enumerate() {
-        if i < head_limit {
-            result.push_str(line);
-            result.push('\n');
-        } else if i >= total_lines - tail_limit {
-            continue; // Will add at the end
-        } else {
-            if line.contains("Error") || line.contains("Exception") || line.contains("panic") {
-                error_lines.push(*line);
-            } else {
-                hidden_count += 1;
+        if is_important(line) {
+            let lo = i.saturating_sub(CONTEXT);
+            let hi = (i + CONTEXT + 1).min(total);
+            for slot in keep.iter_mut().take(hi).skip(lo) {
+                *slot = true;
             }
         }
     }
 
-    if !error_lines.is_empty() {
-        result.push_str(&format!("\n[IMPORTANT {} lines]\n", error_lines.len()));
-        for err in error_lines {
-            result.push_str(err);
+    let mut result = String::new();
+    let mut i = 0;
+    while i < total {
+        if keep[i] {
+            result.push_str(lines[i]);
             result.push('\n');
+            i += 1;
+        } else {
+            let gap_start = i;
+            while i < total && !keep[i] {
+                i += 1;
+            }
+            let hidden = i - gap_start;
+            result.push_str(&format!("[... {} lines hidden ...]\n", hidden));
         }
-    }
-
-    if hidden_count > 0 {
-        result.push_str(&format!("\n[... {} lines hidden ...]\n\n", hidden_count));
-    }
-
-    result.push_str(&format!("[TAIL {} lines]\n", tail_limit));
-    for i in (total_lines - tail_limit)..total_lines {
-        result.push_str(lines[i]);
-        result.push('\n');
     }
 
     result
@@ -53,17 +63,45 @@ mod tests {
     #[test]
     fn test_truncate_short_output() {
         let input = "Line 1\nLine 2\nLine 3\n";
-        assert_eq!(smart_truncate(input, 5, 5), input); // No change if lines < limit
+        assert_eq!(smart_truncate(input, 5, 5), input);
     }
 
     #[test]
-    fn test_truncate_long_output() {
-        let input = "1\n2\n3\n4\n5\nError: Boom\n6\n7\n8\n9\n10\n11\n";
-        // head: 2, tail: 2. Should keep error line.
-        let result = smart_truncate(input, 2, 2);
-        assert!(result.contains("1\n2\n"));
-        assert!(result.contains("Error: Boom"));
-        assert!(result.contains("10\n11\n"));
-        assert!(result.contains("hidden"));
+    fn test_error_kept_in_place_with_context() {
+        let mut input = String::from("head1\nhead2\n");
+        for i in 0..20 {
+            input.push_str(&format!("mid{}\n", i));
+        }
+        input.push_str("error: boom\n");
+        for i in 0..20 {
+            input.push_str(&format!("tail_mid{}\n", i));
+        }
+        input.push_str("end1\nend2\n");
+
+        let result = smart_truncate(&input, 2, 2);
+        // Head and tail windows preserved.
+        assert!(result.contains("head1"));
+        assert!(result.contains("end2"));
+        // Error preserved with adjacent context, in original order.
+        assert!(result.contains("error: boom"));
+        let err_pos = result.find("error: boom").unwrap();
+        let ctx_pos = result.find("mid19").unwrap();
+        assert!(ctx_pos < err_pos, "context line should precede the error");
+        // Ordinary gaps elided.
+        assert!(result.contains("lines hidden"));
+        // "no errors" style lines must NOT be flagged as errors.
+        assert!(!result.contains("[IMPORTANT"));
+    }
+
+    #[test]
+    fn test_no_false_positive_on_no_errors_phrase() {
+        let mut input = String::from("start\n");
+        for _ in 0..30 {
+            input.push_str("no errors here\n");
+        }
+        input.push_str("done\n");
+        let result = smart_truncate(&input, 2, 2);
+        // None of the middle "no errors" lines should be force-kept as important.
+        assert!(result.contains("lines hidden"));
     }
 }

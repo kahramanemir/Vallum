@@ -59,7 +59,7 @@ pub fn aggregate(path: &Path) -> std::io::Result<Report> {
         .into_iter()
         .map(|(k, (b, a))| (k, b.saturating_sub(a), b))
         .collect();
-    by_command.sort_by(|a, b| b.1.cmp(&a.1));
+    by_command.sort_by_key(|r| std::cmp::Reverse(r.1));
 
     Ok(Report {
         total_commands,

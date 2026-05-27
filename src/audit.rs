@@ -1,6 +1,6 @@
 // src/audit.rs
 use chrono::Local;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -24,7 +24,7 @@ pub fn write_log_to_path(path: &Path, cmd_context: &str, output: &str) -> std::i
         fs::create_dir_all(parent)?;
     }
 
-    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    let mut file = crate::fsutil::open_append_private(path)?;
 
     let timestamp = Local::now().to_rfc3339();
     let log_entry = format!(

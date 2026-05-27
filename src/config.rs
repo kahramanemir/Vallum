@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 const CONFIG_ENV_VAR: &str = "VALLUM_CONFIG";
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct AppConfig {
     pub audit: AuditConfig,
@@ -27,9 +27,12 @@ pub struct AuditConfig {
 pub struct PipelineConfig {
     pub head_lines: usize,
     pub tail_lines: usize,
+    pub min_optimize_tokens: usize,
+    pub max_output_bytes: usize,
+    pub timeout_secs: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct ScrubberConfig {
     pub extra_secret_patterns: Vec<RedactionRule>,
@@ -41,21 +44,11 @@ pub struct RedactionRule {
     pub replacement: String,
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            audit: AuditConfig::default(),
-            pipeline: PipelineConfig::default(),
-            scrubber: ScrubberConfig::default(),
-        }
-    }
-}
-
 impl Default for AuditConfig {
     fn default() -> Self {
         Self {
             log_dir: None,
-            raw_enabled: true,
+            raw_enabled: false,
             sanitized_enabled: true,
         }
     }
@@ -66,14 +59,9 @@ impl Default for PipelineConfig {
         Self {
             head_lines: 50,
             tail_lines: 50,
-        }
-    }
-}
-
-impl Default for ScrubberConfig {
-    fn default() -> Self {
-        Self {
-            extra_secret_patterns: Vec::new(),
+            min_optimize_tokens: 50,
+            max_output_bytes: 10 * 1024 * 1024,
+            timeout_secs: 300,
         }
     }
 }
@@ -126,10 +114,13 @@ mod tests {
         let path = unique_temp_path("missing");
         let config = AppConfig::from_path(&path).unwrap();
 
-        assert!(config.audit.raw_enabled);
+        assert!(!config.audit.raw_enabled);
         assert!(config.audit.sanitized_enabled);
         assert_eq!(config.pipeline.head_lines, 50);
         assert_eq!(config.pipeline.tail_lines, 50);
+        assert_eq!(config.pipeline.min_optimize_tokens, 50);
+        assert_eq!(config.pipeline.max_output_bytes, 10 * 1024 * 1024);
+        assert_eq!(config.pipeline.timeout_secs, 300);
         assert!(config.scrubber.extra_secret_patterns.is_empty());
     }
 

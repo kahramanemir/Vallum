@@ -4,10 +4,12 @@ mod audit;
 mod cli;
 mod config;
 mod executor;
+mod fsutil;
 mod metrics;
 mod optimizer;
 mod scrubber;
 mod stats;
+mod tokenizer;
 mod truncator;
 mod whitespace;
 
@@ -45,7 +47,12 @@ fn main() {
 
             let cmd_context = format!("{} {:?}", cmd, args);
 
-            let (raw_output, exit_code) = match executor::execute_command(cmd, args) {
+            let (raw_output, exit_code) = match executor::execute_command(
+                cmd,
+                args,
+                config.pipeline.max_output_bytes,
+                config.pipeline.timeout_secs,
+            ) {
                 Ok(output) => output,
                 Err(e) => {
                     eprintln!("Proxy Error: {}", e);
@@ -65,25 +72,31 @@ fn main() {
                 );
             }
 
-            // Pipeline: ANSI → optimize? → whitespace → truncate → scrub.
+            // Pipeline: ANSI → (optimize → truncate, unless output is tiny) → scrub.
             let stripped = ansi::strip(&raw_output);
 
-            let (after_optimize, optimizer_name) = match optimizer::dispatch(cmd, args, &stripped) {
-                Some((out, name)) => (out, Some(name.to_string())),
-                None => (stripped, None),
-            };
+            let mut optimizer_name: Option<String> = None;
+            let processed =
+                if metrics::estimate_tokens(&stripped) < config.pipeline.min_optimize_tokens {
+                    // Small output: skip optimize/truncate; the security wrapper still applies.
+                    whitespace::collapse(&stripped)
+                } else {
+                    let after_optimize = match optimizer::dispatch(cmd, args, &stripped) {
+                        Some((out, name)) => {
+                            optimizer_name = Some(name.to_string());
+                            out
+                        }
+                        None => stripped.clone(),
+                    };
+                    let collapsed = whitespace::collapse(&after_optimize);
+                    truncator::smart_truncate(
+                        &collapsed,
+                        config.pipeline.head_lines,
+                        config.pipeline.tail_lines,
+                    )
+                };
 
-            let collapsed = whitespace::collapse(&after_optimize);
-            let truncated = truncator::smart_truncate(
-                &collapsed,
-                config.pipeline.head_lines,
-                config.pipeline.tail_lines,
-            );
-            let sanitized = if config.scrubber.extra_secret_patterns.is_empty() {
-                scrubber::sanitize(&truncated)
-            } else {
-                scrubber::sanitize_with_options(&truncated, &config.scrubber.extra_secret_patterns)
-            };
+            let sanitized = scrubber::sanitize(&processed, &config.scrubber.extra_secret_patterns);
 
             let tokens_after = metrics::estimate_tokens(&sanitized);
 

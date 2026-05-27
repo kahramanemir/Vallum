@@ -1,18 +1,20 @@
 # Vallum
 
-A Rust CLI proxy that sits between AI agents and your shell. It sanitizes secrets, flags prompt injections, strips ANSI noise, compresses long outputs, preserves child exit codes, audits every command, and tracks how many tokens you save — so what reaches the model is exactly what you intend it to see.
+A Rust CLI proxy that sits between AI agents and your shell as a **security boundary**. When an agent runs a command, Vallum redacts secrets, neutralizes prompt-injection attempts, wraps the result as untrusted data, preserves the child exit code, and audits everything — so what reaches the model is exactly what you intend it to see. As a side benefit, it strips ANSI noise and compresses long output, which also saves tokens.
 
 ---
 
 ## Why
 
-When an AI agent runs shell commands on your behalf, three problems compound:
+When an AI agent runs shell commands on your behalf, the command output flows straight into the model's context. That output is **untrusted input**, and it creates three problems:
 
-- Output may contain **secrets** — API keys, tokens, credentials — that are forwarded straight to the model.
-- Output may contain **adversarial text** — log lines, scraped pages, or error messages crafted to hijack the agent.
-- Long outputs **burn tokens** and bury the relevant signal in noise.
+- It may contain **secrets** — API keys, tokens, credentials — that get forwarded to the model (and possibly logged by it).
+- It may contain **adversarial text** — log lines, scraped pages, or error messages crafted to hijack the agent ("ignore previous instructions…").
+- It is **unstructured and noisy**, burying the relevant signal and inflating token usage.
 
-Vallum is a single binary that handles all three.
+Vallum is a single binary that puts a controlled boundary between that output and the model.
+
+> **Scope of the guarantees.** Secret redaction and injection neutralization are **best-effort, pattern-based** defenses. They raise the cost of an attack and catch common cases; they are not a substitute for treating all terminal output as untrusted. The untrusted-output wrapper is the durable control — keep your agent prompted to respect it.
 
 ## Pipeline
 
@@ -20,14 +22,15 @@ Vallum is a single binary that handles all three.
 flowchart LR
     A[AI Agent] -->|vallum run cmd| B[Executor]
     B --> C[ANSI strip]
-    C --> D{Known<br/>command?}
-    D -->|yes| E[Optimizer]
-    D -->|no| F[Whitespace]
-    E --> F
-    F --> G[Truncator]
-    G --> H[Scrubber]
+    C --> D{Output small?}
+    D -->|yes| H[Scrubber]
+    D -->|no| E{Known command?}
+    E -->|yes| F[Optimizer]
+    E -->|no| G[Whitespace + Truncate]
+    F --> G
+    G --> H
     H --> I[AI Agent]
-    B -. raw .-> J[(~/.vallum/logs/raw.local.log)]
+    B -. raw, opt-in .-> J[(~/.vallum/logs/raw.local.log)]
     H -. sanitized .-> K[(~/.vallum/logs/sanitized.ai.log)]
     B -.->|tokens_before| L[(~/.vallum/stats.jsonl)]
     H -.->|tokens_after| L
@@ -35,14 +38,22 @@ flowchart LR
 
 Each command flows through these stages:
 
-1. **Execute** — `stdout` and `stderr` are captured into one buffer.
+1. **Execute** — `stdout` and `stderr` are captured concurrently and merged in arrival order. Capture is bounded by a byte cap and a timeout (see Configuration). `stdin` is inherited so interactive commands work.
 2. **ANSI strip** — color and cursor-control escapes are removed.
-3. **Optimize** — if a registered `CommandOptimizer` matches (e.g. `git status`, `cargo test`, `pytest`, `npm test`), it produces a compressed view; otherwise the input passes through.
-4. **Whitespace collapse** — runs of three or more blank lines collapse to one; trailing spaces are stripped.
-5. **Truncate** — a head/tail window is preserved, error lines are pulled out of the middle, the rest is elided.
-6. **Scrub** — common API tokens, bearer credentials, Slack tokens, and PEM private keys are redacted; known injection phrases are neutralized.
-7. **Wrap** — output is enclosed in `[UNTRUSTED TERMINAL OUTPUT]` markers.
-8. **Audit + Metrics** — raw output and sanitized output are written under `~/.vallum/logs/`, and a per-command stats record is appended to `~/.vallum/stats.jsonl`.
+3. **Short-circuit** — if the output is below `min_optimize_tokens`, the optimize and truncate stages are skipped (no point summarizing a few lines). The security stages below always run.
+4. **Optimize** — if a registered `CommandOptimizer` matches (e.g. `git status`, `cargo test`, `pytest`, `npm test`), it produces a compressed view; otherwise the input passes through.
+5. **Whitespace collapse** — runs of three or more blank lines collapse to one; trailing spaces are stripped.
+6. **Truncate** — head/tail windows are preserved; important lines (errors, panics, failures) are kept **in place with surrounding context**, and ordinary gaps are elided.
+7. **Scrub** — API tokens, bearer credentials, Slack tokens, and PEM private keys are redacted; known injection phrases are neutralized.
+8. **Wrap** — output is enclosed in `[UNTRUSTED TERMINAL OUTPUT]` markers; any forged markers inside the content are defanged so output can't break out of the wrapper.
+9. **Audit + Metrics** — the sanitized output is written under `~/.vallum/logs/` (raw logging is opt-in), and a per-command stats record is appended to `~/.vallum/stats.jsonl`.
+
+## Security model
+
+- **Secret redaction** runs on every command's output before it is shown or logged (sanitized log). Patterns cover OpenAI-style `sk-` keys, GitHub `ghp_`/`github_pat_` tokens, Slack `xox*` tokens, JWT bearer headers, and PEM private keys. Extend with your own regex rules via config.
+- **Injection neutralization** is pattern-based and best-effort: it flags common families ("ignore/disregard/forget previous instructions", "you are now…", "reveal your system prompt", injected `Assistant:`/`System:` turns) and replaces them with `[POTENTIAL INJECTION NEUTRALIZED]`.
+- **Untrusted-output wrapper** brackets every result and defangs any embedded marker strings, so a command cannot forge an early close and smuggle "trusted" text past the boundary. This adds a small fixed token overhead on tiny outputs — accepted by design, because the boundary is size-independent.
+- **Logs are private.** Raw (unredacted) logging is **off by default**; the sanitized log and stats file are created with `0600` permissions on unix.
 
 ## Built-in Optimizers
 
@@ -58,12 +69,15 @@ Vallum looks for `~/.vallum/config.toml` by default. For testing or per-project 
 ```toml
 [audit]
 log_dir = "/tmp/vallum-logs"
-raw_enabled = false
+raw_enabled = false          # raw, unredacted logging is opt-in
 sanitized_enabled = true
 
 [pipeline]
 head_lines = 20
 tail_lines = 20
+min_optimize_tokens = 50     # skip optimize/truncate below this token estimate
+max_output_bytes = 10485760  # 10 MiB capture cap; excess is dropped with a marker
+timeout_secs = 300           # kill the child after N seconds (0 = disabled)
 
 [scrubber]
 extra_secret_patterns = [
@@ -71,12 +85,15 @@ extra_secret_patterns = [
 ]
 ```
 
-Supported first-pass settings:
+Supported settings:
 
 - `audit.log_dir`: audit log directory override
-- `audit.raw_enabled`: enable or disable raw terminal logs
+- `audit.raw_enabled`: enable raw (unredacted) terminal logs — **default `false`**
 - `audit.sanitized_enabled`: enable or disable sanitized logs
 - `pipeline.head_lines` / `pipeline.tail_lines`: truncation window
+- `pipeline.min_optimize_tokens`: outputs below this estimate skip optimize/truncate
+- `pipeline.max_output_bytes`: maximum bytes captured from a command (default 10 MiB)
+- `pipeline.timeout_secs`: command timeout in seconds; `0` disables it (default 300)
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
 
 ## Install
@@ -122,9 +139,11 @@ Example JSON output:
 }
 ```
 
+Note how a tiny output ends up *larger* after wrapping: the security wrapper has a fixed cost, and on short commands that cost dominates. Token savings show up on the large, noisy outputs (builds, test runs, big diffs) — see below.
+
 ## Measuring savings
 
-Every `vallum run` appends one JSON record to `~/.vallum/stats.jsonl` with the raw and sanitized token estimates (chars / 4). `vallum stats` aggregates that file:
+Every `vallum run` appends one JSON record to `~/.vallum/stats.jsonl` with raw and sanitized token estimates. Counting goes through a pluggable `TokenEstimator`; the default is a dependency-free heuristic (word runs + symbols) that tracks BPE better than a flat chars/4 ratio. `vallum stats` aggregates the file:
 
 ```
 Vallum — Token savings report
@@ -147,7 +166,7 @@ npm install            8,442 saved   (76%)
 | ----------------------------- | ---------------------------------------------------- |
 | `src/cli.rs`                  | Argument parsing (`run`, `stats`)                    |
 | `src/config.rs`               | Config loading, defaults, and validation             |
-| `src/executor.rs`             | Spawning commands and capturing output               |
+| `src/executor.rs`             | Concurrent capture with byte cap, timeout, stdin     |
 | `src/ansi.rs`                 | Stripping ANSI escape sequences                      |
 | `src/whitespace.rs`           | Collapsing blank-line runs, stripping trailing space |
 | `src/optimizer/mod.rs`        | `CommandOptimizer` trait + dispatch registry         |
@@ -155,10 +174,12 @@ npm install            8,442 saved   (76%)
 | `src/optimizer/git_status.rs` | Summary optimizer for `git status` output            |
 | `src/optimizer/npm.rs`        | Summary optimizer for noisy `npm` output             |
 | `src/optimizer/pytest.rs`     | Summary optimizer for noisy `pytest` output          |
-| `src/truncator.rs`            | Head/tail window with error preservation             |
-| `src/scrubber.rs`             | Secret redaction and injection neutralization        |
+| `src/truncator.rs`            | Context-preserving head/tail truncation              |
+| `src/scrubber.rs`             | Secret redaction, injection neutralization, wrapping |
+| `src/tokenizer.rs`            | Pluggable `TokenEstimator` + heuristic default       |
+| `src/fsutil.rs`               | Private (0600) append-file helper                    |
 | `src/audit.rs`                | Append-only log writer                               |
-| `src/metrics.rs`              | Token estimator + JSONL stats writer                 |
+| `src/metrics.rs`              | Token estimation + JSONL stats writer                |
 | `src/stats.rs`                | `vallum stats` aggregation and reporting             |
 | `src/main.rs`                 | Pipeline wiring                                      |
 
@@ -166,8 +187,9 @@ npm install            8,442 saved   (76%)
 
 - [x] v0.1 — MVP: execute, truncate, scrub, audit
 - [x] v0.2 — ANSI strip, whitespace collapse, token metrics, per-command optimizer framework, `vallum stats`
-- [x] Post-v0.2 hardening — exit-code propagation, structured JSON output, configurable pipeline settings, cargo/pytest/npm optimizers
-- [ ] Next — exact tiktoken counting, optimizer toggles, broader command coverage, streaming/PTY support
+- [x] Post-v0.2 hardening — exit-code propagation, structured JSON output, configurable pipeline, cargo/pytest/npm optimizers
+- [x] Security sweep — concurrent bounded capture (cap + timeout + stdin), context-preserving truncation, broadened injection neutralization, marker anti-spoofing, raw-logs-off-by-default with `0600` perms, small-output short-circuit, pluggable token estimator
+- [ ] Next — exact BPE token counting (swappable behind `TokenEstimator`), optimizer toggles, broader command coverage, streaming/PTY support
 
 ## Name
 
