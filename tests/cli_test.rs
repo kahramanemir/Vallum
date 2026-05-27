@@ -116,10 +116,9 @@ sanitized_enabled = false
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("line1"));
-    assert!(stdout.contains("[TAIL 1 lines]"));
     assert!(stdout.contains("line5"));
-    assert!(!stdout.contains("line2"));
-    assert!(!stdout.contains("line4"));
+    assert!(stdout.contains("lines hidden"));
+    assert!(!stdout.contains("line3"));
     let _ = fs::remove_dir_all(&fixture_dir);
 }
 
