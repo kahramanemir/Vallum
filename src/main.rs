@@ -79,11 +79,7 @@ fn main() {
                 config.pipeline.head_lines,
                 config.pipeline.tail_lines,
             );
-            let sanitized = if config.scrubber.extra_secret_patterns.is_empty() {
-                scrubber::sanitize(&truncated)
-            } else {
-                scrubber::sanitize_with_options(&truncated, &config.scrubber.extra_secret_patterns)
-            };
+            let sanitized = scrubber::sanitize(&truncated, &config.scrubber.extra_secret_patterns);
 
             let tokens_after = metrics::estimate_tokens(&sanitized);
 

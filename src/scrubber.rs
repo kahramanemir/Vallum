@@ -3,11 +3,7 @@ use crate::config::RedactionRule;
 use regex::Regex;
 use std::sync::OnceLock;
 
-pub fn scrub_secrets(input: &str) -> String {
-    scrub_secrets_with_patterns(input, &[])
-}
-
-pub fn scrub_secrets_with_patterns(input: &str, extra_patterns: &[RedactionRule]) -> String {
+pub fn scrub_secrets(input: &str, extra_patterns: &[RedactionRule]) -> String {
     let mut scrubbed = input.to_string();
 
     for (regex, replacement) in secret_patterns() {
@@ -31,19 +27,8 @@ pub fn scrub_injections(input: &str) -> String {
         .to_string()
 }
 
-pub fn sanitize(input: &str) -> String {
-    let no_secrets = scrub_secrets(input);
-    let safe_text = scrub_injections(&no_secrets);
-
-    // Add Untrusted Data Wrapper
-    format!(
-        "[UNTRUSTED TERMINAL OUTPUT START]\n{}\n[UNTRUSTED TERMINAL OUTPUT END]\n",
-        safe_text.trim_end()
-    )
-}
-
-pub fn sanitize_with_options(input: &str, extra_patterns: &[RedactionRule]) -> String {
-    let no_secrets = scrub_secrets_with_patterns(input, extra_patterns);
+pub fn sanitize(input: &str, extra_patterns: &[RedactionRule]) -> String {
+    let no_secrets = scrub_secrets(input, extra_patterns);
     let safe_text = scrub_injections(&no_secrets);
 
     // Add Untrusted Data Wrapper
@@ -80,7 +65,7 @@ mod tests {
             "abcdefghijklmno"
         );
         let expected = "Here is my key: sk-*** and my token: ghp_***";
-        assert_eq!(scrub_secrets(input), expected);
+        assert_eq!(scrub_secrets(input, &[]), expected);
     }
 
     #[test]
@@ -102,7 +87,7 @@ mod tests {
             "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----\n"
         );
 
-        let scrubbed = scrub_secrets(input);
+        let scrubbed = scrub_secrets(input, &[]);
         assert!(scrubbed.contains("Authorization: Bearer ***"));
         assert!(scrubbed.contains("github_pat_***"));
         assert!(scrubbed.contains("xoxb-***"));
@@ -115,7 +100,7 @@ mod tests {
     #[test]
     fn test_scrub_custom_secret_pattern() {
         let input = "custom token-12345";
-        let scrubbed = scrub_secrets_with_patterns(
+        let scrubbed = scrub_secrets(
             input,
             &[RedactionRule {
                 pattern: "token-[0-9]+".to_string(),
