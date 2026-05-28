@@ -1,5 +1,6 @@
 // src/cli.rs
 use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 
 
 #[derive(Parser, Debug)]
@@ -56,6 +57,12 @@ pub enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigAction,
+    },
+    /// Print a shell completion script to stdout
+    Completions {
+        /// Target shell
+        #[arg(value_enum)]
+        shell: Shell,
     },
 }
 

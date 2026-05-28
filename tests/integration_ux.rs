@@ -110,3 +110,29 @@ fn config_init_creates_default_file() {
     assert!(stdout.contains("already exists"), "got: {stdout}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn completions_emits_a_zsh_script() {
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let output = std::process::Command::new(bin)
+        .args(["completions", "zsh"])
+        .output()
+        .expect("run vallum completions zsh");
+    assert!(output.status.success(), "exited {:?}", output.status.code());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.is_empty(), "completion script should be non-empty");
+    assert!(stdout.contains("vallum"), "completion script should reference the binary name");
+}
+
+#[test]
+fn completions_emits_a_bash_script() {
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let output = std::process::Command::new(bin)
+        .args(["completions", "bash"])
+        .output()
+        .expect("run vallum completions bash");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.is_empty());
+    assert!(stdout.contains("vallum"));
+}

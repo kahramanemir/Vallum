@@ -1,6 +1,7 @@
 // src/main.rs
 use chrono::Local;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 use serde::Serialize;
 use std::io::{self, Write};
 use vallum::cli::{Cli, Commands, ConfigAction};
@@ -217,6 +218,10 @@ fn main() {
                     }
                 }
             }
+        }
+        Commands::Completions { shell } => {
+            let mut cmd = Cli::command();
+            generate(*shell, &mut cmd, "vallum", &mut std::io::stdout());
         }
     }
 }
