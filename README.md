@@ -201,6 +201,14 @@ git status            12,103 saved   (88%)
 npm install            8,442 saved   (76%)
 ```
 
+### Reproducing the savings
+
+Run `cargo bench` to time the full pipeline against five committed fixtures (`git status`, `cargo build`, `pytest`, `npm install`, a minified blob) and print a raw-vs-sanitized token table. Fixtures live in `benches/fixtures/` and are versioned with the repo, so the savings figures are reproducible from a clean checkout. The bench also prints a summary table to stderr after all criterion measurements complete, showing each fixture's before/after token counts.
+
+## Tests
+
+**Property tests.** The scrubber, truncator, ansi, whitespace, and optimizer modules carry inline `proptest` invariants (no-panic, structural bounds, idempotency) that run under the normal `cargo test`.
+
 ## Modules
 
 | File                          | Responsibility                                       |
@@ -235,8 +243,8 @@ npm install            8,442 saved   (76%)
 - [x] Sub-project B — broader command coverage (git diff, git log, docker, go test, make), optimizer toggles (`[optimizer] disabled`), long-line truncation (`pipeline.max_line_length`), optional BPE token counting (`--features bpe`)
 - [x] Sub-project C — integration/UX: `install-hook`/`uninstall-hook` (Claude Code PreToolUse), `vallum hook` handler, `config show`/`config init`, `vallum completions <shell>`, exit-125 convention
 - [x] Sub-project D — live-tee (`vallum run --tee`, `~/.vallum/live.log`); PTY/streaming proper descoped because the hook skip-list (sub-project C) removed the urgency
-- [ ] Sub-project E (partial) — fuzzing + benchmark (CI already exists)
-- [ ] Deferred — entropy detection, Chinese injection, injection precision tuning, config regex compile-once, more optimizers (kubectl, terraform, ripgrep)
+- [x] Sub-project E — maturity: `proptest` invariants across scrubber/truncator/ansi/whitespace/optimizer modules; `criterion` benchmark harness with five versioned fixtures (`benches/fixtures/`); savings figures reproducible from a clean checkout
+- [ ] Deferred — entropy detection, Chinese-language injection, injection precision tuning, config regex compile-once, more optimizers (kubectl, terraform, ripgrep), `cargo-fuzz`/libFuzzer harness, performance regression gating
 
 ## Name
 
