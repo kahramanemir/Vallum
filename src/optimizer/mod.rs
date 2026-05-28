@@ -4,6 +4,7 @@ pub mod docker;
 pub mod git_diff;
 pub mod git_log;
 pub mod git_status;
+pub mod go_test;
 pub mod npm;
 pub mod pytest;
 
@@ -26,6 +27,7 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(git_diff::GitDiffOptimizer),
             Box::new(git_log::GitLogOptimizer),
             Box::new(docker::DockerOptimizer),
+            Box::new(go_test::GoTestOptimizer),
         ]
     })
 }
