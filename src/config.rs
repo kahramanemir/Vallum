@@ -32,6 +32,7 @@ pub struct PipelineConfig {
     pub min_optimize_tokens: usize,
     pub max_output_bytes: usize,
     pub timeout_secs: u64,
+    pub max_line_length: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -80,6 +81,7 @@ impl Default for PipelineConfig {
             min_optimize_tokens: 50,
             max_output_bytes: 10 * 1024 * 1024,
             timeout_secs: 300,
+            max_line_length: 2000,
         }
     }
 }
@@ -139,6 +141,7 @@ mod tests {
         assert_eq!(config.pipeline.min_optimize_tokens, 50);
         assert_eq!(config.pipeline.max_output_bytes, 10 * 1024 * 1024);
         assert_eq!(config.pipeline.timeout_secs, 300);
+        assert_eq!(config.pipeline.max_line_length, 2000);
         assert!(config.scrubber.extra_secret_patterns.is_empty());
     }
 

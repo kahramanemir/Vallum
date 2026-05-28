@@ -85,6 +85,7 @@ fn main() {
                         &collapsed,
                         config.pipeline.head_lines,
                         config.pipeline.tail_lines,
+                        config.pipeline.max_line_length,
                     )
                 };
 
