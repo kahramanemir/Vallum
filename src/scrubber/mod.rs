@@ -7,7 +7,7 @@ mod secrets;
 
 pub fn sanitize(input: &str, extra_patterns: &[RedactionRule]) -> String {
     let no_secrets = secrets::scrub_secrets(input, extra_patterns);
-    let safe_text = injection::scrub_injections(&no_secrets);
+    let (safe_text, _detected) = injection::scrub_injections(&no_secrets);
     let safe_text = markers::defang(&safe_text);
 
     format!(
