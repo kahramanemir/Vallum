@@ -5,11 +5,6 @@ mod injection;
 mod markers;
 mod secrets;
 
-#[allow(unused_imports)]
-pub use injection::scrub_injections;
-#[allow(unused_imports)]
-pub use secrets::scrub_secrets;
-
 pub fn sanitize(input: &str, extra_patterns: &[RedactionRule]) -> String {
     let no_secrets = secrets::scrub_secrets(input, extra_patterns);
     let safe_text = injection::scrub_injections(&no_secrets);
