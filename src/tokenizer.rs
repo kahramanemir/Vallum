@@ -20,6 +20,52 @@ impl TokenEstimator for HeuristicEstimator {
     }
 }
 
+/// Exact BPE token counting via tiktoken (o200k_base, the GPT-4o-family BPE).
+/// Compiled only with `--features bpe`. This is an OpenAI-family tokenizer — a
+/// close approximation of, not identical to, Claude's tokenizer, and far more
+/// accurate than the heuristic.
+#[cfg(feature = "bpe")]
+pub struct BpeEstimator {
+    bpe: tiktoken_rs::CoreBPE,
+}
+
+#[cfg(feature = "bpe")]
+impl BpeEstimator {
+    pub fn new() -> Self {
+        Self {
+            bpe: tiktoken_rs::o200k_base().expect("load o200k_base tokenizer"),
+        }
+    }
+}
+
+#[cfg(feature = "bpe")]
+impl Default for BpeEstimator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "bpe")]
+impl TokenEstimator for BpeEstimator {
+    fn estimate(&self, s: &str) -> usize {
+        self.bpe.encode_ordinary(s).len()
+    }
+}
+
+#[cfg(all(test, feature = "bpe"))]
+mod bpe_tests {
+    use super::*;
+
+    #[test]
+    fn bpe_counts_are_plausible() {
+        let est = BpeEstimator::new();
+        assert_eq!(est.estimate(""), 0);
+        assert!(est.estimate("hello world") >= 2);
+        let long = "the quick brown fox ".repeat(50);
+        assert!(est.estimate(&long) > est.estimate("the quick brown fox "));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

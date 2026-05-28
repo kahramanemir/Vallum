@@ -1,8 +1,15 @@
 // src/optimizer/mod.rs
 pub mod cargo;
+pub mod docker;
+pub mod git_diff;
+pub mod git_log;
 pub mod git_status;
+pub mod go_test;
+pub mod make;
 pub mod npm;
 pub mod pytest;
+
+use std::sync::OnceLock;
 
 pub trait CommandOptimizer {
     fn name(&self) -> &'static str;
@@ -10,15 +17,33 @@ pub trait CommandOptimizer {
     fn optimize(&self, input: &str) -> Option<String>;
 }
 
-pub fn dispatch(cmd: &str, args: &[String], input: &str) -> Option<(String, &'static str)> {
-    let optimizers: Vec<Box<dyn CommandOptimizer>> = vec![
-        Box::new(pytest::PytestOptimizer),
-        Box::new(npm::NpmOptimizer),
-        Box::new(cargo::CargoOptimizer),
-        Box::new(git_status::GitStatusOptimizer),
-    ];
+fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
+    static REG: OnceLock<Vec<Box<dyn CommandOptimizer + Send + Sync>>> = OnceLock::new();
+    REG.get_or_init(|| {
+        vec![
+            Box::new(pytest::PytestOptimizer),
+            Box::new(npm::NpmOptimizer),
+            Box::new(cargo::CargoOptimizer),
+            Box::new(git_status::GitStatusOptimizer),
+            Box::new(git_diff::GitDiffOptimizer),
+            Box::new(git_log::GitLogOptimizer),
+            Box::new(docker::DockerOptimizer),
+            Box::new(go_test::GoTestOptimizer),
+            Box::new(make::MakeOptimizer),
+        ]
+    })
+}
 
-    for opt in &optimizers {
+pub fn dispatch(
+    cmd: &str,
+    args: &[String],
+    input: &str,
+    disabled: &[String],
+) -> Option<(String, &'static str)> {
+    for opt in registry() {
+        if disabled.iter().any(|d| d == opt.name()) {
+            continue;
+        }
         if opt.matches(cmd, args) {
             if let Some(out) = opt.optimize(input) {
                 return Some((out, opt.name()));
@@ -26,6 +51,54 @@ pub fn dispatch(cmd: &str, args: &[String], input: &str) -> Option<(String, &'st
         }
     }
     None
+}
+
+/// Collapse maximal runs of "noise" lines (3 or more consecutive lines for which
+/// `is_noise` returns true) into a single `[N <label> hidden]` marker, keeping
+/// all other lines verbatim. Returns `None` if the input has fewer than
+/// `min_lines` lines or nothing was collapsed (so callers pass through).
+pub(crate) fn collapse_noise_runs(
+    input: &str,
+    min_lines: usize,
+    is_noise: impl Fn(&str) -> bool,
+    label: &str,
+) -> Option<String> {
+    let lines: Vec<&str> = input.lines().collect();
+    if lines.len() < min_lines {
+        return None;
+    }
+
+    let mut out = String::new();
+    let mut collapsed_any = false;
+    let mut i = 0;
+    while i < lines.len() {
+        if is_noise(lines[i]) {
+            let start = i;
+            while i < lines.len() && is_noise(lines[i]) {
+                i += 1;
+            }
+            let run = i - start;
+            if run >= 3 {
+                out.push_str(&format!("[{} {} hidden]\n", run, label));
+                collapsed_any = true;
+            } else {
+                for l in &lines[start..i] {
+                    out.push_str(l);
+                    out.push('\n');
+                }
+            }
+        } else {
+            out.push_str(lines[i]);
+            out.push('\n');
+            i += 1;
+        }
+    }
+
+    if !collapsed_any {
+        return None;
+    }
+    out.push_str("[summarized by vallum]\n");
+    Some(out)
 }
 
 #[cfg(test)]
@@ -55,7 +128,7 @@ mod tests {
             "On branch main\nYour branch is up to date with 'origin/main'.\n\nChanges to be committed:\n{}\n",
             files
         );
-        let result = dispatch("git", &["status".to_string()], &input);
+        let result = dispatch("git", &["status".to_string()], &input, &[]);
         assert!(result.is_some());
         let (out, name) = result.unwrap();
         assert_eq!(name, "git_status");
@@ -80,7 +153,7 @@ mod tests {
             "test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n"
         );
 
-        let result = dispatch("cargo", &["test".to_string()], input);
+        let result = dispatch("cargo", &["test".to_string()], input, &[]);
         assert!(result.is_some());
         let (out, name) = result.unwrap();
         assert_eq!(name, "cargo");
@@ -110,7 +183,7 @@ mod tests {
             "========================= 1 failed, 11 passed in 0.50s =========================\n"
         );
 
-        let result = dispatch("pytest", &[], input);
+        let result = dispatch("pytest", &[], input, &[]);
         assert!(result.is_some());
         let (out, name) = result.unwrap();
         assert_eq!(name, "pytest");
@@ -139,7 +212,7 @@ mod tests {
             "Ran all test suites.\n"
         );
 
-        let result = dispatch("npm", &["test".to_string()], input);
+        let result = dispatch("npm", &["test".to_string()], input, &[]);
         assert!(result.is_some());
         let (out, name) = result.unwrap();
         assert_eq!(name, "npm");
@@ -150,8 +223,23 @@ mod tests {
 
     #[test]
     fn dispatch_returns_none_for_unknown_command() {
-        let result = dispatch("ls", &[], "foo");
+        let result = dispatch("ls", &[], "foo", &[]);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn dispatch_skips_disabled_optimizer() {
+        let mut files = String::new();
+        for i in 0..40 {
+            files.push_str(&format!("\tmodified:   src/file_{}.rs\n", i));
+        }
+        let input = format!(
+            "On branch main\nYour branch is up to date with 'origin/main'.\n\nChanges to be committed:\n{}\n",
+            files
+        );
+        let disabled = vec!["git_status".to_string()];
+        let result = dispatch("git", &["status".to_string()], &input, &disabled);
+        assert!(result.is_none(), "disabled optimizer must be skipped");
     }
 
     #[test]
@@ -160,5 +248,31 @@ mod tests {
         assert!(opt.matches("anything", &[]));
         assert_eq!(opt.optimize("x").unwrap(), "OPT:x");
         assert_eq!(opt.name(), "always_match");
+    }
+
+    #[test]
+    fn collapse_noise_runs_collapses_and_keeps_signal() {
+        let input = "keep A\nnoise\nnoise\nnoise\nnoise\nkeep B\nnoise\nkeep C\n";
+        let out = collapse_noise_runs(input, 4, |l| l == "noise", "noise lines").unwrap();
+        assert!(out.contains("keep A"));
+        assert!(out.contains("keep B"));
+        assert!(out.contains("keep C"));
+        assert!(out.contains("[4 noise lines hidden]"));
+        // A run shorter than 3 is NOT collapsed.
+        assert!(out.matches("noise").count() >= 1); // the single "noise" before "keep C" stays
+        assert!(out.contains("[summarized by vallum]"));
+    }
+
+    #[test]
+    fn collapse_noise_runs_passthrough_when_nothing_collapsed() {
+        // No run of >=3 noise lines -> None (pass-through).
+        let input = "a\nnoise\nb\nnoise\nc\n";
+        assert!(collapse_noise_runs(input, 1, |l| l == "noise", "x").is_none());
+    }
+
+    #[test]
+    fn collapse_noise_runs_passthrough_when_too_small() {
+        let input = "noise\nnoise\nnoise\n";
+        assert!(collapse_noise_runs(input, 10, |l| l == "noise", "x").is_none());
     }
 }

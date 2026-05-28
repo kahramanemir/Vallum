@@ -58,9 +58,13 @@ Each command flows through these stages:
 ## Built-in Optimizers
 
 - `git status`: summarizes large working-tree sections while keeping branch state and representative file entries
+- `git diff` / `git log`: collapse large unchanged-context runs / long commit bodies while keeping headers, hunks, and changed lines
 - `cargo build|test|check|clippy|run`: collapses compile/download noise and preserves summaries, failures, and diagnostics
 - `pytest` and `python -m pytest`: hides progress-dot spam while keeping collection, failure, and summary sections
 - `npm test|install|ci|run`: collapses repeated `PASS` and warning lines while preserving result summaries
+- `docker build|compose`: collapse layer/step progress while keeping step headers, errors, and the final result
+- `go test`: hide `=== RUN`/`--- PASS` spam while keeping failures and the summary
+- `make`: surface errors/warnings while collapsing ordinary build noise
 
 ## Configuration
 
@@ -78,6 +82,10 @@ tail_lines = 20
 min_optimize_tokens = 50     # skip optimize/truncate below this token estimate
 max_output_bytes = 10485760  # 10 MiB capture cap; excess is dropped with a marker
 timeout_secs = 300           # kill the child after N seconds (0 = disabled)
+max_line_length = 2000       # truncate single lines longer than this (0 disables)
+
+[optimizer]
+disabled = []            # optimizer names to turn off; all on by default
 
 [scrubber]
 extra_secret_patterns = [
@@ -97,13 +105,16 @@ Supported settings:
 - `pipeline.min_optimize_tokens`: outputs below this estimate skip optimize/truncate
 - `pipeline.max_output_bytes`: maximum bytes captured from a command (default 10 MiB)
 - `pipeline.timeout_secs`: command timeout in seconds; `0` disables it (default 300)
+- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make) — default none
+- `pipeline.max_line_length`: cap individual line length; longer lines are truncated mid-line with an elision marker — default 2000, `0` disables
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
 - `security.strict`: when `true` (or `--strict`), the output is replaced with `[OUTPUT BLOCKED: prompt injection detected]` if any injection is detected — **default `false`**
 
 ## Install
 
 ```bash
-cargo build --release
+cargo build --release                 # default: dependency-free heuristic token counts
+cargo build --release --features bpe  # exact BPE token counts (adds tiktoken-rs)
 ```
 
 The binary lands at `target/release/vallum`.
@@ -148,7 +159,7 @@ Note how a tiny output ends up *larger* after wrapping: the security wrapper has
 
 ## Measuring savings
 
-Every `vallum run` appends one JSON record to `~/.vallum/stats.jsonl` with raw and sanitized token estimates. Counting goes through a pluggable `TokenEstimator`; the default is a dependency-free heuristic (word runs + symbols) that tracks BPE better than a flat chars/4 ratio. `vallum stats` aggregates the file:
+Every `vallum run` appends one JSON record to `~/.vallum/stats.jsonl` with raw and sanitized token estimates. Counting goes through a pluggable `TokenEstimator`; the default is a dependency-free heuristic (word runs + symbols) that tracks BPE better than a flat chars/4 ratio. `vallum stats` aggregates the file. Build with `--features bpe` to count tokens with an exact `tiktoken` (o200k_base) tokenizer instead of the default dependency-free heuristic; it is an OpenAI-family approximation of Claude's tokenizer.
 
 ```
 Vallum — Token savings report
@@ -194,7 +205,8 @@ npm install            8,442 saved   (76%)
 - [x] v0.2 — ANSI strip, whitespace collapse, token metrics, per-command optimizer framework, `vallum stats`
 - [x] Post-v0.2 hardening — exit-code propagation, structured JSON output, configurable pipeline, cargo/pytest/npm optimizers
 - [x] Security sweep — concurrent bounded capture (cap + timeout + stdin), context-preserving truncation, broadened injection neutralization, marker anti-spoofing, raw-logs-off-by-default with `0600` perms, small-output short-circuit, pluggable token estimator
-- [ ] Next — exact BPE token counting (swappable behind `TokenEstimator`), optimizer toggles, broader command coverage, streaming/PTY support
+- [x] Sub-project B — broader command coverage (git diff, git log, docker, go test, make), optimizer toggles (`[optimizer] disabled`), long-line truncation (`pipeline.max_line_length`), optional BPE token counting (`--features bpe`)
+- [ ] Next — streaming/PTY support
 
 ## Name
 

@@ -1,12 +1,23 @@
 // src/metrics.rs
-use crate::tokenizer::{HeuristicEstimator, TokenEstimator};
 use serde::Serialize;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn estimate_tokens(s: &str) -> usize {
-    HeuristicEstimator.estimate(s)
+    #[cfg(feature = "bpe")]
+    {
+        use crate::tokenizer::{BpeEstimator, TokenEstimator};
+        thread_local! {
+            static EST: BpeEstimator = BpeEstimator::new();
+        }
+        EST.with(|e| e.estimate(s))
+    }
+    #[cfg(not(feature = "bpe"))]
+    {
+        use crate::tokenizer::{HeuristicEstimator, TokenEstimator};
+        HeuristicEstimator.estimate(s)
+    }
 }
 
 #[derive(Serialize)]
@@ -50,11 +61,13 @@ mod tests {
         assert_eq!(estimate_tokens(""), 0);
     }
 
+    #[cfg(not(feature = "bpe"))]
     #[test]
     fn estimate_ascii() {
         assert_eq!(estimate_tokens("hello world"), 2);
     }
 
+    #[cfg(not(feature = "bpe"))]
     #[test]
     fn estimate_unicode() {
         assert_eq!(estimate_tokens("Türkçe"), 1);
