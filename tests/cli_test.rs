@@ -187,3 +187,16 @@ fn make_temp_fixture_dir(name: &str) -> std::path::PathBuf {
 fn vallum_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_vallum"))
 }
+
+#[test]
+fn redacts_secret_in_arguments_json() {
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let output = std::process::Command::new(bin)
+        .args(["run", "--json", "echo", "ghp_abcdef123456GHIJKL"])
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .output()
+        .expect("run vallum");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("ghp_abcdef123456GHIJKL"), "secret leaked: {stdout}");
+    assert!(stdout.contains("ghp_***"), "expected redacted form: {stdout}");
+}

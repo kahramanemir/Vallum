@@ -19,7 +19,6 @@ pub fn sanitize(input: &str, extra_patterns: &[RedactionRule]) -> String {
 /// Redact secrets from an arbitrary string without injection scanning or the
 /// untrusted-output wrapper. Used to scrub command names and arguments before
 /// they are logged, recorded in stats, or emitted as JSON.
-#[allow(dead_code)]
 pub fn redact(input: &str, extra_patterns: &[RedactionRule]) -> String {
     secrets::scrub_secrets(input, extra_patterns)
 }

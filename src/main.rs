@@ -45,8 +45,6 @@ fn main() {
                 }
             };
 
-            let cmd_context = format!("{} {:?}", cmd, args);
-
             let (raw_output, exit_code) = match executor::execute_command(
                 cmd,
                 args,
@@ -59,6 +57,12 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+
+            let extra = &config.scrubber.extra_secret_patterns;
+            let safe_cmd = scrubber::redact(cmd, extra);
+            let safe_args: Vec<String> =
+                args.iter().map(|a| scrubber::redact(a, extra)).collect();
+            let cmd_context = format!("{} {:?}", safe_cmd, safe_args);
 
             let tokens_before = metrics::estimate_tokens(&raw_output);
 
@@ -96,7 +100,7 @@ fn main() {
                     )
                 };
 
-            let sanitized = scrubber::sanitize(&processed, &config.scrubber.extra_secret_patterns);
+            let sanitized = scrubber::sanitize(&processed, extra);
 
             let tokens_after = metrics::estimate_tokens(&sanitized);
 
@@ -113,8 +117,8 @@ fn main() {
             // Stats entry — best effort, never blocks output.
             let entry = StatEntry {
                 ts: Local::now().to_rfc3339(),
-                cmd: cmd.clone(),
-                args: args.clone(),
+                cmd: safe_cmd.clone(),
+                args: safe_args.clone(),
                 tokens_before,
                 tokens_after,
                 optimizer: optimizer_name.clone(),
@@ -124,8 +128,8 @@ fn main() {
 
             if *json {
                 let payload = RunOutput {
-                    command: cmd,
-                    args,
+                    command: &safe_cmd,
+                    args: &safe_args,
                     exit_code,
                     optimizer: optimizer_name.as_deref(),
                     tokens_before,
