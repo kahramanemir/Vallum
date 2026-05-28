@@ -212,10 +212,17 @@ mod tests {
 
     #[test]
     fn test_timeout_kills_child() {
+        // `sleep 30` would run for 30s if the timeout did nothing; with a 1s
+        // timeout the child is killed early. The functional guarantee that the
+        // timeout fired is `code == 124` plus the marker. The wall-clock bound
+        // (< 15s) only proves we did NOT run to natural completion (30s); it is
+        // intentionally generous because a tight bound is flaky under parallel
+        // test contention on loaded CI runners, where the polling thread that
+        // detects the 1s timeout can be starved for several seconds.
         let start = std::time::Instant::now();
         let (out, code) = execute_command(
             "sh",
-            &["-c".to_string(), "sleep 5".to_string()],
+            &["-c".to_string(), "sleep 30".to_string()],
             10 * 1024 * 1024,
             1,
             None,
@@ -223,7 +230,11 @@ mod tests {
         .unwrap();
         assert_eq!(code, 124);
         assert!(out.contains("[timed out after 1s]"));
-        assert!(start.elapsed().as_secs() < 4);
+        assert!(
+            start.elapsed().as_secs() < 15,
+            "took {}s — timeout did not cut the command short",
+            start.elapsed().as_secs()
+        );
     }
 
     #[test]
