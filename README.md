@@ -125,6 +125,7 @@ The binary lands at `target/release/vallum`.
 vallum run <command> [args...]       # run a command through the proxy
 vallum run --json <command> ...      # emit structured JSON
 vallum run --strict <command> ...    # block output if a prompt injection is detected
+vallum run --tee <command> ...       # also append raw output to ~/.vallum/live.log
 vallum stats                         # show cumulative token savings
 vallum stats --reset                 # delete collected stats
 
@@ -179,6 +180,8 @@ Once installed, Claude Code invokes `vallum hook` before every Bash tool call. T
 
 To remove the hook, run `vallum uninstall-hook` — it removes only the Vallum entry, leaving the rest of your settings file untouched.
 
+**Live progress.** `vallum run --tee` appends the child's raw stdout/stderr to `~/.vallum/live.log` as lines arrive. Watch it from a side terminal with `tail -f ~/.vallum/live.log`. The tee target is a private file (`0600`), not a stream the agent ever reads — the agent's input is still the wrapped, scrubbed pipeline output on stdout. Tee is best-effort: if the file can't be opened or written, the command runs normally without it.
+
 ## Measuring savings
 
 Every `vallum run` appends one JSON record to `~/.vallum/stats.jsonl` with raw and sanitized token estimates. Counting goes through a pluggable `TokenEstimator`; the default is a dependency-free heuristic (word runs + symbols) that tracks BPE better than a flat chars/4 ratio. `vallum stats` aggregates the file. Build with `--features bpe` to count tokens with an exact `tiktoken` (o200k_base) tokenizer instead of the default dependency-free heuristic; it is an OpenAI-family approximation of Claude's tokenizer.
@@ -204,7 +207,7 @@ npm install            8,442 saved   (76%)
 | ----------------------------- | ---------------------------------------------------- |
 | `src/cli.rs`                  | Argument parsing (`run`, `stats`)                    |
 | `src/config.rs`               | Config loading, defaults, and validation             |
-| `src/executor.rs`             | Concurrent capture with byte cap, timeout, stdin     |
+| `src/executor.rs`             | Concurrent capture with byte cap, timeout, stdin; optional tee to `~/.vallum/live.log` |
 | `src/ansi.rs`                 | Stripping ANSI escape sequences                      |
 | `src/whitespace.rs`           | Collapsing blank-line runs, stripping trailing space |
 | `src/optimizer/mod.rs`        | `CommandOptimizer` trait + dispatch registry         |
@@ -231,7 +234,7 @@ npm install            8,442 saved   (76%)
 - [x] Security sweep — concurrent bounded capture (cap + timeout + stdin), context-preserving truncation, broadened injection neutralization, marker anti-spoofing, raw-logs-off-by-default with `0600` perms, small-output short-circuit, pluggable token estimator
 - [x] Sub-project B — broader command coverage (git diff, git log, docker, go test, make), optimizer toggles (`[optimizer] disabled`), long-line truncation (`pipeline.max_line_length`), optional BPE token counting (`--features bpe`)
 - [x] Sub-project C — integration/UX: `install-hook`/`uninstall-hook` (Claude Code PreToolUse), `vallum hook` handler, `config show`/`config init`, `vallum completions <shell>`, exit-125 convention
-- [ ] Sub-project D — streaming/PTY support
+- [x] Sub-project D — live-tee (`vallum run --tee`, `~/.vallum/live.log`); PTY/streaming proper descoped because the hook skip-list (sub-project C) removed the urgency
 - [ ] Sub-project E (partial) — fuzzing + benchmark (CI already exists)
 - [ ] Deferred — entropy detection, Chinese injection, injection precision tuning, config regex compile-once, more optimizers (kubectl, terraform, ripgrep)
 
