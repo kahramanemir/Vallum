@@ -62,4 +62,13 @@ mod tests {
         let input = "diff --git a/f b/f\n@@ -1 +1 @@\n-a\n+b\n";
         assert!(GitDiffOptimizer.optimize(input).is_none());
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_optimize_does_not_panic(s in "[\\s\\S]{0,500}") {
+            let _ = GitDiffOptimizer.optimize(&s);
+        }
+    }
 }
