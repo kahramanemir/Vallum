@@ -71,4 +71,27 @@ mod tests {
         assert_eq!(out, "token ghp_*** here");
         assert!(!out.contains("[UNTRUSTED"));
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_sanitize_does_not_panic(s in "[\\s\\S]{0,500}", strict in any::<bool>()) {
+            let _ = sanitize(&s, &[], strict);
+        }
+
+        #[test]
+        fn prop_sanitize_output_is_wrapped(s in "[\\s\\S]{0,500}") {
+            let out = sanitize(&s, &[], false);
+            prop_assert!(out.starts_with("[UNTRUSTED TERMINAL OUTPUT START]\n"));
+            prop_assert!(out.trim_end().ends_with("[UNTRUSTED TERMINAL OUTPUT END]"));
+        }
+
+        #[test]
+        fn prop_sanitize_has_exactly_one_end_marker(s in "[\\s\\S]{0,500}") {
+            let out = sanitize(&s, &[], false);
+            let count = out.matches("[UNTRUSTED TERMINAL OUTPUT END]").count();
+            prop_assert_eq!(count, 1);
+        }
+    }
 }

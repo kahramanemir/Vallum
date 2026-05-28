@@ -110,4 +110,13 @@ mod tests {
         let input = "commit abc\nAuthor: x\nDate: y\n\n    subj\n";
         assert!(GitLogOptimizer.optimize(input).is_none());
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_optimize_does_not_panic(s in "[\\s\\S]{0,500}") {
+            let _ = GitLogOptimizer.optimize(&s);
+        }
+    }
 }

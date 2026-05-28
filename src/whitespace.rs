@@ -55,4 +55,21 @@ mod tests {
         let expected = "    indented line\n";
         assert_eq!(collapse(input), expected);
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_collapse_does_not_panic(s in "[\\s\\S]{0,1000}") {
+            let _ = collapse(&s);
+        }
+
+        #[test]
+        fn prop_collapse_no_quad_newline(s in "[\\s\\S]{0,1000}") {
+            // After collapse, no run of 4+ consecutive newlines remains
+            // (which would represent 3+ blank lines between text).
+            let out = collapse(&s);
+            prop_assert!(!out.contains("\n\n\n\n"));
+        }
+    }
 }

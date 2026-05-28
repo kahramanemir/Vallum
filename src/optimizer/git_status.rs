@@ -155,4 +155,13 @@ mod tests {
         assert!(result.contains("[summarized by vallum]"));
         assert!(result.lines().count() < input.lines().count());
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_optimize_does_not_panic(s in "[\\s\\S]{0,500}") {
+            let _ = GitStatusOptimizer.optimize(&s);
+        }
+    }
 }

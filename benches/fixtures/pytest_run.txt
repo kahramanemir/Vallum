@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.7, pytest-8.0.0, pluggy-1.4.0
+rootdir: /tmp/app
+plugins: anyio-4.2.0
+collected 42 items
+
+tests/test_alpha.py ........                                            [ 19%]
+tests/test_beta.py .........F.                                          [ 45%]
+tests/test_gamma.py ...........                                         [ 71%]
+tests/test_delta.py ............                                        [100%]
+
+=================================== FAILURES ===================================
+________________________________ test_example __________________________________
+
+    def test_example():
+>       assert 1 == 2
+E       assert 1 == 2
+
+tests/test_beta.py:42: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_beta.py::test_example - assert 1 == 2
+========================= 1 failed, 41 passed in 1.23s =========================

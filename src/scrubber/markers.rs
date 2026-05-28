@@ -42,4 +42,15 @@ mod tests {
         assert!(out.contains("(untrusted terminal output start)"));
         assert!(!out.to_uppercase().contains("[ UNTRUSTED"));
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_defang_strips_exact_markers(s in "[\\s\\S]{0,500}") {
+            let out = defang(&s);
+            prop_assert!(!out.contains("[UNTRUSTED TERMINAL OUTPUT START]"));
+            prop_assert!(!out.contains("[UNTRUSTED TERMINAL OUTPUT END]"));
+        }
+    }
 }

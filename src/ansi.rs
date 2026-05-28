@@ -32,4 +32,19 @@ mod tests {
         let input = "hello world";
         assert_eq!(strip(input), "hello world");
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_strip_does_not_panic(s in "[\\s\\S]{0,1000}") {
+            let _ = strip(&s);
+        }
+
+        #[test]
+        fn prop_strip_never_grows(s in "[\\s\\S]{0,1000}") {
+            let out = strip(&s);
+            prop_assert!(out.len() <= s.len());
+        }
+    }
 }

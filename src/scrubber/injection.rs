@@ -140,4 +140,21 @@ mod tests {
             assert!(!out.contains(payload), "payload survived for {input}: {out}");
         }
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_scrub_injections_does_not_panic(s in "[\\s\\S]{0,500}") {
+            let _ = scrub_injections(&s);
+        }
+
+        #[test]
+        fn prop_scrub_injections_no_alpha_means_no_detection(s in "[0-9\\s\\p{P}]{0,500}") {
+            // A string composed only of digits, whitespace, and punctuation cannot
+            // match any of the keyword-based injection patterns.
+            let (_out, detected) = scrub_injections(&s);
+            prop_assert!(!detected);
+        }
+    }
 }

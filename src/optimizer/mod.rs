@@ -275,4 +275,30 @@ mod tests {
         let input = "noise\nnoise\nnoise\n";
         assert!(collapse_noise_runs(input, 10, |l| l == "noise", "x").is_none());
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_collapse_noise_runs_does_not_panic(
+            s in "[\\s\\S]{0,500}",
+            min_lines in 0usize..50,
+        ) {
+            let _ = collapse_noise_runs(&s, min_lines, |line| line.is_empty(), "noise");
+        }
+
+        #[test]
+        fn prop_collapse_noise_runs_line_count_bounded(
+            s in "[\\s\\S]{0,500}",
+            min_lines in 0usize..50,
+        ) {
+            if let Some(out) = collapse_noise_runs(&s, min_lines, |line| line.is_empty(), "noise") {
+                let in_lines = s.lines().count();
+                let out_lines = out.lines().count();
+                // A collapse can only equal or reduce the line count, plus one
+                // trailing "[summarized by vallum]" marker.
+                prop_assert!(out_lines <= in_lines + 2);
+            }
+        }
+    }
 }

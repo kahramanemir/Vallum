@@ -64,4 +64,13 @@ mod tests {
         let input = "=== RUN TestX\n--- PASS: TestX\nok\texample\t0.01s\n";
         assert!(GoTestOptimizer.optimize(input).is_none());
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_optimize_does_not_panic(s in "[\\s\\S]{0,500}") {
+            let _ = GoTestOptimizer.optimize(&s);
+        }
+    }
 }
