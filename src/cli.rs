@@ -30,4 +30,6 @@ pub enum Commands {
         #[arg(long)]
         reset: bool,
     },
+    /// Run as a Claude Code PreToolUse hook (reads JSON from stdin)
+    Hook,
 }

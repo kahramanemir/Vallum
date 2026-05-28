@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use vallum::cli::{Cli, Commands};
 use vallum::config::AppConfig;
 use vallum::metrics::{self, StatEntry};
-use vallum::{ansi, audit, executor, optimizer, scrubber, stats, truncator, whitespace};
+use vallum::{ansi, audit, executor, hook, optimizer, scrubber, stats, truncator, whitespace};
 
 #[derive(Serialize)]
 struct RunOutput<'a> {
@@ -152,6 +152,9 @@ fn main() {
                     Err(e) => eprintln!("Could not read stats: {}", e),
                 }
             }
+        }
+        Commands::Hook => {
+            std::process::exit(hook::run());
         }
     }
 }

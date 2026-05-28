@@ -5,6 +5,7 @@ pub mod cli;
 pub mod config;
 pub mod executor;
 pub mod fsutil;
+pub mod hook;
 pub mod metrics;
 pub mod optimizer;
 pub mod scrubber;
