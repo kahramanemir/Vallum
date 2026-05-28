@@ -50,8 +50,8 @@ Each command flows through these stages:
 
 ## Security model
 
-- **Secret redaction** runs on every command's output before it is shown or logged (sanitized log). Patterns cover OpenAI-style `sk-` keys, GitHub `ghp_`/`github_pat_` tokens, Slack `xox*` tokens, JWT bearer headers, and PEM private keys. Extend with your own regex rules via config.
-- **Injection neutralization** is pattern-based and best-effort: it flags common families ("ignore/disregard/forget previous instructions", "you are now…", "reveal your system prompt", injected `Assistant:`/`System:` turns) and replaces them with `[POTENTIAL INJECTION NEUTRALIZED]`.
+- **Secret redaction** runs on every command's output before it is shown or logged (sanitized log). Patterns cover OpenAI-style `sk-` keys, GitHub `ghp_`/`github_pat_` tokens, Slack `xox*` tokens, JWT bearer headers, PEM private keys, AWS access keys (`AKIA…`), Google API keys (`AIza…`), Stripe live keys (`sk_live_`/`rk_live_`), Anthropic keys (`sk-ant-…`), database connection-string passwords (`scheme://user:pass@host` → password masked), and uppercase `.env`-style assignments (`PASSWORD=…`, `API_KEY: …`). **Command names and arguments are also redacted** before being written to the audit log, `stats.jsonl`, and JSON output — not just command output. Extend with your own regex rules via config.
+- **Injection neutralization** is pattern-based and best-effort: it flags common families ("ignore/disregard/forget previous instructions", "you are now…", "reveal your system prompt", injected `Assistant:`/`System:` turns) across multiple languages (English, Turkish, Spanish, German, French) and is resistant to line-splitting; a detected injection's whole line (trigger + payload) is neutralized and replaced with `[POTENTIAL INJECTION NEUTRALIZED]`. With the opt-in `--strict` / `[security] strict` fail-closed mode, a detected injection instead causes the **entire output body** to be replaced with `[OUTPUT BLOCKED: prompt injection detected]` (the child exit code is still preserved).
 - **Untrusted-output wrapper** brackets every result and defangs any embedded marker strings, so a command cannot forge an early close and smuggle "trusted" text past the boundary. This adds a small fixed token overhead on tiny outputs — accepted by design, because the boundary is size-independent.
 - **Logs are private.** Raw (unredacted) logging is **off by default**; the sanitized log and stats file are created with `0600` permissions on unix.
 
@@ -83,6 +83,9 @@ timeout_secs = 300           # kill the child after N seconds (0 = disabled)
 extra_secret_patterns = [
   { pattern = "token-[0-9]+", replacement = "token-***" }
 ]
+
+[security]
+strict = false   # block the entire output when a prompt injection is detected
 ```
 
 Supported settings:
@@ -95,6 +98,7 @@ Supported settings:
 - `pipeline.max_output_bytes`: maximum bytes captured from a command (default 10 MiB)
 - `pipeline.timeout_secs`: command timeout in seconds; `0` disables it (default 300)
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
+- `security.strict`: when `true` (or `--strict`), the output is replaced with `[OUTPUT BLOCKED: prompt injection detected]` if any injection is detected — **default `false`**
 
 ## Install
 
@@ -109,6 +113,7 @@ The binary lands at `target/release/vallum`.
 ```bash
 vallum run <command> [args...]    # run a command through the proxy
 vallum run --json <command> ...   # emit structured JSON for agent/automation use
+vallum run --strict <command> ... # block output if a prompt injection is detected
 vallum stats                      # show cumulative token savings
 vallum stats --reset              # delete all collected stats (prompts)
 ```
