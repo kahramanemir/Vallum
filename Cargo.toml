@@ -32,6 +32,9 @@ dirs = "5"
 toml = "0.8"
 tiktoken-rs = { version = "0.6", optional = true }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 proptest = "1"
 criterion = "0.5"

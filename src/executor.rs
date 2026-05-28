@@ -55,6 +55,24 @@ fn spawn_reader<R: Read + Send + 'static>(
     })
 }
 
+/// Forcefully terminate a timed-out child. On unix the child is its own
+/// process-group leader (see the spawn in `execute_command`), so its PGID
+/// equals its PID; signalling the negative PID kills the whole group —
+/// grandchildren spawned via a shell included — which closes the captured
+/// output pipes so the reader threads reach EOF promptly. On other platforms
+/// we fall back to killing the direct child only.
+fn kill_process_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        let pid = child.id() as i32;
+        // Negative PID targets the entire process group. Errors (e.g. the group
+        // already exited) are intentionally ignored.
+        let _ = unsafe { libc::kill(-pid, libc::SIGKILL) };
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 pub fn execute_command(
     cmd: &str,
     args: &[String],
@@ -80,11 +98,22 @@ pub fn execute_command(
         }
     });
 
-    let mut child = Command::new(cmd)
+    let mut command = Command::new(cmd);
+    command
         .args(args)
         .stdin(Stdio::inherit())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    // On unix, run the child in its own process group so a timeout can kill the
+    // whole tree. A shell like `sh -c 'sleep 30'` forks a grandchild; killing
+    // only the direct child would orphan it, and it would keep the captured
+    // output pipes open until it exits on its own — hanging the reader joins.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command
         .spawn()
         .map_err(|e| format!("Failed to spawn command: {}", e))?;
 
@@ -129,8 +158,7 @@ pub fn execute_command(
             Ok(None) => {
                 if let Some(t) = timeout {
                     if start.elapsed() >= t {
-                        let _ = child.kill();
-                        let _ = child.wait();
+                        kill_process_tree(&mut child);
                         timed_out = true;
                         exit_code = TIMEOUT_EXIT_CODE;
                         break;
