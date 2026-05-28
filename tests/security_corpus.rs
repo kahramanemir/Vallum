@@ -52,8 +52,16 @@ fn injection_corpus_detection_rate() {
         }
     }
     let rate = detected as f64 / INJECTIONS.len() as f64;
-    eprintln!("Injection detection rate: {detected}/{} ({:.0}%)", INJECTIONS.len(), rate * 100.0);
-    assert_eq!(detected, INJECTIONS.len(), "all injection payloads must be detected");
+    eprintln!(
+        "Injection detection rate: {detected}/{} ({:.0}%)",
+        INJECTIONS.len(),
+        rate * 100.0
+    );
+    assert_eq!(
+        detected,
+        INJECTIONS.len(),
+        "all injection payloads must be detected"
+    );
 }
 
 #[test]

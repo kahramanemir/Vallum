@@ -54,7 +54,9 @@ mod tests {
         let blocked = sanitize(malicious, &[], true);
         assert!(blocked.contains("[OUTPUT BLOCKED: prompt injection detected]"));
         assert!(!blocked.contains("do evil"));
-        assert!(blocked.trim_end().ends_with("[UNTRUSTED TERMINAL OUTPUT END]"));
+        assert!(blocked
+            .trim_end()
+            .ends_with("[UNTRUSTED TERMINAL OUTPUT END]"));
     }
 
     #[test]

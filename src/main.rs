@@ -6,8 +6,8 @@ use serde::Serialize;
 use std::io::{self, Write};
 use vallum::cli::{Cli, Commands, ConfigAction};
 use vallum::config::AppConfig;
-use vallum::metrics::{self, StatEntry};
 use vallum::install_hook::{self, Level};
+use vallum::metrics::{self, StatEntry};
 use vallum::{ansi, audit, executor, hook, optimizer, scrubber, stats, truncator, whitespace};
 
 #[derive(Serialize)]
@@ -25,7 +25,13 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Run { json, strict, tee, cmd, args } => {
+        Commands::Run {
+            json,
+            strict,
+            tee,
+            cmd,
+            args,
+        } => {
             let config = match AppConfig::load() {
                 Ok(config) => config,
                 Err(e) => {
@@ -57,8 +63,7 @@ fn main() {
             let strict = *strict || config.security.strict;
             let extra = &config.scrubber.extra_secret_patterns;
             let safe_cmd = scrubber::redact(cmd, extra);
-            let safe_args: Vec<String> =
-                args.iter().map(|a| scrubber::redact(a, extra)).collect();
+            let safe_args: Vec<String> = args.iter().map(|a| scrubber::redact(a, extra)).collect();
             let cmd_context = format!("{} {:?}", safe_cmd, safe_args);
 
             let tokens_before = metrics::estimate_tokens(&raw_output);
@@ -77,26 +82,28 @@ fn main() {
             let stripped = ansi::strip(&raw_output);
 
             let mut optimizer_name: Option<String> = None;
-            let processed =
-                if metrics::estimate_tokens(&stripped) < config.pipeline.min_optimize_tokens {
-                    // Small output: skip optimize/truncate; the security wrapper still applies.
-                    whitespace::collapse(&stripped)
-                } else {
-                    let after_optimize = match optimizer::dispatch(cmd, args, &stripped, &config.optimizer.disabled) {
+            let processed = if metrics::estimate_tokens(&stripped)
+                < config.pipeline.min_optimize_tokens
+            {
+                // Small output: skip optimize/truncate; the security wrapper still applies.
+                whitespace::collapse(&stripped)
+            } else {
+                let after_optimize =
+                    match optimizer::dispatch(cmd, args, &stripped, &config.optimizer.disabled) {
                         Some((out, name)) => {
                             optimizer_name = Some(name.to_string());
                             out
                         }
                         None => stripped.clone(),
                     };
-                    let collapsed = whitespace::collapse(&after_optimize);
-                    truncator::smart_truncate(
-                        &collapsed,
-                        config.pipeline.head_lines,
-                        config.pipeline.tail_lines,
-                        config.pipeline.max_line_length,
-                    )
-                };
+                let collapsed = whitespace::collapse(&after_optimize);
+                truncator::smart_truncate(
+                    &collapsed,
+                    config.pipeline.head_lines,
+                    config.pipeline.tail_lines,
+                    config.pipeline.max_line_length,
+                )
+            };
 
             let sanitized = scrubber::sanitize(&processed, extra, strict);
 
@@ -165,7 +172,11 @@ fn main() {
         Commands::Hook => {
             std::process::exit(hook::run());
         }
-        Commands::InstallHook { user, project, force } => {
+        Commands::InstallHook {
+            user,
+            project,
+            force,
+        } => {
             let level = match resolve_level(*user, *project) {
                 Ok(l) => l,
                 Err(msg) => {
@@ -197,35 +208,31 @@ fn main() {
                 }
             }
         }
-        Commands::Config { action } => {
-            match action {
-                ConfigAction::Show => {
-                    let config = match AppConfig::load() {
-                        Ok(c) => c,
-                        Err(e) => {
-                            eprintln!("Config Error: {e}");
-                            std::process::exit(125);
-                        }
-                    };
-                    match toml::to_string_pretty(&config) {
-                        Ok(s) => print!("{s}"),
-                        Err(e) => {
-                            eprintln!("config show: serialize failed: {e}");
-                            std::process::exit(125);
-                        }
+        Commands::Config { action } => match action {
+            ConfigAction::Show => {
+                let config = match AppConfig::load() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Config Error: {e}");
+                        std::process::exit(125);
                     }
-                }
-                ConfigAction::Init { force } => {
-                    match config_init(*force) {
-                        Ok(msg) => println!("{msg}"),
-                        Err(e) => {
-                            eprintln!("config init: {e}");
-                            std::process::exit(125);
-                        }
+                };
+                match toml::to_string_pretty(&config) {
+                    Ok(s) => print!("{s}"),
+                    Err(e) => {
+                        eprintln!("config show: serialize failed: {e}");
+                        std::process::exit(125);
                     }
                 }
             }
-        }
+            ConfigAction::Init { force } => match config_init(*force) {
+                Ok(msg) => println!("{msg}"),
+                Err(e) => {
+                    eprintln!("config init: {e}");
+                    std::process::exit(125);
+                }
+            },
+        },
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             generate(*shell, &mut cmd, "vallum", &mut std::io::stdout());
@@ -271,7 +278,10 @@ disabled = []                    # optimizer names to turn off (e.g. ["npm","doc
 fn config_init(force: bool) -> Result<String, String> {
     let path = vallum::config::config_path_from_env_or_default();
     if path.exists() && !force {
-        return Ok(format!("{} already exists; pass --force to overwrite.", path.display()));
+        return Ok(format!(
+            "{} already exists; pass --force to overwrite.",
+            path.display()
+        ));
     }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;

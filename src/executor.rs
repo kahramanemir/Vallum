@@ -197,8 +197,14 @@ mod tests {
     #[test]
     fn test_output_cap_marks_truncation() {
         // `seq 1 1000` is well over 100 bytes.
-        let (out, _code) =
-            execute_command("sh", &["-c".to_string(), "seq 1 1000".to_string()], 100, 0, None).unwrap();
+        let (out, _code) = execute_command(
+            "sh",
+            &["-c".to_string(), "seq 1 1000".to_string()],
+            100,
+            0,
+            None,
+        )
+        .unwrap();
         assert!(out.contains("[output capped at 100 bytes]"));
         // Stored body stays bounded near the cap (allow slack for the marker).
         assert!(out.len() < 400);
@@ -247,7 +253,10 @@ mod tests {
         assert!(out.contains("line2"));
 
         let mut tee_contents = String::new();
-        std::fs::File::open(&tee).unwrap().read_to_string(&mut tee_contents).unwrap();
+        std::fs::File::open(&tee)
+            .unwrap()
+            .read_to_string(&mut tee_contents)
+            .unwrap();
         assert!(tee_contents.contains("line1"));
         assert!(tee_contents.contains("line2"));
 

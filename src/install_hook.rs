@@ -163,7 +163,11 @@ pub fn install(level: Level, force: bool) -> Result<String, String> {
         serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize: {e}"))?;
     let backup = write_atomic_with_backup(&path, &rendered)?;
     Ok(match backup {
-        Some(b) => format!("Installed Vallum hook → {} (backup: {})", path.display(), b.display()),
+        Some(b) => format!(
+            "Installed Vallum hook → {} (backup: {})",
+            path.display(),
+            b.display()
+        ),
         None => format!("Installed Vallum hook → {}", path.display()),
     })
 }
@@ -186,7 +190,11 @@ pub fn uninstall(level: Level) -> Result<String, String> {
         serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize: {e}"))?;
     let backup = write_atomic_with_backup(&path, &rendered)?;
     Ok(match backup {
-        Some(b) => format!("Removed Vallum hook from {} (backup: {})", path.display(), b.display()),
+        Some(b) => format!(
+            "Removed Vallum hook from {} (backup: {})",
+            path.display(),
+            b.display()
+        ),
         None => format!("Removed Vallum hook from {}", path.display()),
     })
 }
@@ -198,7 +206,10 @@ mod tests {
     fn temp_dir() -> PathBuf {
         let p = std::env::temp_dir().join(format!(
             "vallum_install_hook_{}",
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         fs::create_dir_all(&p).unwrap();
         p
@@ -281,7 +292,10 @@ mod tests {
         fs::write(&path, "{not valid json").unwrap();
         let err = read_settings(&path).unwrap_err();
         assert!(err.contains("not valid JSON"), "got: {err}");
-        assert!(err.contains(".bak-"), "should hint at backup recovery; got: {err}");
+        assert!(
+            err.contains(".bak-"),
+            "should hint at backup recovery; got: {err}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

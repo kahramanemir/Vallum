@@ -63,7 +63,8 @@ fn run_pipeline(raw: &str, cmd: &str, args: &[String], config: &AppConfig) -> St
     let processed = if metrics::estimate_tokens(&stripped) < config.pipeline.min_optimize_tokens {
         whitespace::collapse(&stripped)
     } else {
-        let after_opt = match optimizer::dispatch(cmd, args, &stripped, &config.optimizer.disabled) {
+        let after_opt = match optimizer::dispatch(cmd, args, &stripped, &config.optimizer.disabled)
+        {
             Some((out, _)) => out,
             None => stripped.clone(),
         };
@@ -82,7 +83,10 @@ fn print_savings_report(config: &AppConfig) {
     eprintln!();
     eprintln!("Vallum — pipeline savings (heuristic estimator)");
     eprintln!("─────────────────────────────────────────────────");
-    eprintln!("{:<22} {:>10} {:>10} {:>8}", "fixture", "raw", "sanitized", "saved");
+    eprintln!(
+        "{:<22} {:>10} {:>10} {:>8}",
+        "fixture", "raw", "sanitized", "saved"
+    );
     for f in FIXTURES {
         let raw = load(f.path);
         let args: Vec<String> = f.args.iter().map(|s| (*s).to_string()).collect();
@@ -90,11 +94,12 @@ fn print_savings_report(config: &AppConfig) {
         let raw_t = metrics::estimate_tokens(&raw);
         let san_t = metrics::estimate_tokens(&sanitized);
         let saved = raw_t.saturating_sub(san_t);
-        let pct = if raw_t == 0 { 0.0 } else { (saved as f64 / raw_t as f64) * 100.0 };
-        eprintln!(
-            "{:<22} {:>10} {:>10} {:>7.1}%",
-            f.label, raw_t, san_t, pct
-        );
+        let pct = if raw_t == 0 {
+            0.0
+        } else {
+            (saved as f64 / raw_t as f64) * 100.0
+        };
+        eprintln!("{:<22} {:>10} {:>10} {:>7.1}%", f.label, raw_t, san_t, pct);
     }
     eprintln!();
 }

@@ -227,7 +227,10 @@ extra_secret_patterns = [ { pattern = "token-(", replacement = "token-***" } ]
         let path = dir.join("config.toml");
         fs::write(&path, "[optimizer]\ndisabled = [\"npm\", \"docker\"]\n").unwrap();
         let config = AppConfig::from_path(&path).unwrap();
-        assert_eq!(config.optimizer.disabled, vec!["npm".to_string(), "docker".to_string()]);
+        assert_eq!(
+            config.optimizer.disabled,
+            vec!["npm".to_string(), "docker".to_string()]
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

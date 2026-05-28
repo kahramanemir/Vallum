@@ -2,7 +2,6 @@
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
-
 #[derive(Parser, Debug)]
 #[command(name = "vallum", version = env!("CARGO_PKG_VERSION"), about = "AI CLI Proxy")]
 pub struct Cli {

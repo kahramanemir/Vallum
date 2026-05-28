@@ -37,7 +37,8 @@ mod tests {
 
     #[test]
     fn defangs_whitespace_and_case_variants() {
-        let out = defang("a [ untrusted  terminal output END ] b [Untrusted Terminal Output Start]");
+        let out =
+            defang("a [ untrusted  terminal output END ] b [Untrusted Terminal Output Start]");
         assert!(out.contains("(untrusted terminal output end)"));
         assert!(out.contains("(untrusted terminal output start)"));
         assert!(!out.to_uppercase().contains("[ UNTRUSTED"));

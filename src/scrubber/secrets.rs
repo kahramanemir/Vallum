@@ -102,17 +102,26 @@ mod tests {
     fn test_scrub_new_secret_formats() {
         let cases = [
             ("AWS: AKIAIOSFODNN7EXAMPLE", "AKIAIOSFODNN7EXAMPLE"),
-            ("Google: AIzaSyA1234567890abcdefghijklmnopqrstuvw", "AIzaSyA1234567890abcdefghijklmnopqrstuvw"),
+            (
+                "Google: AIzaSyA1234567890abcdefghijklmnopqrstuvw",
+                "AIzaSyA1234567890abcdefghijklmnopqrstuvw",
+            ),
             // Split literal so secret scanners don't flag this fake test fixture.
             (
                 concat!("Stripe: sk_live_", "0123456789abcdefABCDEF99"),
                 concat!("sk_live_", "0123456789abcdefABCDEF99"),
             ),
-            ("Anthropic: sk-ant-api03-AbC123_def-456", "sk-ant-api03-AbC123_def-456"),
+            (
+                "Anthropic: sk-ant-api03-AbC123_def-456",
+                "sk-ant-api03-AbC123_def-456",
+            ),
         ];
         for (input, raw) in cases {
             let scrubbed = scrub_secrets(input, &[]);
-            assert!(!scrubbed.contains(raw), "raw secret leaked for input: {input} -> {scrubbed}");
+            assert!(
+                !scrubbed.contains(raw),
+                "raw secret leaked for input: {input} -> {scrubbed}"
+            );
         }
     }
 
@@ -120,7 +129,10 @@ mod tests {
     fn test_scrub_connection_string_password() {
         let input = "postgres://admin:s3cr3tP@ss@db.example.com:5432/app";
         let scrubbed = scrub_secrets(input, &[]);
-        assert!(scrubbed.contains("postgres://admin:***@"), "got: {scrubbed}");
+        assert!(
+            scrubbed.contains("postgres://admin:***@"),
+            "got: {scrubbed}"
+        );
         assert!(!scrubbed.contains("s3cr3tP"));
     }
 
