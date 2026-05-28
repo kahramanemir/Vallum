@@ -1,12 +1,12 @@
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const CONFIG_ENV_VAR: &str = "VALLUM_CONFIG";
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct AppConfig {
     pub audit: AuditConfig,
@@ -16,7 +16,7 @@ pub struct AppConfig {
     pub optimizer: OptimizerConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AuditConfig {
     pub log_dir: Option<PathBuf>,
@@ -24,7 +24,7 @@ pub struct AuditConfig {
     pub sanitized_enabled: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PipelineConfig {
     pub head_lines: usize,
@@ -35,20 +35,20 @@ pub struct PipelineConfig {
     pub max_line_length: usize,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ScrubberConfig {
     pub extra_secret_patterns: Vec<RedactionRule>,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct SecurityConfig {
     /// Block the entire output when an injection is detected.
     pub strict: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct OptimizerConfig {
     /// Names of optimizers to disable. All optimizers are on by default.
@@ -57,7 +57,7 @@ pub struct OptimizerConfig {
     pub disabled: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RedactionRule {
     pub pattern: String,
     pub replacement: String,

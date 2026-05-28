@@ -1,6 +1,7 @@
 // src/cli.rs
 use clap::{Parser, Subcommand};
 
+
 #[derive(Parser, Debug)]
 #[command(name = "vallum", version = env!("CARGO_PKG_VERSION"), about = "AI CLI Proxy")]
 pub struct Cli {
@@ -50,5 +51,22 @@ pub enum Commands {
         user: bool,
         #[arg(long)]
         project: bool,
+    },
+    /// Inspect or scaffold the Vallum config file
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigAction {
+    /// Print the effective merged config as TOML
+    Show,
+    /// Write a commented default config to ~/.vallum/config.toml
+    Init {
+        /// Overwrite an existing config file
+        #[arg(long)]
+        force: bool,
     },
 }

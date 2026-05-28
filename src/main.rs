@@ -3,7 +3,7 @@ use chrono::Local;
 use clap::Parser;
 use serde::Serialize;
 use std::io::{self, Write};
-use vallum::cli::{Cli, Commands};
+use vallum::cli::{Cli, Commands, ConfigAction};
 use vallum::config::AppConfig;
 use vallum::metrics::{self, StatEntry};
 use vallum::install_hook::{self, Level};
@@ -189,6 +189,35 @@ fn main() {
                 }
             }
         }
+        Commands::Config { action } => {
+            match action {
+                ConfigAction::Show => {
+                    let config = match AppConfig::load() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("Config Error: {e}");
+                            std::process::exit(125);
+                        }
+                    };
+                    match toml::to_string_pretty(&config) {
+                        Ok(s) => print!("{s}"),
+                        Err(e) => {
+                            eprintln!("config show: serialize failed: {e}");
+                            std::process::exit(125);
+                        }
+                    }
+                }
+                ConfigAction::Init { force } => {
+                    match config_init(*force) {
+                        Ok(msg) => println!("{msg}"),
+                        Err(e) => {
+                            eprintln!("config init: {e}");
+                            std::process::exit(125);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -198,4 +227,64 @@ fn resolve_level(user: bool, project: bool) -> Result<Level, String> {
         (false, true) => Ok(Level::Project),
         _ => Ok(Level::User), // default
     }
+}
+
+const DEFAULT_CONFIG_TOML: &str = r#"# ~/.vallum/config.toml — Vallum configuration
+
+[audit]
+# log_dir = "/tmp/vallum-logs"  # override log directory (default: ~/.vallum/logs)
+raw_enabled = false              # raw, unredacted logging is opt-in
+sanitized_enabled = true
+
+[pipeline]
+head_lines = 50
+tail_lines = 50
+min_optimize_tokens = 50
+max_output_bytes = 10485760      # 10 MiB capture cap
+timeout_secs = 300               # child timeout; 0 disables
+max_line_length = 2000           # truncate single lines longer than this; 0 disables
+
+[scrubber]
+# extra_secret_patterns = [
+#   { pattern = "token-[0-9]+", replacement = "token-***" }
+# ]
+
+[security]
+strict = false                   # block output if a prompt injection is detected
+
+[optimizer]
+disabled = []                    # optimizer names to turn off (e.g. ["npm","docker"])
+"#;
+
+fn config_init(force: bool) -> Result<String, String> {
+    let path = vallum::config::config_path_from_env_or_default();
+    if path.exists() && !force {
+        return Ok(format!("{} already exists; pass --force to overwrite.", path.display()));
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+    }
+    write_private(&path, DEFAULT_CONFIG_TOML)?;
+    Ok(format!("Wrote default config → {}", path.display()))
+}
+
+#[cfg(unix)]
+fn write_private(path: &std::path::Path, contents: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .map_err(|e| format!("open {}: {e}", path.display()))?;
+    f.write_all(contents.as_bytes())
+        .map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn write_private(path: &std::path::Path, contents: &str) -> Result<(), String> {
+    std::fs::write(path, contents).map_err(|e| format!("write {}: {e}", path.display()))
 }

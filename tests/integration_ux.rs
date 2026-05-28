@@ -58,3 +58,55 @@ fn hook_silently_allows_non_bash_tool() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.is_empty(), "expected empty stdout, got: {stdout}");
 }
+
+#[test]
+fn config_show_prints_valid_toml_roundtrip() {
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let output = std::process::Command::new(bin)
+        .args(["config", "show"])
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .output()
+        .expect("run vallum config show");
+    assert!(output.status.success(), "exited {:?}", output.status.code());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[audit]"), "got: {stdout}");
+    assert!(stdout.contains("[pipeline]"), "got: {stdout}");
+    assert!(stdout.contains("[scrubber]"), "got: {stdout}");
+    assert!(stdout.contains("[security]"), "got: {stdout}");
+    assert!(stdout.contains("[optimizer]"), "got: {stdout}");
+    let parsed: toml::Value = toml::from_str(&stdout).expect("output must be valid TOML");
+    assert!(parsed.get("pipeline").is_some());
+}
+
+#[test]
+fn config_init_creates_default_file() {
+    let dir = std::env::temp_dir().join(format!(
+        "vallum_config_init_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("config.toml");
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let output = std::process::Command::new(bin)
+        .args(["config", "init"])
+        .env("VALLUM_CONFIG", &cfg)
+        .output()
+        .expect("run vallum config init");
+    assert!(output.status.success());
+    let written = std::fs::read_to_string(&cfg).unwrap();
+    assert!(written.contains("[pipeline]"));
+    assert!(written.contains("max_line_length"));
+    // Second invocation without --force should NOT overwrite.
+    let again = std::process::Command::new(bin)
+        .args(["config", "init"])
+        .env("VALLUM_CONFIG", &cfg)
+        .output()
+        .unwrap();
+    assert!(again.status.success());
+    let stdout = String::from_utf8_lossy(&again.stdout);
+    assert!(stdout.contains("already exists"), "got: {stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
