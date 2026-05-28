@@ -12,6 +12,7 @@ pub struct AppConfig {
     pub audit: AuditConfig,
     pub pipeline: PipelineConfig,
     pub scrubber: ScrubberConfig,
+    pub security: SecurityConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -36,6 +37,13 @@ pub struct PipelineConfig {
 #[serde(default)]
 pub struct ScrubberConfig {
     pub extra_secret_patterns: Vec<RedactionRule>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+pub struct SecurityConfig {
+    /// Block the entire output when an injection is detected.
+    pub strict: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -178,6 +186,21 @@ extra_secret_patterns = [ { pattern = "token-(", replacement = "token-***" } ]
 
         let err = AppConfig::from_path(&path).unwrap_err();
         assert!(err.contains("invalid scrubber regex"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn security_strict_defaults_false_and_parses() {
+        let def = AppConfig::default();
+        assert!(!def.security.strict);
+
+        let dir = unique_temp_path("security");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        fs::write(&path, "[security]\nstrict = true\n").unwrap();
+        let config = AppConfig::from_path(&path).unwrap();
+        assert!(config.security.strict);
         let _ = fs::remove_dir_all(&dir);
     }
 

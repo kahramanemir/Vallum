@@ -15,6 +15,9 @@ pub enum Commands {
         /// Emit structured JSON instead of plain text
         #[arg(long)]
         json: bool,
+        /// Block all output when a prompt injection is detected
+        #[arg(long)]
+        strict: bool,
         /// The command to run
         cmd: String,
         /// Arguments for the command

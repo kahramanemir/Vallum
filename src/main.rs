@@ -36,7 +36,7 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Run { json, cmd, args } => {
+        Commands::Run { json, strict, cmd, args } => {
             let config = match AppConfig::load() {
                 Ok(config) => config,
                 Err(e) => {
@@ -58,6 +58,7 @@ fn main() {
                 }
             };
 
+            let strict = *strict || config.security.strict;
             let extra = &config.scrubber.extra_secret_patterns;
             let safe_cmd = scrubber::redact(cmd, extra);
             let safe_args: Vec<String> =
@@ -100,7 +101,7 @@ fn main() {
                     )
                 };
 
-            let sanitized = scrubber::sanitize(&processed, extra);
+            let sanitized = scrubber::sanitize(&processed, extra, strict);
 
             let tokens_after = metrics::estimate_tokens(&sanitized);
 
