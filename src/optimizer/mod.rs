@@ -1,6 +1,7 @@
 // src/optimizer/mod.rs
 pub mod cargo;
 pub mod git_diff;
+pub mod git_log;
 pub mod git_status;
 pub mod npm;
 pub mod pytest;
@@ -22,6 +23,7 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(cargo::CargoOptimizer),
             Box::new(git_status::GitStatusOptimizer),
             Box::new(git_diff::GitDiffOptimizer),
+            Box::new(git_log::GitLogOptimizer),
         ]
     })
 }
