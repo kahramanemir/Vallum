@@ -28,7 +28,7 @@ fn main() {
                 Ok(config) => config,
                 Err(e) => {
                     eprintln!("Config Error: {}", e);
-                    std::process::exit(1);
+                    std::process::exit(125);
                 }
             };
 
@@ -41,7 +41,7 @@ fn main() {
                 Ok(output) => output,
                 Err(e) => {
                     eprintln!("Proxy Error: {}", e);
-                    std::process::exit(1);
+                    std::process::exit(125);
                 }
             };
 
@@ -130,7 +130,7 @@ fn main() {
                     Ok(json_output) => println!("{}", json_output),
                     Err(e) => {
                         eprintln!("Proxy Error: failed to serialize JSON output: {}", e);
-                        std::process::exit(1);
+                        std::process::exit(125);
                     }
                 }
             } else {
