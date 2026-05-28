@@ -10,6 +10,14 @@ authors = ["Emir Kahraman"]
 keywords = ["ai", "cli", "proxy", "security", "tokens"]
 categories = ["command-line-utilities"]
 
+[lib]
+name = "vallum"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vallum"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
 regex = "1.10"

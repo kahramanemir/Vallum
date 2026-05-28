@@ -5,6 +5,8 @@ mod injection;
 mod markers;
 mod secrets;
 
+pub use injection::scrub_injections;
+
 pub fn sanitize(input: &str, extra_patterns: &[RedactionRule], strict: bool) -> String {
     let no_secrets = secrets::scrub_secrets(input, extra_patterns);
     let (safe_text, injection_detected) = injection::scrub_injections(&no_secrets);

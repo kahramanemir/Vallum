@@ -1,25 +1,12 @@
 // src/main.rs
-mod ansi;
-mod audit;
-mod cli;
-mod config;
-mod executor;
-mod fsutil;
-mod metrics;
-mod optimizer;
-mod scrubber;
-mod stats;
-mod tokenizer;
-mod truncator;
-mod whitespace;
-
 use chrono::Local;
 use clap::Parser;
-use cli::{Cli, Commands};
-use config::AppConfig;
-use metrics::StatEntry;
 use serde::Serialize;
 use std::io::{self, Write};
+use vallum::cli::{Cli, Commands};
+use vallum::config::AppConfig;
+use vallum::metrics::{self, StatEntry};
+use vallum::{ansi, audit, executor, optimizer, scrubber, stats, truncator, whitespace};
 
 #[derive(Serialize)]
 struct RunOutput<'a> {
