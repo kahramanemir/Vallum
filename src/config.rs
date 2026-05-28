@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub pipeline: PipelineConfig,
     pub scrubber: ScrubberConfig,
     pub security: SecurityConfig,
+    pub optimizer: OptimizerConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -44,6 +45,15 @@ pub struct ScrubberConfig {
 pub struct SecurityConfig {
     /// Block the entire output when an injection is detected.
     pub strict: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+pub struct OptimizerConfig {
+    /// Names of optimizers to disable. All optimizers are on by default.
+    /// Valid names: git_status, git_diff, git_log, cargo, pytest, npm,
+    /// docker, go_test, make.
+    pub disabled: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -201,6 +211,20 @@ extra_secret_patterns = [ { pattern = "token-(", replacement = "token-***" } ]
         fs::write(&path, "[security]\nstrict = true\n").unwrap();
         let config = AppConfig::from_path(&path).unwrap();
         assert!(config.security.strict);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn optimizer_disabled_defaults_empty_and_parses() {
+        assert!(AppConfig::default().optimizer.disabled.is_empty());
+
+        let dir = unique_temp_path("optimizer");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        fs::write(&path, "[optimizer]\ndisabled = [\"npm\", \"docker\"]\n").unwrap();
+        let config = AppConfig::from_path(&path).unwrap();
+        assert_eq!(config.optimizer.disabled, vec!["npm".to_string(), "docker".to_string()]);
         let _ = fs::remove_dir_all(&dir);
     }
 

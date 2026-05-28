@@ -73,7 +73,7 @@ fn main() {
                     // Small output: skip optimize/truncate; the security wrapper still applies.
                     whitespace::collapse(&stripped)
                 } else {
-                    let after_optimize = match optimizer::dispatch(cmd, args, &stripped) {
+                    let after_optimize = match optimizer::dispatch(cmd, args, &stripped, &config.optimizer.disabled) {
                         Some((out, name)) => {
                             optimizer_name = Some(name.to_string());
                             out

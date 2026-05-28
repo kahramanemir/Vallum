@@ -4,21 +4,36 @@ pub mod git_status;
 pub mod npm;
 pub mod pytest;
 
+use std::sync::OnceLock;
+
 pub trait CommandOptimizer {
     fn name(&self) -> &'static str;
     fn matches(&self, cmd: &str, args: &[String]) -> bool;
     fn optimize(&self, input: &str) -> Option<String>;
 }
 
-pub fn dispatch(cmd: &str, args: &[String], input: &str) -> Option<(String, &'static str)> {
-    let optimizers: Vec<Box<dyn CommandOptimizer>> = vec![
-        Box::new(pytest::PytestOptimizer),
-        Box::new(npm::NpmOptimizer),
-        Box::new(cargo::CargoOptimizer),
-        Box::new(git_status::GitStatusOptimizer),
-    ];
+fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
+    static REG: OnceLock<Vec<Box<dyn CommandOptimizer + Send + Sync>>> = OnceLock::new();
+    REG.get_or_init(|| {
+        vec![
+            Box::new(pytest::PytestOptimizer),
+            Box::new(npm::NpmOptimizer),
+            Box::new(cargo::CargoOptimizer),
+            Box::new(git_status::GitStatusOptimizer),
+        ]
+    })
+}
 
-    for opt in &optimizers {
+pub fn dispatch(
+    cmd: &str,
+    args: &[String],
+    input: &str,
+    disabled: &[String],
+) -> Option<(String, &'static str)> {
+    for opt in registry() {
+        if disabled.iter().any(|d| d == opt.name()) {
+            continue;
+        }
         if opt.matches(cmd, args) {
             if let Some(out) = opt.optimize(input) {
                 return Some((out, opt.name()));
@@ -55,7 +70,7 @@ mod tests {
             "On branch main\nYour branch is up to date with 'origin/main'.\n\nChanges to be committed:\n{}\n",
             files
         );
-        let result = dispatch("git", &["status".to_string()], &input);
+        let result = dispatch("git", &["status".to_string()], &input, &[]);
         assert!(result.is_some());
         let (out, name) = result.unwrap();
         assert_eq!(name, "git_status");
@@ -80,7 +95,7 @@ mod tests {
             "test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n"
         );
 
-        let result = dispatch("cargo", &["test".to_string()], input);
+        let result = dispatch("cargo", &["test".to_string()], input, &[]);
         assert!(result.is_some());
         let (out, name) = result.unwrap();
         assert_eq!(name, "cargo");
@@ -110,7 +125,7 @@ mod tests {
             "========================= 1 failed, 11 passed in 0.50s =========================\n"
         );
 
-        let result = dispatch("pytest", &[], input);
+        let result = dispatch("pytest", &[], input, &[]);
         assert!(result.is_some());
         let (out, name) = result.unwrap();
         assert_eq!(name, "pytest");
@@ -139,7 +154,7 @@ mod tests {
             "Ran all test suites.\n"
         );
 
-        let result = dispatch("npm", &["test".to_string()], input);
+        let result = dispatch("npm", &["test".to_string()], input, &[]);
         assert!(result.is_some());
         let (out, name) = result.unwrap();
         assert_eq!(name, "npm");
@@ -150,8 +165,23 @@ mod tests {
 
     #[test]
     fn dispatch_returns_none_for_unknown_command() {
-        let result = dispatch("ls", &[], "foo");
+        let result = dispatch("ls", &[], "foo", &[]);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn dispatch_skips_disabled_optimizer() {
+        let mut files = String::new();
+        for i in 0..40 {
+            files.push_str(&format!("\tmodified:   src/file_{}.rs\n", i));
+        }
+        let input = format!(
+            "On branch main\nYour branch is up to date with 'origin/main'.\n\nChanges to be committed:\n{}\n",
+            files
+        );
+        let disabled = vec!["git_status".to_string()];
+        let result = dispatch("git", &["status".to_string()], &input, &disabled);
+        assert!(result.is_none(), "disabled optimizer must be skipped");
     }
 
     #[test]
