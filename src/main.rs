@@ -39,6 +39,7 @@ fn main() {
                 args,
                 config.pipeline.max_output_bytes,
                 config.pipeline.timeout_secs,
+                None,
             ) {
                 Ok(output) => output,
                 Err(e) => {
