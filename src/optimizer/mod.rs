@@ -1,5 +1,6 @@
 // src/optimizer/mod.rs
 pub mod cargo;
+pub mod git_diff;
 pub mod git_status;
 pub mod npm;
 pub mod pytest;
@@ -20,6 +21,7 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(npm::NpmOptimizer),
             Box::new(cargo::CargoOptimizer),
             Box::new(git_status::GitStatusOptimizer),
+            Box::new(git_diff::GitDiffOptimizer),
         ]
     })
 }
@@ -43,8 +45,6 @@ pub fn dispatch(
     None
 }
 
-// used by optimizer submodules added in later tasks
-#[allow(dead_code)]
 /// Collapse maximal runs of "noise" lines (3 or more consecutive lines for which
 /// `is_noise` returns true) into a single `[N <label> hidden]` marker, keeping
 /// all other lines verbatim. Returns `None` if the input has fewer than
