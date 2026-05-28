@@ -139,4 +139,20 @@ mod tests {
         let scrubbed = scrub_secrets(input, &[]);
         assert_eq!(scrubbed, input);
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_scrub_secrets_does_not_panic(s in "[\\s\\S]{0,500}") {
+            let _ = scrub_secrets(&s, &[]);
+        }
+
+        #[test]
+        fn prop_scrub_secrets_idempotent(s in "[\\s\\S]{0,500}") {
+            let once = scrub_secrets(&s, &[]);
+            let twice = scrub_secrets(&once, &[]);
+            prop_assert_eq!(once, twice);
+        }
+    }
 }
