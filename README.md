@@ -122,11 +122,20 @@ The binary lands at `target/release/vallum`.
 ## Usage
 
 ```bash
-vallum run <command> [args...]    # run a command through the proxy
-vallum run --json <command> ...   # emit structured JSON for agent/automation use
-vallum run --strict <command> ... # block output if a prompt injection is detected
-vallum stats                      # show cumulative token savings
-vallum stats --reset              # delete all collected stats (prompts)
+vallum run <command> [args...]       # run a command through the proxy
+vallum run --json <command> ...      # emit structured JSON
+vallum run --strict <command> ...    # block output if a prompt injection is detected
+vallum stats                         # show cumulative token savings
+vallum stats --reset                 # delete collected stats
+
+# Integration & UX
+vallum install-hook                  # register vallum in ~/.claude/settings.json
+vallum install-hook --project        # register in <cwd>/.claude/settings.json
+vallum uninstall-hook                # remove the vallum hook entry
+vallum hook                          # internal: invoked by Claude Code (don't run directly)
+vallum config show                   # print effective merged config as TOML
+vallum config init [--force]         # scaffold ~/.vallum/config.toml
+vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
 
 Examples:
@@ -156,6 +165,19 @@ Example JSON output:
 ```
 
 Note how a tiny output ends up *larger* after wrapping: the security wrapper has a fixed cost, and on short commands that cost dominates. Token savings show up on the large, noisy outputs (builds, test runs, big diffs) — see below.
+
+### Exit codes
+
+- The child's own exit code is propagated as Vallum's exit code on success.
+- Vallum-level failures (bad config, executor spawn error, JSON serialization error) exit **`125`** — the `env(1)` "command not invoked" convention — so they are distinguishable from the child's real exit 1.
+
+## Claude Code integration
+
+`vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry.
+
+Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are skipped because Vallum captures stdout and would break their TTY requirements. Commands already starting with `vallum` are skipped for idempotency.
+
+To remove the hook, run `vallum uninstall-hook` — it removes only the Vallum entry, leaving the rest of your settings file untouched.
 
 ## Measuring savings
 
@@ -197,6 +219,8 @@ npm install            8,442 saved   (76%)
 | `src/audit.rs`                | Append-only log writer                               |
 | `src/metrics.rs`              | Token estimation + JSONL stats writer                |
 | `src/stats.rs`                | `vallum stats` aggregation and reporting             |
+| `src/hook.rs`                 | Claude Code PreToolUse handler: rewrites Bash calls to `vallum run` |
+| `src/install_hook.rs`         | `install-hook`/`uninstall-hook`: read-modify-write of Claude Code settings.json |
 | `src/main.rs`                 | Pipeline wiring                                      |
 
 ## Roadmap
@@ -206,7 +230,10 @@ npm install            8,442 saved   (76%)
 - [x] Post-v0.2 hardening — exit-code propagation, structured JSON output, configurable pipeline, cargo/pytest/npm optimizers
 - [x] Security sweep — concurrent bounded capture (cap + timeout + stdin), context-preserving truncation, broadened injection neutralization, marker anti-spoofing, raw-logs-off-by-default with `0600` perms, small-output short-circuit, pluggable token estimator
 - [x] Sub-project B — broader command coverage (git diff, git log, docker, go test, make), optimizer toggles (`[optimizer] disabled`), long-line truncation (`pipeline.max_line_length`), optional BPE token counting (`--features bpe`)
-- [ ] Next — streaming/PTY support
+- [x] Sub-project C — integration/UX: `install-hook`/`uninstall-hook` (Claude Code PreToolUse), `vallum hook` handler, `config show`/`config init`, `vallum completions <shell>`, exit-125 convention
+- [ ] Sub-project D — streaming/PTY support
+- [ ] Sub-project E (partial) — fuzzing + benchmark (CI already exists)
+- [ ] Deferred — entropy detection, Chinese injection, injection precision tuning, config regex compile-once, more optimizers (kubectl, terraform, ripgrep)
 
 ## Name
 
