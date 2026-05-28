@@ -1,0 +1,34 @@
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   src/file_00.rs
+	modified:   src/file_01.rs
+	modified:   src/file_02.rs
+	modified:   src/file_03.rs
+	modified:   src/file_04.rs
+	modified:   src/file_05.rs
+	modified:   src/file_06.rs
+	modified:   src/file_07.rs
+	modified:   src/file_08.rs
+	modified:   src/file_09.rs
+	modified:   src/file_10.rs
+	modified:   src/file_11.rs
+	modified:   src/file_12.rs
+	modified:   src/file_13.rs
+	modified:   src/file_14.rs
+	modified:   src/file_15.rs
+	modified:   src/file_16.rs
+	modified:   src/file_17.rs
+	modified:   src/file_18.rs
+	modified:   src/file_19.rs
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	build/output.log
+	target/debug/deps/abc.d
+	target/debug/deps/abc.o
+	notes-scratch.md
+
+no changes added to commit (use "git add" and/or "git commit -a")
