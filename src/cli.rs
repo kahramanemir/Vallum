@@ -20,6 +20,9 @@ pub enum Commands {
         /// Block all output when a prompt injection is detected
         #[arg(long)]
         strict: bool,
+        /// Mirror raw child output to ~/.vallum/live.log as lines arrive
+        #[arg(long)]
+        tee: bool,
         /// The command to run
         cmd: String,
         /// Arguments for the command

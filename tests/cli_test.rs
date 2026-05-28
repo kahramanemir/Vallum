@@ -202,6 +202,36 @@ fn vallum_bin() -> PathBuf {
 }
 
 #[test]
+fn tee_flag_writes_live_log_under_home() {
+    let tmp = std::env::temp_dir().join(format!(
+        "vallum_tee_home_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let output = std::process::Command::new(bin)
+        .args(["run", "--tee", "printf", "tee-marker-xyz\\n"])
+        .env("HOME", &tmp)
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .output()
+        .expect("run vallum --tee");
+    assert!(output.status.success(), "exited {:?}", output.status.code());
+
+    let tee_path = tmp.join(".vallum").join("live.log");
+    let contents = std::fs::read_to_string(&tee_path).expect("tee file must exist");
+    assert!(contents.contains("tee-marker-xyz"), "got: {contents}");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("tee-marker-xyz"), "stdout should also contain it: {stdout}");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
 fn redacts_secret_in_arguments_json() {
     let bin = env!("CARGO_BIN_EXE_vallum");
     let output = std::process::Command::new(bin)
