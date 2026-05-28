@@ -32,4 +32,23 @@ pub enum Commands {
     },
     /// Run as a Claude Code PreToolUse hook (reads JSON from stdin)
     Hook,
+    /// Install the Vallum PreToolUse hook in Claude Code's settings.json
+    InstallHook {
+        /// Install at user level (~/.claude/settings.json) — default
+        #[arg(long)]
+        user: bool,
+        /// Install at project level (<cwd>/.claude/settings.json)
+        #[arg(long)]
+        project: bool,
+        /// Replace an existing Vallum hook entry if present
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove the Vallum PreToolUse hook from Claude Code's settings.json
+    UninstallHook {
+        #[arg(long)]
+        user: bool,
+        #[arg(long)]
+        project: bool,
+    },
 }

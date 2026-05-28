@@ -6,6 +6,7 @@ use std::io::{self, Write};
 use vallum::cli::{Cli, Commands};
 use vallum::config::AppConfig;
 use vallum::metrics::{self, StatEntry};
+use vallum::install_hook::{self, Level};
 use vallum::{ansi, audit, executor, hook, optimizer, scrubber, stats, truncator, whitespace};
 
 #[derive(Serialize)]
@@ -156,5 +157,45 @@ fn main() {
         Commands::Hook => {
             std::process::exit(hook::run());
         }
+        Commands::InstallHook { user, project, force } => {
+            let level = match resolve_level(*user, *project) {
+                Ok(l) => l,
+                Err(msg) => {
+                    eprintln!("{msg}");
+                    std::process::exit(125);
+                }
+            };
+            match install_hook::install(level, *force) {
+                Ok(msg) => println!("{msg}"),
+                Err(e) => {
+                    eprintln!("install-hook: {e}");
+                    std::process::exit(125);
+                }
+            }
+        }
+        Commands::UninstallHook { user, project } => {
+            let level = match resolve_level(*user, *project) {
+                Ok(l) => l,
+                Err(msg) => {
+                    eprintln!("{msg}");
+                    std::process::exit(125);
+                }
+            };
+            match install_hook::uninstall(level) {
+                Ok(msg) => println!("{msg}"),
+                Err(e) => {
+                    eprintln!("uninstall-hook: {e}");
+                    std::process::exit(125);
+                }
+            }
+        }
+    }
+}
+
+fn resolve_level(user: bool, project: bool) -> Result<Level, String> {
+    match (user, project) {
+        (true, true) => Err("--user and --project are mutually exclusive".to_string()),
+        (false, true) => Ok(Level::Project),
+        _ => Ok(Level::User), // default
     }
 }
