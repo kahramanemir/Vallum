@@ -56,7 +56,7 @@ pub fn rewrite_decision(tool_name: &str, command: &str) -> Option<String> {
         return None;
     }
     let head = trimmed.split_whitespace().next().unwrap_or("");
-    if TUI_SKIP.iter().any(|t| *t == head) {
+    if TUI_SKIP.contains(&head) {
         return None;
     }
     if head == "vallum" {
