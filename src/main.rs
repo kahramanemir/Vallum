@@ -25,7 +25,7 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Run { json, strict, cmd, args } => {
+        Commands::Run { json, strict, tee, cmd, args } => {
             let config = match AppConfig::load() {
                 Ok(config) => config,
                 Err(e) => {
@@ -34,11 +34,18 @@ fn main() {
                 }
             };
 
+            let tee_path = if *tee {
+                dirs::home_dir().map(|h| h.join(".vallum").join("live.log"))
+            } else {
+                None
+            };
+
             let (raw_output, exit_code) = match executor::execute_command(
                 cmd,
                 args,
                 config.pipeline.max_output_bytes,
                 config.pipeline.timeout_secs,
+                tee_path.as_deref(),
             ) {
                 Ok(output) => output,
                 Err(e) => {
