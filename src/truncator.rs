@@ -168,4 +168,37 @@ mod tests {
         assert!(out.contains("chars elided"));
         assert!(!out.contains(&"z".repeat(5000)));
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_cap_line_length_does_not_panic(s in "[\\s\\S]{0,2000}", max in 0usize..=2000) {
+            let _ = cap_line_length(&s, max);
+        }
+
+        #[test]
+        fn prop_cap_line_length_bounded(s in "[\\s\\S]{0,2000}", max in 1usize..=2000) {
+            let out = cap_line_length(&s, max);
+            // The output's char count never exceeds max plus a small marker budget
+            // (the elision marker "…[N chars elided]…" stays within ~32 chars even
+            // for very large N).
+            prop_assert!(out.chars().count() <= max + 32);
+        }
+
+        #[test]
+        fn prop_cap_line_length_zero_is_identity(s in "[\\s\\S]{0,2000}") {
+            prop_assert_eq!(cap_line_length(&s, 0), s);
+        }
+
+        #[test]
+        fn prop_smart_truncate_does_not_panic(
+            s in "[\\s\\S]{0,2000}",
+            head in 0usize..50,
+            tail in 0usize..50,
+            cap in 0usize..2000,
+        ) {
+            let _ = smart_truncate(&s, head, tail, cap);
+        }
+    }
 }
