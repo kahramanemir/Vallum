@@ -1,5 +1,7 @@
 # Vallum
 
+*A security boundary between AI coding agents (Claude Code, Cursor, etc.) and your shell — secret redaction, prompt-injection defense, ANSI stripping, and command auditing in a single Rust binary.*
+
 A Rust CLI proxy that sits between AI agents and your shell as a **security boundary**. When an agent runs a command, Vallum redacts secrets, neutralizes prompt-injection attempts, wraps the result as untrusted data, preserves the child exit code, and audits everything — so what reaches the model is exactly what you intend it to see. As a side benefit, it strips ANSI noise and compresses long output, which also saves tokens.
 
 ---
