@@ -17,9 +17,10 @@
 //! `./` are skipped (file paths).
 //!
 //! **Evasion mitigations:**
-//! - Leading separator characters (`=`, `:`) and surrounding whitespace are
-//!   stripped from the measured payload before entropy scoring. This prevents
-//!   `key==value` / `key:=value` (double-separator) and `key="  <secret>  "`
+//! - Separator characters (`=`, `:`) and surrounding whitespace are stripped
+//!   from **both edges** of the measured payload before entropy scoring. This
+//!   prevents `key==value` / `key:=value` (double-separator leading),
+//!   `value==` (base64-style trailing padding), and `key="  <secret>  "`
 //!   (padded quoted value) from flipping the charset class or depressing the
 //!   score. The replacement still masks the entire captured value, so the
 //!   output shape is unchanged.
@@ -126,11 +127,12 @@ pub fn scrub_entropy_secrets(input: &str) -> String {
                 Some(b'\'') => ("'", val.trim_matches('\'')),
                 _ => ("", val),
             };
-            // Measure the actual payload: strip stray leading separators
-            // (key==value, key:=value) and surrounding whitespace inside
-            // quotes — both otherwise flip the charset class and depress
-            // the entropy score, which is an evasion vector.
-            let inner = inner.trim_start_matches(['=', ':']).trim();
+            // Measure the actual payload: strip stray separators and
+            // whitespace from BOTH edges (key==value, key:=value,
+            // value with base64-style trailing padding, padded quotes) —
+            // each otherwise flips the charset class and depresses the
+            // entropy score, which is an evasion vector.
+            let inner = inner.trim().trim_matches(['=', ':']).trim();
             if key_is_credential_ish(key) && value_is_high_entropy_secret(inner) {
                 format!("{key}{sep}{quote}***{quote}")
             } else {
@@ -245,6 +247,18 @@ mod tests {
     #[test]
     fn redacts_padded_quoted_value() {
         let out = scrub_entropy_secrets(&format!("token=\"  {HEX32}  \""));
+        assert!(!out.contains(HEX32), "got: {out}");
+    }
+
+    #[test]
+    fn redacts_despite_trailing_separator() {
+        // base64-style '=' padding after a hex secret must not flip the
+        // charset class and let the secret through.
+        let out = scrub_entropy_secrets(&format!("password={HEX32}=="));
+        assert!(!out.contains(HEX32), "got: {out}");
+        let out = scrub_entropy_secrets(&format!("api_key={HEX32}="));
+        assert!(!out.contains(HEX32), "got: {out}");
+        let out = scrub_entropy_secrets(&format!("token=\"{HEX32}==\""));
         assert!(!out.contains(HEX32), "got: {out}");
     }
 
