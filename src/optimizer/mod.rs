@@ -34,12 +34,45 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
     })
 }
 
+/// Shell metacharacters that make a `bash -c` script unsafe to word-split.
+/// Any hit means we bail and match the invocation as-is (today's behavior).
+const SHELL_METACHARACTERS: &[char] = &[
+    '|', '&', ';', '<', '>', '(', ')', '$', '`', '\\', '"', '\'', '*', '?', '[', ']', '{', '}',
+    '~', '#',
+];
+
+/// The Claude Code hook rewrites every Bash call to `bash -c '<original>'`,
+/// which would otherwise hide the real command from optimizer matching.
+/// Unwraps only the trivial case: exactly `["-c", script]` with no shell
+/// metacharacters in the script.
+fn unwrap_shell_invocation(cmd: &str, args: &[String]) -> Option<(String, Vec<String>)> {
+    if !matches!(cmd, "bash" | "sh" | "zsh") {
+        return None;
+    }
+    if args.len() != 2 || args[0] != "-c" {
+        return None;
+    }
+    let script = &args[1];
+    if script.chars().any(|c| SHELL_METACHARACTERS.contains(&c)) {
+        return None;
+    }
+    let mut words = script.split_whitespace();
+    let inner_cmd = words.next()?.to_string();
+    let inner_args: Vec<String> = words.map(str::to_string).collect();
+    Some((inner_cmd, inner_args))
+}
+
 pub fn dispatch(
     cmd: &str,
     args: &[String],
     input: &str,
     disabled: &[String],
 ) -> Option<(String, &'static str)> {
+    let unwrapped = unwrap_shell_invocation(cmd, args);
+    let (cmd, args) = match &unwrapped {
+        Some((c, a)) => (c.as_str(), a.as_slice()),
+        None => (cmd, args),
+    };
     for opt in registry() {
         if disabled.iter().any(|d| d == opt.name()) {
             continue;
@@ -274,6 +307,62 @@ mod tests {
     fn collapse_noise_runs_passthrough_when_too_small() {
         let input = "noise\nnoise\nnoise\n";
         assert!(collapse_noise_runs(input, 10, |l| l == "noise", "x").is_none());
+    }
+
+    #[test]
+    fn unwrap_shell_invocation_shapes() {
+        let ok = unwrap_shell_invocation("bash", &["-c".into(), "git status".into()]);
+        assert_eq!(ok, Some(("git".to_string(), vec!["status".to_string()])));
+        assert!(unwrap_shell_invocation("sh", &["-c".into(), "cargo test".into()]).is_some());
+        assert!(unwrap_shell_invocation("zsh", &["-c".into(), "ls -la".into()]).is_some());
+        // Wrong shapes must not unwrap.
+        assert!(unwrap_shell_invocation("bash", &["-c".into()]).is_none());
+        assert!(unwrap_shell_invocation("bash", &["-lc".into(), "git status".into()]).is_none());
+        assert!(unwrap_shell_invocation(
+            "bash",
+            &["-c".into(), "git status".into(), "extra".into()]
+        )
+        .is_none());
+        assert!(unwrap_shell_invocation("python", &["-c".into(), "print(1)".into()]).is_none());
+        assert!(unwrap_shell_invocation("bash", &["-c".into(), "".into()]).is_none());
+    }
+
+    #[test]
+    fn dispatch_unwraps_bash_c_simple_command() {
+        let mut files = String::new();
+        for i in 0..40 {
+            files.push_str(&format!("\tmodified:   src/file_{}.rs\n", i));
+        }
+        let input = format!(
+            "On branch main\nYour branch is up to date with 'origin/main'.\n\nChanges to be committed:\n{}\n",
+            files
+        );
+        let args = vec!["-c".to_string(), "git status".to_string()];
+        let result = dispatch("bash", &args, &input, &[]);
+        assert!(
+            result.is_some(),
+            "bash -c 'git status' must reach git_status"
+        );
+        assert_eq!(result.unwrap().1, "git_status");
+    }
+
+    #[test]
+    fn dispatch_does_not_unwrap_metacharacter_scripts() {
+        for script in [
+            "git status | head",
+            "echo 'hi'",
+            "ls *.rs",
+            "a; b",
+            "x > y",
+            "echo $HOME",
+            "cd ~/src",
+        ] {
+            let args = vec!["-c".to_string(), script.to_string()];
+            assert!(
+                dispatch("bash", &args, "irrelevant", &[]).is_none(),
+                "{script} must not unwrap"
+            );
+        }
     }
 
     use proptest::prelude::*;
