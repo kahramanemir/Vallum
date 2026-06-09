@@ -1,4 +1,20 @@
 // src/optimizer/grep.rs
+
+//! Grep/rg output optimizer.
+//!
+//! Targets **multi-file** `path:match` / `path:line:match` output produced by
+//! `rg` and `grep -r`. Lines whose prefix before the first `:` does not look
+//! like a real filesystem path are kept verbatim so no signal is ever hidden.
+//!
+//! **Single-file mode** (`grep pattern file.txt` or `grep -h`) emits raw
+//! content lines with no path prefix. Because those lines do not satisfy the
+//! path-shape check they all stay verbatim, `hidden_any` remains false, and
+//! the optimizer returns `None` — pass-through, no transformation.
+//!
+//! Grouping assumes **file-contiguous output**, which is standard for both
+//! `rg` and `grep`: all matches for a given file appear together before the
+//! next file starts.
+
 use super::CommandOptimizer;
 
 pub struct GrepOptimizer;
@@ -63,10 +79,21 @@ impl CommandOptimizer for GrepOptimizer {
             matches!(path, "grep" | "rg" | "egrep" | "fgrep")
         }
 
+        /// A grouping prefix must look like a real path: no whitespace and at least
+        /// one `/` or `.`. Anything else (diagnostics like "Error:", prose with
+        /// colons, Windows drive letters) stays verbatim so signal is never hidden.
+        /// Extensionless bare filenames ("Makefile") are deliberately left verbatim —
+        /// under-optimizing is the safe direction.
+        fn looks_like_path(path: &str) -> bool {
+            !path.is_empty()
+                && !path.chars().any(char::is_whitespace)
+                && path.chars().any(|c| c == '/' || c == '.')
+        }
+
         let mut items: Vec<Item> = Vec::new();
         for &line in &lines {
             match line.split_once(':') {
-                Some((path, _)) if !path.is_empty() && !is_tool_diagnostic(path) => {
+                Some((path, _)) if looks_like_path(path) && !is_tool_diagnostic(path) => {
                     if let Some(Item::Group(g)) = items.last_mut() {
                         if g.path == path {
                             g.matches.push(line);
@@ -235,6 +262,44 @@ mod tests {
                 input.push_str(&format!("src/f{:02}.rs:{}:m\n", f, l + 1));
             }
         }
+        assert!(GrepOptimizer.optimize(&input).is_none());
+    }
+
+    #[test]
+    fn keeps_colon_diagnostics_verbatim() {
+        // 35 valid match lines so the optimizer engages, plus 4 consecutive
+        // diagnostic-shaped lines that must never be grouped or hidden.
+        let mut input = String::new();
+        for i in 0..35 {
+            input.push_str(&format!("src/alpha.rs:{}:line\n", i + 1));
+        }
+        for i in 0..4 {
+            input.push_str(&format!("Error: boom {}\n", i));
+        }
+        let out = GrepOptimizer.optimize(&input).unwrap();
+        for i in 0..4 {
+            assert!(out.contains(&format!("Error: boom {}", i)));
+        }
+        assert!(!out.contains("more matches in Error"));
+    }
+
+    #[test]
+    fn passthrough_single_file_content_with_colons() {
+        // `grep pattern file.txt` output: no path prefixes, colons in content.
+        let mut input = String::new();
+        for i in 0..35 {
+            input.push_str(&format!("let v{}: i32 = {};\n", i, i));
+        }
+        assert!(GrepOptimizer.optimize(&input).is_none());
+    }
+
+    #[test]
+    fn windows_drive_prefixes_are_not_grouped() {
+        let mut input = String::new();
+        for i in 0..35 {
+            input.push_str(&format!("C:\\proj\\alpha.rs:{}:x\n", i + 1));
+        }
+        // Prefix "C" does not look like a path -> all verbatim -> nothing hidden.
         assert!(GrepOptimizer.optimize(&input).is_none());
     }
 
