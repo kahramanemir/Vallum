@@ -21,6 +21,12 @@
 //!
 //! Pass-through (returns `None`) when the input has fewer than [`MIN_LINES`]
 //! lines or when nothing actually collapses.
+//!
+//! **Shape detection is best-effort substring matching** (tree glyphs,
+//! permission-prefix majority vote, report line). Mis-detection is safe:
+//! every mode only collapses runs into count markers and never drops error
+//! lines, so a false positive merely produces a slightly different summary
+//! rather than silently discarding signal.
 
 use super::CommandOptimizer;
 use std::collections::HashMap;
@@ -119,10 +125,12 @@ fn collapse_entries(
 }
 
 fn optimize_tree(lines: &[&str]) -> Option<String> {
-    // tree's trailing report, e.g. "12 directories, 340 files" (absent under --noreport).
+    // tree's trailing report line, e.g. "12 directories, 340 files" or
+    // "1 directory, 1 file" (absent under --noreport).
+    // "director" matches both "directory" and "directories".
     let report_idx = lines
         .iter()
-        .rposition(|l| l.contains("directories") && l.contains("file"));
+        .rposition(|l| l.contains("director") && l.contains("file"));
     let (mut out, hidden) = collapse_entries(
         lines,
         |i, l| i < KEEP_ENTRIES || Some(i) == report_idx || is_error_line(l),
@@ -168,14 +176,20 @@ fn optimize_paths(lines: &[&str]) -> Option<String> {
 /// First path component frequency over all (non-error) lines, e.g.
 /// "src (60), tests (40)". Empty when every component is unique (plain `ls`
 /// name-per-line output), where the summary would be noise.
+///
+/// Paths are assumed POSIX (`/`-separated). Windows backslash paths fall into
+/// the all-unique suppression case and produce no footer.
 fn top_dirs(lines: &[&str]) -> String {
     let mut counts: HashMap<&str, usize> = HashMap::new();
     for l in lines {
         if is_error_line(l) || l.trim().is_empty() {
             continue;
         }
-        let trimmed = l.trim_start_matches("./");
+        let trimmed = l.trim_start_matches("./").trim_start_matches('/');
         let top = trimmed.split('/').next().unwrap_or(trimmed);
+        if top.is_empty() {
+            continue;
+        }
         *counts.entry(top).or_insert(0) += 1;
     }
     let mut pairs: Vec<(&str, usize)> = counts.into_iter().collect();
@@ -285,6 +299,48 @@ mod tests {
     fn passthrough_small_input() {
         let input = "./src/a.rs\n./src/b.rs\n";
         assert!(FileListOptimizer.optimize(input).is_none());
+    }
+
+    #[test]
+    fn path_mode_absolute_paths_get_real_top_dirs() {
+        let mut input = String::new();
+        for i in 0..50 {
+            input.push_str(&format!("/srv/www/file_{:02}.txt\n", i));
+        }
+        let out = FileListOptimizer.optimize(&input).unwrap();
+        assert!(out.contains("[top dirs: srv (50)]"));
+        assert!(
+            !out.contains("[top dirs:  ("),
+            "empty component must be skipped"
+        );
+    }
+
+    #[test]
+    fn tree_mode_keeps_singular_report_line() {
+        let mut input = String::from(".\n");
+        for i in 0..45 {
+            input.push_str(&format!("├── file_{:02}.rs\n", i));
+        }
+        input.push_str("1 directory, 1 file\n");
+        let out = FileListOptimizer.optimize(&input).unwrap();
+        assert!(
+            out.contains("1 directory, 1 file"),
+            "singular tree report must survive"
+        );
+    }
+
+    #[test]
+    fn path_mode_passthrough_when_only_errors_beyond_head() {
+        // >= MIN_LINES total, but everything past the kept head is an error
+        // line -> nothing hidden -> pass through.
+        let mut input = String::new();
+        for i in 0..30 {
+            input.push_str(&format!("./src/file_{:02}.rs\n", i));
+        }
+        for i in 0..12 {
+            input.push_str(&format!("find: ./locked_{:02}: Permission denied\n", i));
+        }
+        assert!(FileListOptimizer.optimize(&input).is_none());
     }
 
     use proptest::prelude::*;
