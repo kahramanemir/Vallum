@@ -51,6 +51,18 @@ const FIXTURES: &[Fixture] = &[
         cmd: "echo",
         args: &[],
     },
+    Fixture {
+        label: "rg_matches",
+        path: "benches/fixtures/rg_matches.txt",
+        cmd: "rg",
+        args: &["parse"],
+    },
+    Fixture {
+        label: "find_list",
+        path: "benches/fixtures/find_list.txt",
+        cmd: "find",
+        args: &[".", "-type", "f"],
+    },
 ];
 
 fn load(path: &str) -> String {

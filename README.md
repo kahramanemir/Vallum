@@ -67,6 +67,8 @@ Each command flows through these stages:
 - `docker build|compose`: collapse layer/step progress while keeping step headers, errors, and the final result
 - `go test`: hide `=== RUN`/`--- PASS` spam while keeping failures and the summary
 - `make`: surface errors/warnings while collapsing ordinary build noise
+- `rg` / `grep` (also `egrep`/`fgrep`): group matches by file, keep the first few per file, and summarize the rest with per-file and total counts
+- `ls` / `find` / `fd` / `tree`: keep the leading entries and summarize the rest (with a top-directories breakdown for path lists); error lines are always preserved
 
 ## Configuration
 
@@ -107,7 +109,7 @@ Supported settings:
 - `pipeline.min_optimize_tokens`: outputs below this estimate skip optimize/truncate
 - `pipeline.max_output_bytes`: maximum bytes captured from a command (default 10 MiB)
 - `pipeline.timeout_secs`: command timeout in seconds; `0` disables it (default 300)
-- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make) — default none
+- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make, grep, file_list) — default none
 - `pipeline.max_line_length`: cap individual line length; longer lines are truncated mid-line with an elision marker — default 2000, `0` disables
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
 - `security.strict`: when `true` (or `--strict`), the output is replaced with `[OUTPUT BLOCKED: prompt injection detected]` if any injection is detected — **default `false`**
@@ -178,7 +180,7 @@ Note how a tiny output ends up *larger* after wrapping: the security wrapper has
 
 `vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry.
 
-Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are skipped because Vallum captures stdout and would break their TTY requirements. Commands already starting with `vallum` are skipped for idempotency.
+Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps simple scripts (no pipes, redirects, quoting, or other shell metacharacters) before optimizer matching, so `bash -c 'git status'` still hits the `git_status` optimizer; complex scripts fall back to generic compression. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are skipped because Vallum captures stdout and would break their TTY requirements. Commands already starting with `vallum` are skipped for idempotency.
 
 To remove the hook, run `vallum uninstall-hook` — it removes only the Vallum entry, leaving the rest of your settings file untouched.
 
@@ -205,7 +207,7 @@ npm install            8,442 saved   (76%)
 
 ### Reproducing the savings
 
-Run `cargo bench` to time the full pipeline against five committed fixtures (`git status`, `cargo build`, `pytest`, `npm install`, a minified blob) and print a raw-vs-sanitized token table. Fixtures live in `benches/fixtures/` and are versioned with the repo, so the savings figures are reproducible from a clean checkout. The bench also prints a summary table to stderr after all criterion measurements complete, showing each fixture's before/after token counts.
+Run `cargo bench` to time the full pipeline against seven committed fixtures (`git status`, `cargo build`, `pytest`, `npm install`, a minified blob, an `rg` match list, a `find` file list) and print a raw-vs-sanitized token table. Fixtures live in `benches/fixtures/` and are versioned with the repo, so the savings figures are reproducible from a clean checkout. The bench also prints a summary table to stderr after all criterion measurements complete, showing each fixture's before/after token counts.
 
 ## Tests
 
@@ -222,7 +224,9 @@ Run `cargo bench` to time the full pipeline against five committed fixtures (`gi
 | `src/whitespace.rs`           | Collapsing blank-line runs, stripping trailing space |
 | `src/optimizer/mod.rs`        | `CommandOptimizer` trait + dispatch registry         |
 | `src/optimizer/cargo.rs`      | Summary optimizer for noisy `cargo` output           |
+| `src/optimizer/file_list.rs`  | Entry-capping optimizer for `ls`/`find`/`fd`/`tree` |
 | `src/optimizer/git_status.rs` | Summary optimizer for `git status` output            |
+| `src/optimizer/grep.rs`       | Match-grouping optimizer for `rg`/`grep` output      |
 | `src/optimizer/npm.rs`        | Summary optimizer for noisy `npm` output             |
 | `src/optimizer/pytest.rs`     | Summary optimizer for noisy `pytest` output          |
 | `src/truncator.rs`            | Context-preserving head/tail truncation              |
@@ -246,7 +250,8 @@ Run `cargo bench` to time the full pipeline against five committed fixtures (`gi
 - [x] Sub-project C — integration/UX: `install-hook`/`uninstall-hook` (Claude Code PreToolUse), `vallum hook` handler, `config show`/`config init`, `vallum completions <shell>`, exit-125 convention
 - [x] Sub-project D — live-tee (`vallum run --tee`, `~/.vallum/live.log`); PTY/streaming proper descoped because the hook skip-list (sub-project C) removed the urgency
 - [x] Sub-project E — maturity: `proptest` invariants across scrubber/truncator/ansi/whitespace/optimizer modules; `criterion` benchmark harness with five versioned fixtures (`benches/fixtures/`); savings figures reproducible from a clean checkout
-- [ ] Deferred — entropy detection, Chinese-language injection, injection precision tuning, config regex compile-once, more optimizers (kubectl, terraform, ripgrep), `cargo-fuzz`/libFuzzer harness, performance regression gating
+- [x] grep/file_list optimizers + hook-mode dispatch fix — `bash -c` unwrap so optimizers fire via the Claude Code hook; `rg`/`grep` match grouping; `ls`/`find`/`fd`/`tree` entry capping; two new bench fixtures (seven total)
+- [ ] Deferred — entropy detection, Chinese-language injection, injection precision tuning, config regex compile-once, more optimizers (kubectl, terraform), `cargo-fuzz`/libFuzzer harness, performance regression gating
 
 ## Name
 

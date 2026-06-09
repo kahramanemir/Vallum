@@ -1,10 +1,12 @@
 // src/optimizer/mod.rs
 pub mod cargo;
 pub mod docker;
+pub mod file_list;
 pub mod git_diff;
 pub mod git_log;
 pub mod git_status;
 pub mod go_test;
+pub mod grep;
 pub mod make;
 pub mod npm;
 pub mod pytest;
@@ -30,8 +32,38 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(docker::DockerOptimizer),
             Box::new(go_test::GoTestOptimizer),
             Box::new(make::MakeOptimizer),
+            Box::new(grep::GrepOptimizer),
+            Box::new(file_list::FileListOptimizer),
         ]
     })
+}
+
+/// Shell metacharacters that make a `bash -c` script unsafe to word-split.
+/// Any hit means we bail and match the invocation as-is (today's behavior).
+const SHELL_METACHARACTERS: &[char] = &[
+    '|', '&', ';', '<', '>', '(', ')', '$', '`', '\\', '"', '\'', '*', '?', '[', ']', '{', '}',
+    '~', '#',
+];
+
+/// The Claude Code hook rewrites every Bash call to `bash -c '<original>'`,
+/// which would otherwise hide the real command from optimizer matching.
+/// Unwraps only the trivial case: exactly `["-c", script]` with no shell
+/// metacharacters in the script.
+fn unwrap_shell_invocation(cmd: &str, args: &[String]) -> Option<(String, Vec<String>)> {
+    if !matches!(cmd, "bash" | "sh" | "zsh") {
+        return None;
+    }
+    if args.len() != 2 || args[0] != "-c" {
+        return None;
+    }
+    let script = &args[1];
+    if script.chars().any(|c| SHELL_METACHARACTERS.contains(&c)) {
+        return None;
+    }
+    let mut words = script.split_whitespace();
+    let inner_cmd = words.next()?.to_string();
+    let inner_args: Vec<String> = words.map(str::to_string).collect();
+    Some((inner_cmd, inner_args))
 }
 
 pub fn dispatch(
@@ -40,6 +72,11 @@ pub fn dispatch(
     input: &str,
     disabled: &[String],
 ) -> Option<(String, &'static str)> {
+    let unwrapped = unwrap_shell_invocation(cmd, args);
+    let (cmd, args) = match &unwrapped {
+        Some((c, a)) => (c.as_str(), a.as_slice()),
+        None => (cmd, args),
+    };
     for opt in registry() {
         if disabled.iter().any(|d| d == opt.name()) {
             continue;
@@ -222,6 +259,17 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_matches_rg_output() {
+        let mut input = String::new();
+        for i in 0..35 {
+            input.push_str(&format!("src/alpha.rs:{}:line\n", i + 1));
+        }
+        let result = dispatch("rg", &["line".to_string()], &input, &[]);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().1, "grep");
+    }
+
+    #[test]
     fn dispatch_returns_none_for_unknown_command() {
         let result = dispatch("ls", &[], "foo", &[]);
         assert!(result.is_none());
@@ -274,6 +322,74 @@ mod tests {
     fn collapse_noise_runs_passthrough_when_too_small() {
         let input = "noise\nnoise\nnoise\n";
         assert!(collapse_noise_runs(input, 10, |l| l == "noise", "x").is_none());
+    }
+
+    #[test]
+    fn unwrap_shell_invocation_shapes() {
+        let ok = unwrap_shell_invocation("bash", &["-c".into(), "git status".into()]);
+        assert_eq!(ok, Some(("git".to_string(), vec!["status".to_string()])));
+        assert!(unwrap_shell_invocation("sh", &["-c".into(), "cargo test".into()]).is_some());
+        assert!(unwrap_shell_invocation("zsh", &["-c".into(), "ls -la".into()]).is_some());
+        // Wrong shapes must not unwrap.
+        assert!(unwrap_shell_invocation("bash", &["-c".into()]).is_none());
+        assert!(unwrap_shell_invocation("bash", &["-lc".into(), "git status".into()]).is_none());
+        assert!(unwrap_shell_invocation(
+            "bash",
+            &["-c".into(), "git status".into(), "extra".into()]
+        )
+        .is_none());
+        assert!(unwrap_shell_invocation("python", &["-c".into(), "print(1)".into()]).is_none());
+        assert!(unwrap_shell_invocation("bash", &["-c".into(), "".into()]).is_none());
+    }
+
+    #[test]
+    fn dispatch_unwraps_bash_c_simple_command() {
+        let mut files = String::new();
+        for i in 0..40 {
+            files.push_str(&format!("\tmodified:   src/file_{}.rs\n", i));
+        }
+        let input = format!(
+            "On branch main\nYour branch is up to date with 'origin/main'.\n\nChanges to be committed:\n{}\n",
+            files
+        );
+        let args = vec!["-c".to_string(), "git status".to_string()];
+        let result = dispatch("bash", &args, &input, &[]);
+        assert!(
+            result.is_some(),
+            "bash -c 'git status' must reach git_status"
+        );
+        assert_eq!(result.unwrap().1, "git_status");
+    }
+
+    #[test]
+    fn dispatch_unwraps_bash_c_find_to_file_list() {
+        let mut input = String::new();
+        for i in 0..60 {
+            input.push_str(&format!("./src/file_{:02}.rs\n", i));
+        }
+        let args = vec!["-c".to_string(), "find . -type f".to_string()];
+        let result = dispatch("bash", &args, &input, &[]);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().1, "file_list");
+    }
+
+    #[test]
+    fn dispatch_does_not_unwrap_metacharacter_scripts() {
+        for script in [
+            "git status | head",
+            "echo 'hi'",
+            "ls *.rs",
+            "a; b",
+            "x > y",
+            "echo $HOME",
+            "cd ~/src",
+        ] {
+            let args = vec!["-c".to_string(), script.to_string()];
+            assert!(
+                dispatch("bash", &args, "irrelevant", &[]).is_none(),
+                "{script} must not unwrap"
+            );
+        }
     }
 
     use proptest::prelude::*;
