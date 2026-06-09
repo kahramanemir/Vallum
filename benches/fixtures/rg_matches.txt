@@ -1,0 +1,95 @@
+src/parser.rs:1:fn parse_1() {}
+src/parser.rs:2:fn parse_2() {}
+src/parser.rs:3:fn parse_3() {}
+src/parser.rs:4:fn parse_4() {}
+src/parser.rs:5:fn parse_5() {}
+src/parser.rs:6:fn parse_6() {}
+src/parser.rs:7:fn parse_7() {}
+src/parser.rs:8:fn parse_8() {}
+src/parser.rs:9:fn parse_9() {}
+src/parser.rs:10:fn parse_10() {}
+src/parser.rs:11:fn parse_11() {}
+src/parser.rs:12:fn parse_12() {}
+src/parser.rs:13:fn parse_13() {}
+src/parser.rs:14:fn parse_14() {}
+src/parser.rs:15:fn parse_15() {}
+src/parser.rs:16:fn parse_16() {}
+src/parser.rs:17:fn parse_17() {}
+src/parser.rs:18:fn parse_18() {}
+src/parser.rs:19:fn parse_19() {}
+src/parser.rs:20:fn parse_20() {}
+src/parser.rs:21:fn parse_21() {}
+src/parser.rs:22:fn parse_22() {}
+src/parser.rs:23:fn parse_23() {}
+src/parser.rs:24:fn parse_24() {}
+src/parser.rs:25:fn parse_25() {}
+src/parser.rs:26:fn parse_26() {}
+src/parser.rs:27:fn parse_27() {}
+src/parser.rs:28:fn parse_28() {}
+src/parser.rs:29:fn parse_29() {}
+src/parser.rs:30:fn parse_30() {}
+src/parser.rs:31:fn parse_31() {}
+src/parser.rs:32:fn parse_32() {}
+src/parser.rs:33:fn parse_33() {}
+src/parser.rs:34:fn parse_34() {}
+src/parser.rs:35:fn parse_35() {}
+src/parser.rs:36:fn parse_36() {}
+src/parser.rs:37:fn parse_37() {}
+src/parser.rs:38:fn parse_38() {}
+src/parser.rs:39:fn parse_39() {}
+src/parser.rs:40:fn parse_40() {}
+src/lexer.rs:1:let tok_1 = next();
+src/lexer.rs:2:let tok_2 = next();
+src/lexer.rs:3:let tok_3 = next();
+src/lexer.rs:4:let tok_4 = next();
+src/lexer.rs:5:let tok_5 = next();
+src/lexer.rs:6:let tok_6 = next();
+src/lexer.rs:7:let tok_7 = next();
+src/lexer.rs:8:let tok_8 = next();
+src/lexer.rs:9:let tok_9 = next();
+src/lexer.rs:10:let tok_10 = next();
+src/lexer.rs:11:let tok_11 = next();
+src/lexer.rs:12:let tok_12 = next();
+src/lexer.rs:13:let tok_13 = next();
+src/lexer.rs:14:let tok_14 = next();
+src/lexer.rs:15:let tok_15 = next();
+src/lexer.rs:16:let tok_16 = next();
+src/lexer.rs:17:let tok_17 = next();
+src/lexer.rs:18:let tok_18 = next();
+src/lexer.rs:19:let tok_19 = next();
+src/lexer.rs:20:let tok_20 = next();
+src/lexer.rs:21:let tok_21 = next();
+src/lexer.rs:22:let tok_22 = next();
+src/lexer.rs:23:let tok_23 = next();
+src/lexer.rs:24:let tok_24 = next();
+src/lexer.rs:25:let tok_25 = next();
+src/lexer.rs:26:let tok_26 = next();
+src/lexer.rs:27:let tok_27 = next();
+src/lexer.rs:28:let tok_28 = next();
+src/lexer.rs:29:let tok_29 = next();
+src/lexer.rs:30:let tok_30 = next();
+tests/case_1.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_2.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_3.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_4.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_5.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_6.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_7.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_8.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_9.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_10.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_11.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_12.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_13.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_14.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_15.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_16.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_17.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_18.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_19.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_20.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_21.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_22.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_23.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_24.rs:1:assert_eq!(parse(), Ok(()));
+tests/case_25.rs:1:assert_eq!(parse(), Ok(()));
