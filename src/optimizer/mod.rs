@@ -1,6 +1,7 @@
 // src/optimizer/mod.rs
 pub mod cargo;
 pub mod docker;
+pub mod file_list;
 pub mod git_diff;
 pub mod git_log;
 pub mod git_status;
@@ -32,6 +33,7 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(go_test::GoTestOptimizer),
             Box::new(make::MakeOptimizer),
             Box::new(grep::GrepOptimizer),
+            Box::new(file_list::FileListOptimizer),
         ]
     })
 }
@@ -357,6 +359,18 @@ mod tests {
             "bash -c 'git status' must reach git_status"
         );
         assert_eq!(result.unwrap().1, "git_status");
+    }
+
+    #[test]
+    fn dispatch_unwraps_bash_c_find_to_file_list() {
+        let mut input = String::new();
+        for i in 0..60 {
+            input.push_str(&format!("./src/file_{:02}.rs\n", i));
+        }
+        let args = vec!["-c".to_string(), "find . -type f".to_string()];
+        let result = dispatch("bash", &args, &input, &[]);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().1, "file_list");
     }
 
     #[test]
