@@ -1,6 +1,7 @@
 // src/scrubber/mod.rs
 use crate::config::RedactionRule;
 
+mod entropy;
 mod injection;
 mod markers;
 mod secrets;
