@@ -16,6 +16,19 @@
 //! masked upstream by a dedicated pattern); values starting with `/` or
 //! `./` are skipped (file paths).
 //!
+//! **Evasion mitigations:**
+//! - Leading separator characters (`=`, `:`) and surrounding whitespace are
+//!   stripped from the measured payload before entropy scoring. This prevents
+//!   `key==value` / `key:=value` (double-separator) and `key="  <secret>  "`
+//!   (padded quoted value) from flipping the charset class or depressing the
+//!   score. The replacement still masks the entire captured value, so the
+//!   output shape is unchanged.
+//! - Pure-decimal values (numeric IDs, phone numbers) are deliberately
+//!   exempt: they are excluded from the hex-charset class (which requires at
+//!   least one `a-f` letter) and their maximum entropy (~3.32 bits/char)
+//!   never reaches the general threshold of 4.5, so they always pass through
+//!   unredacted.
+//!
 //! Known accepted side effects: keys like `author`, `monkey`, `cache_key`
 //! become candidates via substring matching ("auth", "key"). This is
 //! harmless — the entropy gate still applies — and deliberate: substring
@@ -34,7 +47,9 @@ const HEX_ENTROPY_THRESHOLD: f64 = 3.0;
 const GENERAL_ENTROPY_THRESHOLD: f64 = 4.5;
 
 /// Case-insensitive substrings that mark a key as credential-ish.
-const KEY_VOCABULARY: &[&str] = &["pass", "secret", "token", "key", "auth", "cred"];
+const KEY_VOCABULARY: &[&str] = &[
+    "pass", "pwd", "secret", "token", "key", "auth", "cred", "session",
+];
 
 /// `key` (optionally quoted) + `=`/`:` separator + value (quoted string or
 /// bare non-whitespace run). Quoted alternatives come first so a leading
@@ -85,7 +100,13 @@ fn value_is_high_entropy_secret(value: &str) -> bool {
     if value.starts_with('/') || value.starts_with("./") {
         return false; // file path
     }
-    let threshold = if value.chars().all(|c| c.is_ascii_hexdigit()) {
+    // Genuinely hex-looking: all hex digits AND at least one a-f letter.
+    // Pure-decimal values (IDs, phone numbers) max out at ~3.32 bits/char
+    // and must use the general threshold, which they effectively never
+    // clear — numeric identifiers stay visible by design.
+    let is_hex = value.chars().all(|c| c.is_ascii_hexdigit())
+        && value.chars().any(|c| c.is_ascii_alphabetic());
+    let threshold = if is_hex {
         HEX_ENTROPY_THRESHOLD
     } else {
         GENERAL_ENTROPY_THRESHOLD
@@ -105,6 +126,11 @@ pub fn scrub_entropy_secrets(input: &str) -> String {
                 Some(b'\'') => ("'", val.trim_matches('\'')),
                 _ => ("", val),
             };
+            // Measure the actual payload: strip stray leading separators
+            // (key==value, key:=value) and surrounding whitespace inside
+            // quotes — both otherwise flip the charset class and depress
+            // the entropy score, which is an evasion vector.
+            let inner = inner.trim_start_matches(['=', ':']).trim();
             if key_is_credential_ish(key) && value_is_high_entropy_secret(inner) {
                 format!("{key}{sep}{quote}***{quote}")
             } else {
@@ -205,6 +231,38 @@ mod tests {
     }
 
     use proptest::prelude::*;
+
+    #[test]
+    fn redacts_despite_double_separator() {
+        // key==value and key:=value: the stray separator must not flip the
+        // charset class and let the secret through.
+        let out = scrub_entropy_secrets(&format!("password=={HEX32}"));
+        assert!(!out.contains(HEX32), "got: {out}");
+        let out = scrub_entropy_secrets(&format!("cfg_token:={HEX32}"));
+        assert!(!out.contains(HEX32), "got: {out}");
+    }
+
+    #[test]
+    fn redacts_padded_quoted_value() {
+        let out = scrub_entropy_secrets(&format!("token=\"  {HEX32}  \""));
+        assert!(!out.contains(HEX32), "got: {out}");
+    }
+
+    #[test]
+    fn redacts_pwd_and_session_keys() {
+        let out = scrub_entropy_secrets(&format!("db_pwd={HEX32}"));
+        assert_eq!(out, "db_pwd=***");
+        let out = scrub_entropy_secrets(&format!("sessionid={HEX32}"));
+        assert_eq!(out, "sessionid=***");
+    }
+
+    #[test]
+    fn leaves_pure_decimal_ids_alone() {
+        // Numeric identifiers (IDs, phone numbers) must stay visible even in
+        // credential-ish contexts.
+        let input = "key=15551234567890123";
+        assert_eq!(scrub_entropy_secrets(input), input);
+    }
 
     proptest! {
         #[test]
