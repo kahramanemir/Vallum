@@ -5,6 +5,7 @@ pub mod git_diff;
 pub mod git_log;
 pub mod git_status;
 pub mod go_test;
+pub mod grep;
 pub mod make;
 pub mod npm;
 pub mod pytest;
@@ -30,6 +31,7 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(docker::DockerOptimizer),
             Box::new(go_test::GoTestOptimizer),
             Box::new(make::MakeOptimizer),
+            Box::new(grep::GrepOptimizer),
         ]
     })
 }
@@ -252,6 +254,17 @@ mod tests {
         assert!(out.contains("PASS: 5 lines hidden"));
         assert!(out.contains("Test Suites: 5 passed, 5 total"));
         assert!(out.contains("[summarized by vallum]"));
+    }
+
+    #[test]
+    fn dispatch_matches_rg_output() {
+        let mut input = String::new();
+        for i in 0..35 {
+            input.push_str(&format!("src/alpha.rs:{}:line\n", i + 1));
+        }
+        let result = dispatch("rg", &["line".to_string()], &input, &[]);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().1, "grep");
     }
 
     #[test]
