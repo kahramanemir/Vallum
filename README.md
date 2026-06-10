@@ -231,13 +231,22 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/whitespace.rs`           | Collapsing blank-line runs, stripping trailing space |
 | `src/optimizer/mod.rs`        | `CommandOptimizer` trait + dispatch registry         |
 | `src/optimizer/cargo.rs`      | Summary optimizer for noisy `cargo` output           |
+| `src/optimizer/docker.rs`     | Summary optimizer for `docker build`/`compose` output |
 | `src/optimizer/file_list.rs`  | Entry-capping optimizer for `ls`/`find`/`fd`/`tree` |
+| `src/optimizer/git_diff.rs`   | Summary optimizer for `git diff` output              |
+| `src/optimizer/git_log.rs`    | Summary optimizer for `git log` output               |
 | `src/optimizer/git_status.rs` | Summary optimizer for `git status` output            |
+| `src/optimizer/go_test.rs`    | Summary optimizer for `go test` output               |
 | `src/optimizer/grep.rs`       | Match-grouping optimizer for `rg`/`grep` output      |
+| `src/optimizer/make.rs`       | Summary optimizer for `make` output                  |
 | `src/optimizer/npm.rs`        | Summary optimizer for noisy `npm` output             |
 | `src/optimizer/pytest.rs`     | Summary optimizer for noisy `pytest` output          |
 | `src/truncator.rs`            | Context-preserving head/tail truncation              |
-| `src/scrubber.rs`             | Secret redaction, injection neutralization, wrapping |
+| `src/scrubber/mod.rs`         | Scrub pipeline: `sanitize`/`redact` orchestration + wrapper |
+| `src/scrubber/secrets.rs`     | Known-format secret redaction patterns               |
+| `src/scrubber/entropy.rs`     | Context-gated entropy secret detection               |
+| `src/scrubber/injection.rs`   | Prompt-injection neutralization                      |
+| `src/scrubber/markers.rs`     | Untrusted-output marker defang                       |
 | `src/tokenizer.rs`            | Pluggable `TokenEstimator` + heuristic default       |
 | `src/fsutil.rs`               | Private (0600) append-file helper                    |
 | `src/audit.rs`                | Append-only log writer                               |
