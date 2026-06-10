@@ -24,6 +24,10 @@
 //!   (padded quoted value) from flipping the charset class or depressing the
 //!   score. The replacement still masks the entire captured value, so the
 //!   output shape is unchanged.
+//!   The separator group itself is a run (`[=:]+`), so a dangling separator
+//!   before a whitespace-separated quoted value (`key== "<secret>"`) still
+//!   tokenizes. Side effect: Rust paths (`token::Kind`) become candidates,
+//!   but identifier-ish values never clear the entropy gate.
 //! - Pure-decimal values (numeric IDs, phone numbers) are deliberately
 //!   exempt: they are excluded from the hex-charset class (which requires at
 //!   least one `a-f` letter) and their maximum entropy (~3.32 bits/char)
@@ -52,14 +56,15 @@ const KEY_VOCABULARY: &[&str] = &[
     "pass", "pwd", "secret", "token", "key", "auth", "cred", "session",
 ];
 
-/// `key` (optionally quoted) + `=`/`:` separator + value (quoted string or
-/// bare non-whitespace run). Quoted alternatives come first so a leading
+/// `key` (optionally quoted) + a run of `=`/`:` separators (so `key==`,
+/// `key:=`, `key== "v"` all tokenize) + value (quoted string or bare
+/// non-whitespace run). Quoted alternatives come first so a leading
 /// quote is never parsed as part of a bare value.
 fn assignment_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r#"(?P<key>"[A-Za-z_][A-Za-z0-9_.-]*"|'[A-Za-z_][A-Za-z0-9_.-]*'|[A-Za-z_][A-Za-z0-9_.-]*)(?P<sep>\s*[=:]\s*)(?P<val>"[^"\n]+"|'[^'\n]+'|[^\s"']+)"#,
+            r#"(?P<key>"[A-Za-z_][A-Za-z0-9_.-]*"|'[A-Za-z_][A-Za-z0-9_.-]*'|[A-Za-z_][A-Za-z0-9_.-]*)(?P<sep>\s*[=:]+\s*)(?P<val>"[^"\n]+"|'[^'\n]+'|[^\s"']+)"#,
         )
         .unwrap()
     })
@@ -259,6 +264,30 @@ mod tests {
         assert!(!out.contains(HEX32), "got: {out}");
         let out = scrub_entropy_secrets(&format!("token=\"{HEX32}==\""));
         assert!(!out.contains(HEX32), "got: {out}");
+    }
+
+    #[test]
+    fn redacts_dangling_separator_before_quoted_value() {
+        // `key== "<hex>"`: the separator run ends, whitespace follows, the
+        // value is quoted. Single-char separator tokenization missed this
+        // (SECURITY.md known gap from sub-project G).
+        let out = scrub_entropy_secrets(&format!("password== \"{HEX32}\""));
+        assert!(!out.contains(HEX32), "got: {out}");
+        let out = scrub_entropy_secrets(&format!("api_token:= '{HEX32}'"));
+        assert!(!out.contains(HEX32), "got: {out}");
+    }
+
+    #[test]
+    fn leaves_rust_paths_alone() {
+        // `::` is now a capturable separator run; identifier-ish values must
+        // still fail the entropy gate.
+        for input in [
+            "use std::collections::HashMap;",
+            "token::SomeVeryLongGeneratedTypeName",
+            "secret_key::generate_for_test_fixtures",
+        ] {
+            assert_eq!(scrub_entropy_secrets(input), input, "{input}");
+        }
     }
 
     #[test]
