@@ -115,7 +115,6 @@ fn value_is_high_entropy_secret(value: &str) -> bool {
     shannon_entropy(value) >= threshold
 }
 
-#[allow(dead_code)] // used from secrets.rs in the next commit
 pub fn scrub_entropy_secrets(input: &str) -> String {
     assignment_regex()
         .replace_all(input, |caps: &regex::Captures| {

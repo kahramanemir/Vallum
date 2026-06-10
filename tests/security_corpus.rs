@@ -76,7 +76,7 @@ fn benign_corpus_not_flagged() {
 fn secret_corpus_redacted() {
     let mut redacted = 0;
     for &sample in SECRETS {
-        let out = scrubber::redact(sample, &[]);
+        let out = scrubber::redact(sample, &[], true);
         // The masked form may keep a harmless prefix (e.g. "ghp_***"); what
         // matters is that the full original secret string is gone.
         if !out.contains(sample) {
