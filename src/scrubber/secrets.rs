@@ -3,7 +3,7 @@ use crate::config::RedactionRule;
 use regex::Regex;
 use std::sync::OnceLock;
 
-pub fn scrub_secrets(input: &str, extra_patterns: &[RedactionRule]) -> String {
+pub fn scrub_secrets(input: &str, extra_patterns: &[RedactionRule], entropy: bool) -> String {
     let mut scrubbed = input.to_string();
 
     for (regex, replacement) in secret_patterns() {
@@ -15,6 +15,10 @@ pub fn scrub_secrets(input: &str, extra_patterns: &[RedactionRule]) -> String {
         scrubbed = regex
             .replace_all(&scrubbed, rule.replacement.as_str())
             .to_string();
+    }
+
+    if entropy {
+        scrubbed = super::entropy::scrub_entropy_secrets(&scrubbed);
     }
 
     scrubbed
@@ -60,7 +64,7 @@ mod tests {
             "abcdefghijklmno"
         );
         let expected = "Here is my key: sk-*** and my token: ghp_***";
-        assert_eq!(scrub_secrets(input, &[]), expected);
+        assert_eq!(scrub_secrets(input, &[], true), expected);
     }
 
     #[test]
@@ -75,7 +79,7 @@ mod tests {
             "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----\n"
         );
 
-        let scrubbed = scrub_secrets(input, &[]);
+        let scrubbed = scrub_secrets(input, &[], true);
         assert!(scrubbed.contains("Authorization: Bearer ***"));
         assert!(scrubbed.contains("github_pat_***"));
         assert!(scrubbed.contains("xoxb-***"));
@@ -94,6 +98,7 @@ mod tests {
                 pattern: "token-[0-9]+".to_string(),
                 replacement: "token-***".to_string(),
             }],
+            true,
         );
         assert_eq!(scrubbed, "custom token-***");
     }
@@ -117,7 +122,7 @@ mod tests {
             ),
         ];
         for (input, raw) in cases {
-            let scrubbed = scrub_secrets(input, &[]);
+            let scrubbed = scrub_secrets(input, &[], true);
             assert!(
                 !scrubbed.contains(raw),
                 "raw secret leaked for input: {input} -> {scrubbed}"
@@ -128,7 +133,7 @@ mod tests {
     #[test]
     fn test_scrub_connection_string_password() {
         let input = "postgres://admin:s3cr3tP@ss@db.example.com:5432/app";
-        let scrubbed = scrub_secrets(input, &[]);
+        let scrubbed = scrub_secrets(input, &[], true);
         assert!(
             scrubbed.contains("postgres://admin:***@"),
             "got: {scrubbed}"
@@ -139,7 +144,7 @@ mod tests {
     #[test]
     fn test_scrub_env_assignment() {
         let input = "PASSWORD=hunter2supersecret\nAPI_KEY: abcdef123456ZZ";
-        let scrubbed = scrub_secrets(input, &[]);
+        let scrubbed = scrub_secrets(input, &[], true);
         assert!(!scrubbed.contains("hunter2supersecret"), "got: {scrubbed}");
         assert!(!scrubbed.contains("abcdef123456ZZ"), "got: {scrubbed}");
     }
@@ -148,8 +153,23 @@ mod tests {
     fn test_env_assignment_ignores_short_prose() {
         // "secret: the spec" — value too short / prose, should not be redacted.
         let input = "the secret: tip";
-        let scrubbed = scrub_secrets(input, &[]);
+        let scrubbed = scrub_secrets(input, &[], true);
         assert_eq!(scrubbed, input);
+    }
+
+    #[test]
+    fn entropy_stage_can_be_disabled() {
+        let input = "db_password=0123456789abcdef0123456789abcdef";
+        assert_eq!(
+            scrub_secrets(input, &[], true),
+            "db_password=***",
+            "entropy on must redact"
+        );
+        assert_eq!(
+            scrub_secrets(input, &[], false),
+            input,
+            "entropy off must pass through"
+        );
     }
 
     use proptest::prelude::*;
@@ -157,13 +177,13 @@ mod tests {
     proptest! {
         #[test]
         fn prop_scrub_secrets_does_not_panic(s in "[\\s\\S]{0,500}") {
-            let _ = scrub_secrets(&s, &[]);
+            let _ = scrub_secrets(&s, &[], true);
         }
 
         #[test]
         fn prop_scrub_secrets_idempotent(s in "[\\s\\S]{0,500}") {
-            let once = scrub_secrets(&s, &[]);
-            let twice = scrub_secrets(&once, &[]);
+            let once = scrub_secrets(&s, &[], true);
+            let twice = scrub_secrets(&once, &[], true);
             prop_assert_eq!(once, twice);
         }
     }

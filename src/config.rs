@@ -35,10 +35,22 @@ pub struct PipelineConfig {
     pub max_line_length: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ScrubberConfig {
     pub extra_secret_patterns: Vec<RedactionRule>,
+    /// Context-gated entropy redaction of credential-ish assignment values.
+    /// Default on; bare tokens (git SHAs, UUIDs) are never candidates.
+    pub entropy: bool,
+}
+
+impl Default for ScrubberConfig {
+    fn default() -> Self {
+        Self {
+            extra_secret_patterns: Vec::new(),
+            entropy: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -215,6 +227,14 @@ extra_secret_patterns = [ { pattern = "token-(", replacement = "token-***" } ]
         let config = AppConfig::from_path(&path).unwrap();
         assert!(config.security.strict);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scrubber_entropy_defaults_true_and_parses_false() {
+        assert!(AppConfig::default().scrubber.entropy);
+        let parsed: AppConfig =
+            toml::from_str("[scrubber]\nentropy = false\n").expect("valid toml");
+        assert!(!parsed.scrubber.entropy);
     }
 
     #[test]

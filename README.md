@@ -53,6 +53,7 @@ Each command flows through these stages:
 ## Security model
 
 - **Secret redaction** runs on every command's output before it is shown or logged (sanitized log). Patterns cover OpenAI-style `sk-` keys, GitHub `ghp_`/`github_pat_` tokens, Slack `xox*` tokens, JWT bearer headers, PEM private keys, AWS access keys (`AKIA…`), Google API keys (`AIza…`), Stripe live keys (`sk_live_`/`rk_live_`), Anthropic keys (`sk-ant-…`), database connection-string passwords (`scheme://user:pass@host` → password masked), and uppercase `.env`-style assignments (`PASSWORD=…`, `API_KEY: …`). **Command names and arguments are also redacted** before being written to the audit log, `stats.jsonl`, and JSON output — not just command output. Extend with your own regex rules via config.
+- **Entropy detection (context-gated)** backs the pattern list with a generic net: when a credential-ish assignment (`db_password=…`, `"authToken": "…"`, `SIGNING_KEY: …` — any key containing pass/pwd/secret/token/key/auth/cred/session) carries a long, high-entropy value, the value is masked (`db_password=***`). Bare high-entropy tokens — commit SHAs, UUIDs, base64 blobs in logs — are **never** candidates, so ordinary developer output is structurally safe from false positives. Low-entropy values, pure-decimal IDs, URLs, and file paths are skipped even in credential contexts. Disable with `[scrubber] entropy = false`.
 - **Injection neutralization** is pattern-based and best-effort: it flags common families ("ignore/disregard/forget previous instructions", "you are now…", "reveal your system prompt", injected `Assistant:`/`System:` turns) across multiple languages (English, Turkish, Spanish, German, French) and is resistant to line-splitting; a detected injection's whole line (trigger + payload) is neutralized and replaced with `[POTENTIAL INJECTION NEUTRALIZED]`. With the opt-in `--strict` / `[security] strict` fail-closed mode, a detected injection instead causes the **entire output body** to be replaced with `[OUTPUT BLOCKED: prompt injection detected]` (the child exit code is still preserved).
 - **Untrusted-output wrapper** brackets every result and defangs any embedded marker strings, so a command cannot forge an early close and smuggle "trusted" text past the boundary. This adds a small fixed token overhead on tiny outputs — accepted by design, because the boundary is size-independent.
 - **Logs are private.** Raw (unredacted) logging is **off by default**; the sanitized log and stats file are created with `0600` permissions on unix.
@@ -92,6 +93,7 @@ max_line_length = 2000       # truncate single lines longer than this (0 disable
 disabled = []            # optimizer names to turn off; all on by default
 
 [scrubber]
+entropy = true   # context-gated entropy redaction of credential-ish values
 extra_secret_patterns = [
   { pattern = "token-[0-9]+", replacement = "token-***" }
 ]
@@ -112,6 +114,7 @@ Supported settings:
 - `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make, grep, file_list) — default none
 - `pipeline.max_line_length`: cap individual line length; longer lines are truncated mid-line with an elision marker — default 2000, `0` disables
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
+- `scrubber.entropy`: context-gated entropy redaction of credential-ish assignment values — **default `true`**
 - `security.strict`: when `true` (or `--strict`), the output is replaced with `[OUTPUT BLOCKED: prompt injection detected]` if any injection is detected — **default `false`**
 
 ## Install
@@ -251,7 +254,8 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Sub-project D — live-tee (`vallum run --tee`, `~/.vallum/live.log`); PTY/streaming proper descoped because the hook skip-list (sub-project C) removed the urgency
 - [x] Sub-project E — maturity: `proptest` invariants across scrubber/truncator/ansi/whitespace/optimizer modules; `criterion` benchmark harness with five versioned fixtures (`benches/fixtures/`); savings figures reproducible from a clean checkout
 - [x] grep/file_list optimizers + hook-mode dispatch fix — `bash -c` unwrap so optimizers fire via the Claude Code hook; `rg`/`grep` match grouping; `ls`/`find`/`fd`/`tree` entry capping; two new bench fixtures (seven total)
-- [ ] Deferred — entropy detection, Chinese-language injection, injection precision tuning, config regex compile-once, more optimizers (kubectl, terraform), `cargo-fuzz`/libFuzzer harness, performance regression gating
+- [x] Context-gated entropy secret detection — credential-ish assignment values with high Shannon entropy are masked; bare tokens (commit SHAs, UUIDs) structurally exempt; `[scrubber] entropy` flag (default on)
+- [ ] Deferred — Chinese-language injection, injection precision tuning, config regex compile-once, more optimizers (kubectl, terraform), `cargo-fuzz`/libFuzzer harness, performance regression gating
 
 ## Name
 

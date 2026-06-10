@@ -76,7 +76,7 @@ fn benign_corpus_not_flagged() {
 fn secret_corpus_redacted() {
     let mut redacted = 0;
     for &sample in SECRETS {
-        let out = scrubber::redact(sample, &[]);
+        let out = scrubber::redact(sample, &[], true);
         // The masked form may keep a harmless prefix (e.g. "ghp_***"); what
         // matters is that the full original secret string is gone.
         if !out.contains(sample) {
@@ -87,4 +87,69 @@ fn secret_corpus_redacted() {
     }
     eprintln!("Secret redaction: {redacted}/{}", SECRETS.len());
     assert_eq!(redacted, SECRETS.len(), "all secrets must be redacted");
+}
+
+// Context-gated entropy cases: credential-ish assignment + high-entropy
+// value. Each entry is (full sample, the secret value that must vanish).
+// Values are transparently synthetic (sequential hex / alphabet runs).
+const ENTROPY_SECRETS: &[(&str, &str)] = &[
+    (
+        "db_password=0123456789abcdef0123456789abcdef",
+        "0123456789abcdef0123456789abcdef",
+    ),
+    (
+        r#""authToken": "AbCdEfGhIjKlMnOpQrStUvWxYz012345""#,
+        "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    ),
+    (
+        "api-key = Zx9Yw8Vu7Ts6Rq5Po4Nm3Lk2Ji1Hg0Fe",
+        "Zx9Yw8Vu7Ts6Rq5Po4Nm3Lk2Ji1Hg0Fe",
+    ),
+    (
+        "secret: 'f0e1d2c3b4a5968778695a4b3c2d1e0f'",
+        "f0e1d2c3b4a5968778695a4b3c2d1e0f",
+    ),
+];
+
+// High-entropy or credential-shaped text that must survive the FULL scrub
+// chain unchanged (the false-positive corpus).
+const ENTROPY_BENIGN: &[&str] = &[
+    "commit 9f86d081884c7d659a2feaa0c55ad015afc366b7",
+    "9f86d08 fix(optimizer): unwrap bash -c scripts\nac8541d fix(optimizer): tighten grouping",
+    "id: 550e8400-e29b-41d4-a716-446655440000",
+    "cache_key=user:123",
+    "registry_token: https://registry.npmjs.org/some/long/package",
+    "KEY_PATH=/home/user/.ssh/id_rsa_with_long_name",
+    "password: hunter2supersecret",
+];
+
+#[test]
+fn entropy_secret_corpus_redacted() {
+    for &(sample, value) in ENTROPY_SECRETS {
+        let out = scrubber::redact(sample, &[], true);
+        assert!(
+            !out.contains(value),
+            "entropy secret leaked: {sample} -> {out}"
+        );
+    }
+}
+
+#[test]
+fn entropy_benign_corpus_untouched() {
+    for &sample in ENTROPY_BENIGN {
+        let out = scrubber::redact(sample, &[], true);
+        assert_eq!(out, sample, "false positive on benign sample");
+    }
+}
+
+#[test]
+fn entropy_redaction_fires_through_sanitize() {
+    let input = "db_password=0123456789abcdef0123456789abcdef";
+    let out = scrubber::sanitize(input, &[], false, true);
+    assert!(
+        !out.contains("0123456789abcdef0123456789abcdef"),
+        "entropy secret must not survive sanitize: {out}"
+    );
+    assert!(out.contains("db_password=***"));
+    assert!(out.starts_with("[UNTRUSTED TERMINAL OUTPUT START]"));
 }
