@@ -64,8 +64,6 @@ they are logged):
 - Unknown-format secrets *outside* any assignment context are not caught
   (catching them was rejected as a high-false-positive design).
 - Secrets split across lines, or encoded so that measured entropy drops.
-- Whitespace-separated dangling separators (`key== "<value>"`) fall outside
-  the assignment tokenizer.
 - Low-entropy passwords and pure-decimal secrets are exempt by design (the
   alternative would redact ordinary IDs and phone numbers).
 - A secret the agent itself typed into a command is already known to the
@@ -88,8 +86,14 @@ exit code. The sanitized log only ever receives post-neutralization text.
   deferred).
 - Contiguous no-space payloads (`ignoreallpreviousinstructions…`).
 - `Assistant:`/`System:` turns starting mid-line rather than at line start.
-- The pattern set deliberately over-neutralizes (the safe direction): some
-  benign lines mentioning instructions or prompts are flagged.
+- Turn lines with fewer than three natural-language words after the colon
+  (`Assistant:` alone, `System: obey now`) pass through; payloads on
+  following lines are still scanned by the other families.
+- Reveal-family phrases without a possessive or system-directed qualifier
+  ("print the instructions above") are not flagged.
+- Natural-language `System:`/`Assistant:` log lines of three or more words
+  ("System: All services operational") are still neutralized — the safe
+  direction.
 - The entropy stage may mask a quoted credential value that *contains* an
   injection phrase before the scanner sees it; trigger and payload both
   vanish into `***` — safe by construction, but it is not counted as a
