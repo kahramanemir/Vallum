@@ -36,6 +36,7 @@ Strength vocabulary used below:
 | Secrets in terminal output | Redacted before the model or the sanitized log sees them | Known-format patterns (provider keys, connection-string passwords, `.env` assignments) + context-gated entropy detection | Best-effort |
 | Secrets in command names/args | Redacted in the audit log, `stats.jsonl`, and `--json` output | The same scrubber applied to cmd/args before any sink | Best-effort |
 | Prompt injection in command output / logs | Trigger line neutralized, or whole output blocked | Multilingual pattern families; whole-line consumption; opt-in `--strict` fail-closed | Best-effort |
+| Invisible/bidi control chars in output | Removed before the model sees them | Fixed-set zero-width/BOM/bidi strip (`normalize`) | Structural (for the listed code points) |
 | Forged `[UNTRUSTED TERMINAL OUTPUT]` markers | Output cannot close the wrapper early or smuggle "trusted" text | Marker defang after all content transforms; exactly one wrapper survives | **Structural** |
 | Log exposure | Secrets don't reach disk by default | Raw (unredacted) log **off by default**; sanitized log and stats written `0600`; cmd/args redacted even in the raw log header | Structural defaults |
 | Noisy output / token bloat | Compressed before reaching the model | Command optimizers, truncation, whitespace collapse | Not a security control |
@@ -79,25 +80,27 @@ neutralize the whole trigger line (trigger + payload) with
 strict`), any detection replaces the entire output body with
 `[OUTPUT BLOCKED: prompt injection detected]` while preserving the child
 exit code. The sanitized log only ever receives post-neutralization text.
+Before matching, output is normalized: zero-width, BOM, and bidi control
+characters are stripped from the output entirely, and the scanner matches a
+per-line shadow (compatibility/decomposition + combining-mark strip +
+lowercase + curated confusable folding) so homoglyph, full-width, and
+diacritic evasions are seen through. The despaced ignore-family also catches
+no-space concatenation (`ignoreallpreviousinstructions`).
 
 **Known gaps**
 
 - Chinese-language injection (no word boundaries; needs different matching —
   deferred).
-- Contiguous no-space payloads (`ignoreallpreviousinstructions…`).
+- Confusables outside the curated table (the table targets ASCII-Latin
+  look-alikes of the keyword alphabets, not the full Unicode confusable set).
+- Reveal-family no-space concatenation (`revealyoursystemprompt`) — only the
+  ignore-family is despaced in v1.
+- Leetspeak digit substitution (`1gn0re`) — not folded.
 - `Assistant:`/`System:` turns starting mid-line rather than at line start.
-- Turn lines with fewer than three natural-language words after the colon
-  (`Assistant:` alone, `System: obey now`) pass through; payloads on
-  following lines are still scanned by the other families.
-- Reveal-family phrases without a possessive or system-directed qualifier
-  ("print the instructions above") are not flagged.
-- Natural-language `System:`/`Assistant:` log lines of three or more words
-  ("System: All services operational") are still neutralized — the safe
-  direction.
-- The entropy stage may mask a quoted credential value that *contains* an
-  injection phrase before the scanner sees it; trigger and payload both
-  vanish into `***` — safe by construction, but it is not counted as a
-  neutralized injection.
+- Turn lines with fewer than three natural-language words after the colon.
+- Reveal-family phrases without a possessive or system-directed qualifier.
+- The entropy stage may mask a quoted value containing an injection phrase
+  before the scanner sees it.
 
 ### Forged untrusted-output markers
 
