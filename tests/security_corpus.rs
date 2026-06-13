@@ -117,7 +117,10 @@ fn benign_unicode_survives_sanitize_verbatim() {
     // output, only of the detection shadow).
     let s = "Café ☕ — Türkçe ığüş";
     let out = scrubber::sanitize(s, &[], false, true, true);
-    assert!(out.contains(s), "benign Unicode altered: {out}");
+    assert_eq!(
+        out,
+        format!("[UNTRUSTED TERMINAL OUTPUT START]\n{s}\n[UNTRUSTED TERMINAL OUTPUT END]\n")
+    );
 }
 
 #[test]
