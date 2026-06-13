@@ -63,10 +63,11 @@ fn main() {
             let strict = *strict || config.security.strict;
             let extra = &config.scrubber.extra_secret_patterns;
             let entropy = config.scrubber.entropy;
-            let safe_cmd = scrubber::redact(cmd, extra, entropy);
+            let normalize = config.scrubber.normalize;
+            let safe_cmd = scrubber::redact(cmd, extra, entropy, normalize);
             let safe_args: Vec<String> = args
                 .iter()
-                .map(|a| scrubber::redact(a, extra, entropy))
+                .map(|a| scrubber::redact(a, extra, entropy, normalize))
                 .collect();
             let cmd_context = format!("{} {:?}", safe_cmd, safe_args);
 
@@ -109,7 +110,7 @@ fn main() {
                 )
             };
 
-            let sanitized = scrubber::sanitize(&processed, extra, strict, entropy);
+            let sanitized = scrubber::sanitize(&processed, extra, strict, entropy, normalize);
 
             let tokens_after = metrics::estimate_tokens(&sanitized);
 
@@ -269,6 +270,7 @@ max_line_length = 2000           # truncate single lines longer than this; 0 dis
 
 [scrubber]
 entropy = true                   # context-gated entropy redaction of credential-ish values
+normalize = true                 # strip invisible/bidi chars + fold homoglyphs for injection matching
 # extra_secret_patterns = [
 #   { pattern = "token-[0-9]+", replacement = "token-***" }
 # ]

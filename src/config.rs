@@ -42,6 +42,9 @@ pub struct ScrubberConfig {
     /// Context-gated entropy redaction of credential-ish assignment values.
     /// Default on; bare tokens (git SHAs, UUIDs) are never candidates.
     pub entropy: bool,
+    /// Input normalization (strip invisible/bidi chars + shadow-fold homoglyphs
+    /// for injection matching). Default on; `false` reverts to legacy behavior.
+    pub normalize: bool,
 }
 
 impl Default for ScrubberConfig {
@@ -49,6 +52,7 @@ impl Default for ScrubberConfig {
         Self {
             extra_secret_patterns: Vec::new(),
             entropy: true,
+            normalize: true,
         }
     }
 }
@@ -235,6 +239,14 @@ extra_secret_patterns = [ { pattern = "token-(", replacement = "token-***" } ]
         let parsed: AppConfig =
             toml::from_str("[scrubber]\nentropy = false\n").expect("valid toml");
         assert!(!parsed.scrubber.entropy);
+    }
+
+    #[test]
+    fn scrubber_normalize_defaults_true_and_parses_false() {
+        assert!(AppConfig::default().scrubber.normalize);
+        let parsed: AppConfig =
+            toml::from_str("[scrubber]\nnormalize = false\n").expect("valid toml");
+        assert!(!parsed.scrubber.normalize);
     }
 
     #[test]
