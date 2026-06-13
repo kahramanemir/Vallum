@@ -41,8 +41,12 @@ fn mn_regex() -> &'static Regex {
 
 pub(crate) fn detection_shadow(line: &str) -> String {
     let visible = strip_invisible(line);
-    let no_marks = mn_regex().replace_all(&visible, "");
-    let nfkc: String = no_marks.nfkc().collect();
+    let decomposed: String = visible.nfkd().collect();
+    let no_marks = mn_regex().replace_all(&decomposed, "");
+    let lowered = no_marks.to_lowercase();
+    let lowered_decomposed: String = lowered.nfkd().collect();
+    let no_lower_marks = mn_regex().replace_all(&lowered_decomposed, "");
+    let nfkc: String = no_lower_marks.nfkc().collect();
     let lowered = nfkc.to_lowercase();
     fold_confusables(&lowered)
 }
@@ -123,6 +127,12 @@ mod tests {
     fn shadow_strips_combining_marks() {
         // i + combining acute, g n o r e
         assert_eq!(detection_shadow("i\u{0301}gnore"), "ignore");
+    }
+
+    #[test]
+    fn shadow_strips_marks_exposed_by_case_and_decomposition() {
+        assert_eq!(detection_shadow("\u{0130}GNORE"), "ignore"); // İGNORE
+        assert_eq!(detection_shadow("\u{00ED}gnore"), "ignore"); // ígnore
     }
 
     #[test]
