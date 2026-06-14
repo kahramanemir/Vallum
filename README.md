@@ -53,11 +53,11 @@ Each command flows through these stages:
 
 ## Security model
 
-Vallum applies four mechanism families to every command, in order: secret
-redaction (known-format patterns plus context-gated entropy detection),
+Vallum applies four mechanism families to every command, in order:
 prompt-injection neutralization (multilingual, with invisible/bidi character
 stripping and a homoglyph-folded detection shadow; opt-in `--strict`
-fail-closed mode), untrusted-output wrapping with marker defang, and
+fail-closed mode), secret redaction (known-format patterns plus context-gated
+entropy detection), untrusted-output wrapping with marker defang, and
 private-by-default logging (raw log opt-in, `0600` permissions).
 
 **Full threat model:** see [SECURITY.md](SECURITY.md) — what is protected,
