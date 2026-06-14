@@ -54,7 +54,8 @@ Each command flows through these stages:
 
 Vallum applies four mechanism families to every command, in order: secret
 redaction (known-format patterns plus context-gated entropy detection),
-prompt-injection neutralization (multilingual, with an opt-in `--strict`
+prompt-injection neutralization (multilingual, with invisible/bidi character
+stripping and a homoglyph-folded detection shadow; opt-in `--strict`
 fail-closed mode), untrusted-output wrapping with marker defang, and
 private-by-default logging (raw log opt-in, `0600` permissions).
 
@@ -98,6 +99,7 @@ disabled = []            # optimizer names to turn off; all on by default
 
 [scrubber]
 entropy = true   # context-gated entropy redaction of credential-ish values
+normalize = true # strip invisible/bidi chars; fold homoglyphs for injection matching
 extra_secret_patterns = [
   { pattern = "token-[0-9]+", replacement = "token-***" }
 ]
@@ -119,6 +121,7 @@ Supported settings:
 - `pipeline.max_line_length`: cap individual line length; longer lines are truncated mid-line with an elision marker — default 2000, `0` disables
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
 - `scrubber.entropy`: context-gated entropy redaction of credential-ish assignment values — **default `true`**
+- `scrubber.normalize`: strip invisible/bidi characters and fold homoglyphs for injection matching — **default `true`**
 - `security.strict`: when `true` (or `--strict`), the output is replaced with `[OUTPUT BLOCKED: prompt injection detected]` if any injection is detected — **default `false`**
 
 ## Install
@@ -246,6 +249,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/scrubber/secrets.rs`     | Known-format secret redaction patterns               |
 | `src/scrubber/entropy.rs`     | Context-gated entropy secret detection               |
 | `src/scrubber/injection.rs`   | Prompt-injection neutralization                      |
+| `src/scrubber/normalize.rs`   | Invisible-char strip + homoglyph detection shadow    |
 | `src/scrubber/markers.rs`     | Untrusted-output marker defang                       |
 | `src/tokenizer.rs`            | Pluggable `TokenEstimator` + heuristic default       |
 | `src/fsutil.rs`               | Private (0600) append-file helper                    |
@@ -269,6 +273,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] grep/file_list optimizers + hook-mode dispatch fix — `bash -c` unwrap so optimizers fire via the Claude Code hook; `rg`/`grep` match grouping; `ls`/`find`/`fd`/`tree` entry capping; two new bench fixtures (seven total)
 - [x] Context-gated entropy secret detection — credential-ish assignment values with high Shannon entropy are masked; bare tokens (commit SHAs, UUIDs) structurally exempt; `[scrubber] entropy` flag (default on)
 - [x] Injection precision tuning — reveal-family requires a possessive or system-directed object in all five languages; `System:`/`Assistant:` turn lines get a natural-language veto so log lines pass; entropy tokenizer captures separator runs (`key== "<value>"`); security corpus grown to 20 injections / 18 benign samples
+- [x] Sub-project I — injection input normalization (strip invisible/bidi; NFKC + confusable-folded detection shadow; no-space ignore-family; `scrubber.normalize` flag)
 - [ ] Deferred — Chinese-language injection, config regex compile-once, more optimizers (kubectl, terraform), `cargo-fuzz`/libFuzzer harness, performance regression gating
 
 ## Name

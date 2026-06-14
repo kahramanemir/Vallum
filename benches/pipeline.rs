@@ -88,7 +88,13 @@ fn run_pipeline(raw: &str, cmd: &str, args: &[String], config: &AppConfig) -> St
             config.pipeline.max_line_length,
         )
     };
-    scrubber::sanitize(&processed, &[], false, config.scrubber.entropy)
+    scrubber::sanitize(
+        &processed,
+        &[],
+        false,
+        config.scrubber.entropy,
+        config.scrubber.normalize,
+    )
 }
 
 fn print_savings_report(config: &AppConfig) {
