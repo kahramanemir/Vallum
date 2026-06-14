@@ -25,11 +25,12 @@ flowchart LR
     A[AI Agent] -->|vallum run cmd| B[Executor]
     B --> C[ANSI strip]
     C --> D{Output small?}
-    D -->|yes| H[Scrubber]
+    D -->|yes| W[Whitespace collapse]
     D -->|no| E{Known command?}
     E -->|yes| F[Optimizer]
-    E -->|no| G[Whitespace + Truncate]
+    E -->|no| G[Whitespace collapse + Truncate]
     F --> G
+    W --> H[Scrubber]
     G --> H
     H --> I[AI Agent]
     B -. raw, opt-in .-> J[(~/.vallum/logs/raw.local.log)]
@@ -227,7 +228,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 
 | File                          | Responsibility                                       |
 | ----------------------------- | ---------------------------------------------------- |
-| `src/cli.rs`                  | Argument parsing (`run`, `stats`)                    |
+| `src/cli.rs`                  | Argument parsing (`run`, `stats`, `hook`, `install-hook`/`uninstall-hook`, `config`, `completions`) |
 | `src/config.rs`               | Config loading, defaults, and validation             |
 | `src/executor.rs`             | Concurrent capture with byte cap, timeout, stdin; optional tee to `~/.vallum/live.log` |
 | `src/ansi.rs`                 | Stripping ANSI escape sequences                      |
@@ -259,6 +260,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/hook.rs`                 | Claude Code PreToolUse handler: rewrites Bash calls to `vallum run` |
 | `src/install_hook.rs`         | `install-hook`/`uninstall-hook`: read-modify-write of Claude Code settings.json |
 | `src/main.rs`                 | Pipeline wiring                                      |
+| `src/lib.rs`                  | Library surface — re-exports modules so integration tests can exercise internals |
 
 ## Roadmap
 
