@@ -1,5 +1,6 @@
 // src/scrubber/mod.rs
 use crate::config::RedactionRule;
+use regex::Regex;
 
 mod entropy;
 mod injection;
@@ -9,9 +10,30 @@ mod secrets;
 
 pub use injection::scrub_injections;
 
+/// A config redaction rule with its pattern compiled once. Built from
+/// `RedactionRule` (the deserialized TOML form) via `compile_rules`.
+#[derive(Debug)]
+pub struct CompiledRule {
+    pub regex: Regex,
+    pub replacement: String,
+}
+
+/// Compile config redaction rules once. Sound to `.expect` here because
+/// `AppConfig::validate` already rejected any rule whose pattern does not
+/// compile at load time.
+pub fn compile_rules(rules: &[RedactionRule]) -> Vec<CompiledRule> {
+    rules
+        .iter()
+        .map(|rule| CompiledRule {
+            regex: Regex::new(&rule.pattern).expect("validated config regex"),
+            replacement: rule.replacement.clone(),
+        })
+        .collect()
+}
+
 pub fn sanitize(
     input: &str,
-    extra_patterns: &[RedactionRule],
+    extra_patterns: &[CompiledRule],
     strict: bool,
     entropy: bool,
     normalize: bool,
@@ -42,7 +64,7 @@ pub fn sanitize(
 /// they are logged, recorded in stats, or emitted as JSON.
 pub fn redact(
     input: &str,
-    extra_patterns: &[RedactionRule],
+    extra_patterns: &[CompiledRule],
     entropy: bool,
     normalize: bool,
 ) -> String {

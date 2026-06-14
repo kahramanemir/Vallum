@@ -61,13 +61,13 @@ fn main() {
             };
 
             let strict = *strict || config.security.strict;
-            let extra = &config.scrubber.extra_secret_patterns;
+            let extra = scrubber::compile_rules(&config.scrubber.extra_secret_patterns);
             let entropy = config.scrubber.entropy;
             let normalize = config.scrubber.normalize;
-            let safe_cmd = scrubber::redact(cmd, extra, entropy, normalize);
+            let safe_cmd = scrubber::redact(cmd, &extra, entropy, normalize);
             let safe_args: Vec<String> = args
                 .iter()
-                .map(|a| scrubber::redact(a, extra, entropy, normalize))
+                .map(|a| scrubber::redact(a, &extra, entropy, normalize))
                 .collect();
             let cmd_context = format!("{} {:?}", safe_cmd, safe_args);
 
@@ -110,7 +110,7 @@ fn main() {
                 )
             };
 
-            let sanitized = scrubber::sanitize(&processed, extra, strict, entropy, normalize);
+            let sanitized = scrubber::sanitize(&processed, &extra, strict, entropy, normalize);
 
             let tokens_after = metrics::estimate_tokens(&sanitized);
 
