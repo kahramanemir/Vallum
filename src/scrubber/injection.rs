@@ -6,10 +6,11 @@ use std::sync::OnceLock;
 /// any injection was detected.
 pub fn scrub_injections(input: &str, normalize: bool) -> (String, bool) {
     let lines: Vec<&str> = input.split('\n').collect();
-    let raw = lines.join("\n");
 
     let mut mark = vec![false; lines.len()];
-    mark_matches(&raw, injection_patterns(), &mut mark);
+    // `input` is byte-identical to `lines.join("\n")` (split-on-'\n' round-trips),
+    // so mark_span's newline-counted byte offsets line up with the `lines` vec.
+    mark_matches(input, injection_patterns(), &mut mark);
 
     if normalize {
         let shadow_lines: Vec<String> = lines

@@ -85,7 +85,9 @@ characters are stripped from the output entirely, and the scanner matches a
 per-line shadow (compatibility/decomposition + combining-mark strip +
 lowercase + curated confusable folding) so homoglyph, full-width, and
 diacritic evasions are seen through. The despaced ignore-family also catches
-no-space concatenation (`ignoreallpreviousinstructions`).
+no-space concatenation (`ignoreallpreviousinstructions`). This normalization
+relies on the `unicode-normalization` crate (NFKD/NFKC) plus a curated,
+dependency-free confusable table.
 
 **Known gaps**
 

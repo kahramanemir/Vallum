@@ -39,7 +39,28 @@ fn mn_regex() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\p{Mn}").unwrap())
 }
 
+/// Builds the per-line match-only **shadow**: the normalized form the injection
+/// scanner matches against. This is detection-only and never alters the bytes
+/// emitted to the agent.
+///
+/// The pipeline decomposes/strips combining marks **twice**: the second
+/// NFKD + `\p{Mn}` strip catches marks that are *exposed by case-folding* and
+/// re-decomposition. For example `İ` (U+0130) lowercases to `i` + U+0307
+/// (combining dot above), and a precomposed `í` decomposes to `i` + combining
+/// acute — in both cases the mark only appears after the first lowercase/NFKD
+/// pass, so a single strip would leave it behind.
+///
+/// The shadow is **not canonical across case for Turkish**: lowercase
+/// `talimatları` keeps the dotless `ı`, but uppercase `TALİMATLARI` decomposes
+/// `İ` → dotted `i` + mark → `i`, so the same logical word yields two shadows
+/// (`...ları` vs `...lari`); TR patterns must therefore accept both via `[ıi]`.
 pub(crate) fn detection_shadow(line: &str) -> String {
+    // Fast path: a pure-ASCII line is its own shadow modulo case (no invisible/
+    // bidi chars, NFKD/NFKC are identities on ASCII, no combining marks, and the
+    // confusable table is non-ASCII). Avoids the full pipeline on the common case.
+    if line.is_ascii() {
+        return line.to_ascii_lowercase();
+    }
     let visible = strip_invisible(line);
     let decomposed: String = visible.nfkd().collect();
     let no_marks = mn_regex().replace_all(&decomposed, "");
@@ -140,6 +161,11 @@ mod tests {
         assert_eq!(detection_shadow("IGNORE"), "ignore");
     }
 
+    #[test]
+    fn shadow_ascii_fast_path_equals_ascii_lowercase() {
+        assert_eq!(detection_shadow("Ignore The ABOVE"), "ignore the above");
+    }
+
     use proptest::prelude::*;
 
     proptest! {
@@ -170,6 +196,13 @@ mod tests {
             // On already-ASCII-lowercased-foldable input the shadow is stable.
             let once = detection_shadow(&s);
             prop_assert_eq!(detection_shadow(&once), once);
+        }
+
+        // Characterization guard: the ASCII fast path is equivalent to the full
+        // pipeline, which on printable ASCII reduces to to_ascii_lowercase.
+        #[test]
+        fn prop_detection_shadow_ascii_is_ascii_lowercase(s in "[ -~]{0,200}") {
+            prop_assert_eq!(detection_shadow(&s), s.to_ascii_lowercase());
         }
     }
 }
