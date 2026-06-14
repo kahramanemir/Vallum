@@ -79,13 +79,14 @@ neutralize the whole trigger line (trigger + payload) with
 `[POTENTIAL INJECTION NEUTRALIZED]`. With `--strict` (or `[security]
 strict`), any detection replaces the entire output body with
 `[OUTPUT BLOCKED: prompt injection detected]` while preserving the child
-exit code. The sanitized log only ever receives post-neutralization text.
+exit code. The sanitized log only ever receives post-neutralization text. The injection scanner runs before secret redaction within the scrub stage, so a secret pattern can no longer delete a trigger word and hide an injection.
 Before matching, output is normalized: zero-width, BOM, and bidi control
 characters are stripped from the output entirely, and the scanner matches a
 per-line shadow (compatibility/decomposition + combining-mark strip +
 lowercase + curated confusable folding) so homoglyph, full-width, and
-diacritic evasions are seen through. The despaced ignore-family also catches
-no-space concatenation (`ignoreallpreviousinstructions`). This normalization
+diacritic evasions are seen through. The despaced ignore-family and
+reveal-family also catch no-space concatenation
+(`ignoreallpreviousinstructions`, `revealyoursystemprompt`). This normalization
 relies on the `unicode-normalization` crate (NFKD/NFKC) plus a curated,
 dependency-free confusable table.
 
@@ -95,14 +96,10 @@ dependency-free confusable table.
   deferred).
 - Confusables outside the curated table (the table targets ASCII-Latin
   look-alikes of the keyword alphabets, not the full Unicode confusable set).
-- Reveal-family no-space concatenation (`revealyoursystemprompt`) — only the
-  ignore-family is despaced in v1.
 - Leetspeak digit substitution (`1gn0re`) — not folded.
 - `Assistant:`/`System:` turns starting mid-line rather than at line start.
 - Turn lines with fewer than three natural-language words after the colon.
 - Reveal-family phrases without a possessive or system-directed qualifier.
-- The entropy stage may mask a quoted value containing an injection phrase
-  before the scanner sees it.
 
 ### Forged untrusted-output markers
 

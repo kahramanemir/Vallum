@@ -1,9 +1,9 @@
 // src/scrubber/secrets.rs
-use crate::config::RedactionRule;
+use super::CompiledRule;
 use regex::Regex;
 use std::sync::OnceLock;
 
-pub fn scrub_secrets(input: &str, extra_patterns: &[RedactionRule], entropy: bool) -> String {
+pub fn scrub_secrets(input: &str, extra_patterns: &[CompiledRule], entropy: bool) -> String {
     let mut scrubbed = input.to_string();
 
     for (regex, replacement) in secret_patterns() {
@@ -11,8 +11,8 @@ pub fn scrub_secrets(input: &str, extra_patterns: &[RedactionRule], entropy: boo
     }
 
     for rule in extra_patterns {
-        let regex = Regex::new(&rule.pattern).expect("validated config regex");
-        scrubbed = regex
+        scrubbed = rule
+            .regex
             .replace_all(&scrubbed, rule.replacement.as_str())
             .to_string();
     }
@@ -91,15 +91,13 @@ mod tests {
 
     #[test]
     fn test_scrub_custom_secret_pattern() {
+        use crate::config::RedactionRule;
         let input = "custom token-12345";
-        let scrubbed = scrub_secrets(
-            input,
-            &[RedactionRule {
-                pattern: "token-[0-9]+".to_string(),
-                replacement: "token-***".to_string(),
-            }],
-            true,
-        );
+        let rules = super::super::compile_rules(&[RedactionRule {
+            pattern: "token-[0-9]+".to_string(),
+            replacement: "token-***".to_string(),
+        }]);
+        let scrubbed = scrub_secrets(input, &rules, true);
         assert_eq!(scrubbed, "custom token-***");
     }
 

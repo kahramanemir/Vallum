@@ -276,7 +276,8 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Context-gated entropy secret detection — credential-ish assignment values with high Shannon entropy are masked; bare tokens (commit SHAs, UUIDs) structurally exempt; `[scrubber] entropy` flag (default on)
 - [x] Injection precision tuning — reveal-family requires a possessive or system-directed object in all five languages; `System:`/`Assistant:` turn lines get a natural-language veto so log lines pass; entropy tokenizer captures separator runs (`key== "<value>"`); security corpus grown to 20 injections / 18 benign samples
 - [x] Sub-project I — injection input normalization (strip invisible/bidi; NFKC + confusable-folded detection shadow; no-space ignore-family; `scrubber.normalize` flag)
-- [ ] Deferred — Chinese-language injection, config regex compile-once, more optimizers (kubectl, terraform), `cargo-fuzz`/libFuzzer harness, performance regression gating
+- [x] Sub-project J — scrub-stage hardening: injection scan before secret masking (closes the secret-eats-trigger gap), reveal-family no-space detection in five languages, config extra-pattern compile-once (`CompiledRule`)
+- [ ] Deferred — Chinese-language injection, more optimizers (kubectl, terraform), `cargo-fuzz`/libFuzzer harness, performance regression gating
 
 ## Name
 
