@@ -60,6 +60,8 @@ pub enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Run install/health self-checks (config, hook, PATH, log dir)
+    Doctor,
     /// Print a shell completion script to stdout
     Completions {
         /// Target shell

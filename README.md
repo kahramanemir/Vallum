@@ -153,6 +153,7 @@ vallum uninstall-hook                # remove the vallum hook entry
 vallum hook                          # internal: invoked by Claude Code (don't run directly)
 vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
+vallum doctor                        # self-check: config, hook, PATH, log dir
 vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
 
@@ -263,6 +264,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/stats.rs`                | `vallum stats` aggregation and reporting             |
 | `src/hook.rs`                 | Claude Code PreToolUse handler: rewrites Bash calls to `vallum run` |
 | `src/install_hook.rs`         | `install-hook`/`uninstall-hook`: read-modify-write of Claude Code settings.json |
+| `src/doctor.rs`               | `vallum doctor`: install/health self-checks (config, hook, PATH, log dir) |
 | `src/main.rs`                 | Pipeline wiring                                      |
 | `src/lib.rs`                  | Library surface — re-exports modules so integration tests can exercise internals |
 
@@ -282,6 +284,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Sub-project I — injection input normalization (strip invisible/bidi; NFKC + confusable-folded detection shadow; no-space ignore-family; `scrubber.normalize` flag)
 - [x] Sub-project J — scrub-stage hardening: injection scan before secret masking (closes the secret-eats-trigger gap), reveal-family no-space detection in five languages, config extra-pattern compile-once (`CompiledRule`)
 - [x] Sub-project K — broader infra/optimizer coverage: `kubectl get` (collapse healthy resource rows, keep problem-state pods) and `terraform plan|apply` (collapse refresh chatter + attribute diffs, keep action headers/summary/errors); expanded secret-format coverage (GitLab, SendGrid, Twilio, npm, PyPI, Hugging Face, OpenAI project keys, bare JWTs)
+- [x] Sub-project L — `vallum doctor` install/health self-check: validates the config file, flags unknown `[optimizer] disabled` names, reports hook installation, checks the binary is on `PATH`, and probes log-dir writability (exit non-zero only on hard failures)
 - [ ] Deferred — Chinese-language injection, `cargo-fuzz`/libFuzzer harness, performance regression gating
 
 ## Name

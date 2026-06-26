@@ -42,6 +42,12 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
     })
 }
 
+/// Names of all registered optimizers. Used by `vallum doctor` to validate
+/// `[optimizer] disabled` entries against real optimizer names.
+pub fn names() -> Vec<&'static str> {
+    registry().iter().map(|o| o.name()).collect()
+}
+
 /// Shell metacharacters that make a `bash -c` script unsafe to word-split.
 /// Any hit means we bail and match the invocation as-is (today's behavior).
 const SHELL_METACHARACTERS: &[char] = &[

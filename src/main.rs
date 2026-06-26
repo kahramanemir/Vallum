@@ -238,6 +238,9 @@ fn main() {
                 }
             },
         },
+        Commands::Doctor => {
+            std::process::exit(vallum::doctor::run());
+        }
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             generate(*shell, &mut cmd, "vallum", &mut std::io::stdout());
