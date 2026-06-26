@@ -30,7 +30,13 @@ fn secret_patterns() -> &'static [(Regex, &'static str)] {
         vec![
             (Regex::new(r"(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----").unwrap(), "[REDACTED PRIVATE KEY]"),
             (Regex::new(r"(?i)\bBearer\s+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+(?:\.[A-Za-z0-9\-_.+/=]+)?").unwrap(), "Bearer ***"),
+            // Bare JSON Web Token (header.payload.signature, both halves base64url
+            // of a JSON object so they begin `eyJ`). The Bearer rule above already
+            // consumed any `Bearer <jwt>`, so this only fires on unprefixed tokens.
+            (Regex::new(r"eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+").unwrap(), "[REDACTED JWT]"),
             (Regex::new(r"github_pat_[A-Za-z0-9_]+").unwrap(), "github_pat_***"),
+            // GitLab personal/project/group access token
+            (Regex::new(r"glpat-[A-Za-z0-9_\-]{20,}").unwrap(), "glpat-***"),
             (Regex::new(r"xox[baprs]-[A-Za-z0-9-]+").unwrap(), "xoxb-***"),
             // AWS access key id
             (Regex::new(r"AKIA[0-9A-Z]{16}").unwrap(), "AKIA***"),
@@ -38,8 +44,21 @@ fn secret_patterns() -> &'static [(Regex, &'static str)] {
             (Regex::new(r"AIza[0-9A-Za-z\-_]{35}").unwrap(), "AIza***"),
             // Stripe live secret/restricted key
             (Regex::new(r"[sr]k_live_[0-9a-zA-Z]{16,}").unwrap(), "***_live_***"),
+            // SendGrid API key
+            (Regex::new(r"SG\.[A-Za-z0-9_\-]{16,32}\.[A-Za-z0-9_\-]{16,64}").unwrap(), "SG.***"),
+            // Twilio API key SID (SK + 32 hex)
+            (Regex::new(r"\bSK[0-9a-fA-F]{32}\b").unwrap(), "SK***"),
+            // npm automation/access token
+            (Regex::new(r"npm_[A-Za-z0-9]{36}").unwrap(), "npm_***"),
+            // PyPI upload token
+            (Regex::new(r"pypi-[A-Za-z0-9_\-]{16,}").unwrap(), "pypi-***"),
+            // Hugging Face access token
+            (Regex::new(r"hf_[A-Za-z0-9]{20,}").unwrap(), "hf_***"),
             // Anthropic key — MUST precede the broad sk- rule
             (Regex::new(r"sk-ant-[0-9A-Za-z\-_]{10,}").unwrap(), "sk-ant-***"),
+            // OpenAI project key (contains underscores the broad sk- rule stops at)
+            // — MUST precede the broad sk- rule.
+            (Regex::new(r"sk-proj-[A-Za-z0-9_\-]{20,}").unwrap(), "sk-proj-***"),
             (Regex::new(r"sk-[a-zA-Z0-9\-]+").unwrap(), "sk-***"),
             (Regex::new(r"ghp_[a-zA-Z0-9]+").unwrap(), "ghp_***"),
             // DB connection string — mask only the password component
@@ -126,6 +145,68 @@ mod tests {
                 "raw secret leaked for input: {input} -> {scrubbed}"
             );
         }
+    }
+
+    #[test]
+    fn test_scrub_additional_provider_formats() {
+        // Each fixture is a fake credential; the secret half is split with
+        // concat! so repo secret scanners don't flag this test.
+        let cases = [
+            ("GitLab: ", concat!("glpat-", "abcdef1234567890ABCDEF")),
+            (
+                "SendGrid: ",
+                concat!(
+                    "SG.",
+                    "abcdefghij1234567890ab",
+                    ".",
+                    "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHI"
+                ),
+            ),
+            (
+                "Twilio: ",
+                concat!("SK", "0123456789abcdef0123456789abcdef"),
+            ),
+            (
+                "npm: ",
+                concat!("npm_", "abcdefghijklmnopqrstuvwxyz0123456789"),
+            ),
+            ("PyPI: ", concat!("pypi-", "AgEIcHlwaS5vcmcCJD12345")),
+            ("HF: ", concat!("hf_", "abcdefghijklmnopqrstuvwxyz")),
+            (
+                "OpenAI: ",
+                concat!("sk-proj-", "abc_DEF-123ghi_JKL456mno789"),
+            ),
+        ];
+        for (label, raw) in cases {
+            let input = format!("{label}{raw}");
+            let scrubbed = scrub_secrets(&input, &[], false);
+            assert!(
+                !scrubbed.contains(raw),
+                "raw secret leaked for {label} -> {scrubbed}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_scrub_bare_jwt() {
+        // A three-part JWT with no Bearer prefix. Entropy off to prove the
+        // format rule alone catches it.
+        let jwt = concat!(
+            "eyJhbGciOiJIUzI1NiJ9.",
+            "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.",
+            "dummysignature_part-0123"
+        );
+        let input = format!("session token = {jwt}");
+        let scrubbed = scrub_secrets(&input, &[], false);
+        assert!(scrubbed.contains("[REDACTED JWT]"), "got: {scrubbed}");
+        assert!(!scrubbed.contains("dummysignature"), "got: {scrubbed}");
+    }
+
+    #[test]
+    fn test_twilio_sid_does_not_eat_prose() {
+        // `SK` followed by non-hex / wrong length must pass through untouched.
+        let input = "The SKILL value and SK123 are fine";
+        assert_eq!(scrub_secrets(input, &[], false), input);
     }
 
     #[test]

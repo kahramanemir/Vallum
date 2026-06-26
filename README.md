@@ -47,7 +47,7 @@ Each command flows through these stages:
 4. **Optimize** — if a registered `CommandOptimizer` matches (e.g. `git status`, `cargo test`, `pytest`, `npm test`), it produces a compressed view; otherwise the input passes through.
 5. **Whitespace collapse** — runs of three or more blank lines collapse to one; trailing spaces are stripped.
 6. **Truncate** — head/tail windows are preserved; important lines (errors, panics, failures) are kept **in place with surrounding context**, and ordinary gaps are elided.
-7. **Scrub** — API tokens, bearer credentials, Slack tokens, and PEM private keys are redacted; known injection phrases are neutralized.
+7. **Scrub** — API tokens (OpenAI, Anthropic, GitHub, GitLab, Slack, AWS, Google, Stripe, SendGrid, Twilio, npm, PyPI, Hugging Face), bearer/bare JWTs, connection-string passwords, and PEM private keys are redacted; known injection phrases are neutralized.
 8. **Wrap** — output is enclosed in `[UNTRUSTED TERMINAL OUTPUT]` markers; any forged markers inside the content are defanged so output can't break out of the wrapper.
 9. **Audit + Metrics** — the sanitized output is written under `~/.vallum/logs/` (raw logging is opt-in), and a per-command stats record is appended to `~/.vallum/stats.jsonl`.
 
