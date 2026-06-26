@@ -74,6 +74,8 @@ guaranteed.
 - `docker build|compose`: collapse layer/step progress while keeping step headers, errors, and the final result
 - `go test`: hide `=== RUN`/`--- PASS` spam while keeping failures and the summary
 - `make`: surface errors/warnings while collapsing ordinary build noise
+- `kubectl get`: collapse runs of healthy (`Running`/`Completed`) resources while keeping the header and any pod in a problem state (`CrashLoopBackOff`, `Pending`, `Evicted`, …)
+- `terraform plan|apply`: collapse state-refresh chatter and attribute-diff bodies while keeping resource action headers, the `Plan:`/`Apply complete!` summary, and errors
 - `rg` / `grep` (also `egrep`/`fgrep`): group matches by file, keep the first few per file, and summarize the rest with per-file and total counts
 - `ls` / `find` / `fd` / `tree`: keep the leading entries and summarize the rest (with a top-directories breakdown for path lists); error lines are always preserved
 
@@ -118,7 +120,7 @@ Supported settings:
 - `pipeline.min_optimize_tokens`: outputs below this estimate skip optimize/truncate
 - `pipeline.max_output_bytes`: maximum bytes captured from a command (default 10 MiB)
 - `pipeline.timeout_secs`: command timeout in seconds; `0` disables it (default 300)
-- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make, grep, file_list) — default none
+- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make, kubectl, terraform, grep, file_list) — default none
 - `pipeline.max_line_length`: cap individual line length; longer lines are truncated mid-line with an elision marker — default 2000, `0` disables
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
 - `scrubber.entropy`: context-gated entropy redaction of credential-ish assignment values — **default `true`**
@@ -242,9 +244,11 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/optimizer/git_status.rs` | Summary optimizer for `git status` output            |
 | `src/optimizer/go_test.rs`    | Summary optimizer for `go test` output               |
 | `src/optimizer/grep.rs`       | Match-grouping optimizer for `rg`/`grep` output      |
+| `src/optimizer/kubectl.rs`    | Healthy-row collapsing optimizer for `kubectl get` output |
 | `src/optimizer/make.rs`       | Summary optimizer for `make` output                  |
 | `src/optimizer/npm.rs`        | Summary optimizer for noisy `npm` output             |
 | `src/optimizer/pytest.rs`     | Summary optimizer for noisy `pytest` output          |
+| `src/optimizer/terraform.rs`  | Summary optimizer for `terraform plan`/`apply` output |
 | `src/truncator.rs`            | Context-preserving head/tail truncation              |
 | `src/scrubber/mod.rs`         | Scrub pipeline: `sanitize`/`redact` orchestration + wrapper |
 | `src/scrubber/secrets.rs`     | Known-format secret redaction patterns               |
@@ -277,7 +281,8 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Injection precision tuning — reveal-family requires a possessive or system-directed object in all five languages; `System:`/`Assistant:` turn lines get a natural-language veto so log lines pass; entropy tokenizer captures separator runs (`key== "<value>"`); security corpus grown to 20 injections / 18 benign samples
 - [x] Sub-project I — injection input normalization (strip invisible/bidi; NFKC + confusable-folded detection shadow; no-space ignore-family; `scrubber.normalize` flag)
 - [x] Sub-project J — scrub-stage hardening: injection scan before secret masking (closes the secret-eats-trigger gap), reveal-family no-space detection in five languages, config extra-pattern compile-once (`CompiledRule`)
-- [ ] Deferred — Chinese-language injection, more optimizers (kubectl, terraform), `cargo-fuzz`/libFuzzer harness, performance regression gating
+- [x] Sub-project K — broader infra/optimizer coverage: `kubectl get` (collapse healthy resource rows, keep problem-state pods) and `terraform plan|apply` (collapse refresh chatter + attribute diffs, keep action headers/summary/errors); expanded secret-format coverage (GitLab, SendGrid, Twilio, npm, PyPI, Hugging Face, OpenAI project keys, bare JWTs)
+- [ ] Deferred — Chinese-language injection, `cargo-fuzz`/libFuzzer harness, performance regression gating
 
 ## Name
 

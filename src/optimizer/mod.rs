@@ -7,9 +7,11 @@ pub mod git_log;
 pub mod git_status;
 pub mod go_test;
 pub mod grep;
+pub mod kubectl;
 pub mod make;
 pub mod npm;
 pub mod pytest;
+pub mod terraform;
 
 use std::sync::OnceLock;
 
@@ -32,6 +34,8 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(docker::DockerOptimizer),
             Box::new(go_test::GoTestOptimizer),
             Box::new(make::MakeOptimizer),
+            Box::new(kubectl::KubectlOptimizer),
+            Box::new(terraform::TerraformOptimizer),
             Box::new(grep::GrepOptimizer),
             Box::new(file_list::FileListOptimizer),
         ]
