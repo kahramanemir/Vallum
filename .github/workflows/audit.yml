@@ -16,6 +16,13 @@ on:
 jobs:
   audit:
     runs-on: ubuntu-latest
+    # rustsec/audit-check reports findings as a check run (and opens issues on
+    # the scheduled run); without these write scopes it fails with
+    # "Resource not accessible by integration" when posting results.
+    permissions:
+      contents: read
+      checks: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - uses: rustsec/audit-check@v2.0.0
