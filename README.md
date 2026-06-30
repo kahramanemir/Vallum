@@ -47,7 +47,7 @@ Each command flows through these stages:
 4. **Optimize** — if a registered `CommandOptimizer` matches (e.g. `git status`, `cargo test`, `pytest`, `npm test`), it produces a compressed view; otherwise the input passes through.
 5. **Whitespace collapse** — runs of three or more blank lines collapse to one; trailing spaces are stripped.
 6. **Truncate** — head/tail windows are preserved; important lines (errors, panics, failures) are kept **in place with surrounding context**, and ordinary gaps are elided.
-7. **Scrub** — API tokens, bearer credentials, Slack tokens, and PEM private keys are redacted; known injection phrases are neutralized.
+7. **Scrub** — API tokens (OpenAI, Anthropic, GitHub, GitLab, Slack, AWS, Google, Stripe, SendGrid, Twilio, npm, PyPI, Hugging Face), bearer/bare JWTs, connection-string passwords, and PEM private keys are redacted; known injection phrases are neutralized.
 8. **Wrap** — output is enclosed in `[UNTRUSTED TERMINAL OUTPUT]` markers; any forged markers inside the content are defanged so output can't break out of the wrapper.
 9. **Audit + Metrics** — the sanitized output is written under `~/.vallum/logs/` (raw logging is opt-in), and a per-command stats record is appended to `~/.vallum/stats.jsonl`.
 
@@ -74,6 +74,8 @@ guaranteed.
 - `docker build|compose`: collapse layer/step progress while keeping step headers, errors, and the final result
 - `go test`: hide `=== RUN`/`--- PASS` spam while keeping failures and the summary
 - `make`: surface errors/warnings while collapsing ordinary build noise
+- `kubectl get`: collapse runs of healthy (`Running`/`Completed`) resources while keeping the header and any pod in a problem state (`CrashLoopBackOff`, `Pending`, `Evicted`, …)
+- `terraform plan|apply`: collapse state-refresh chatter and attribute-diff bodies while keeping resource action headers, the `Plan:`/`Apply complete!` summary, and errors
 - `rg` / `grep` (also `egrep`/`fgrep`): group matches by file, keep the first few per file, and summarize the rest with per-file and total counts
 - `ls` / `find` / `fd` / `tree`: keep the leading entries and summarize the rest (with a top-directories breakdown for path lists); error lines are always preserved
 
@@ -118,7 +120,7 @@ Supported settings:
 - `pipeline.min_optimize_tokens`: outputs below this estimate skip optimize/truncate
 - `pipeline.max_output_bytes`: maximum bytes captured from a command (default 10 MiB)
 - `pipeline.timeout_secs`: command timeout in seconds; `0` disables it (default 300)
-- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make, grep, file_list) — default none
+- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make, kubectl, terraform, grep, file_list) — default none
 - `pipeline.max_line_length`: cap individual line length; longer lines are truncated mid-line with an elision marker — default 2000, `0` disables
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
 - `scrubber.entropy`: context-gated entropy redaction of credential-ish assignment values — **default `true`**
@@ -151,6 +153,7 @@ vallum uninstall-hook                # remove the vallum hook entry
 vallum hook                          # internal: invoked by Claude Code (don't run directly)
 vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
+vallum doctor                        # self-check: config, hook, PATH, log dir
 vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
 
@@ -242,9 +245,11 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/optimizer/git_status.rs` | Summary optimizer for `git status` output            |
 | `src/optimizer/go_test.rs`    | Summary optimizer for `go test` output               |
 | `src/optimizer/grep.rs`       | Match-grouping optimizer for `rg`/`grep` output      |
+| `src/optimizer/kubectl.rs`    | Healthy-row collapsing optimizer for `kubectl get` output |
 | `src/optimizer/make.rs`       | Summary optimizer for `make` output                  |
 | `src/optimizer/npm.rs`        | Summary optimizer for noisy `npm` output             |
 | `src/optimizer/pytest.rs`     | Summary optimizer for noisy `pytest` output          |
+| `src/optimizer/terraform.rs`  | Summary optimizer for `terraform plan`/`apply` output |
 | `src/truncator.rs`            | Context-preserving head/tail truncation              |
 | `src/scrubber/mod.rs`         | Scrub pipeline: `sanitize`/`redact` orchestration + wrapper |
 | `src/scrubber/secrets.rs`     | Known-format secret redaction patterns               |
@@ -259,6 +264,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/stats.rs`                | `vallum stats` aggregation and reporting             |
 | `src/hook.rs`                 | Claude Code PreToolUse handler: rewrites Bash calls to `vallum run` |
 | `src/install_hook.rs`         | `install-hook`/`uninstall-hook`: read-modify-write of Claude Code settings.json |
+| `src/doctor.rs`               | `vallum doctor`: install/health self-checks (config, hook, PATH, log dir) |
 | `src/main.rs`                 | Pipeline wiring                                      |
 | `src/lib.rs`                  | Library surface — re-exports modules so integration tests can exercise internals |
 
@@ -277,7 +283,9 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Injection precision tuning — reveal-family requires a possessive or system-directed object in all five languages; `System:`/`Assistant:` turn lines get a natural-language veto so log lines pass; entropy tokenizer captures separator runs (`key== "<value>"`); security corpus grown to 20 injections / 18 benign samples
 - [x] Sub-project I — injection input normalization (strip invisible/bidi; NFKC + confusable-folded detection shadow; no-space ignore-family; `scrubber.normalize` flag)
 - [x] Sub-project J — scrub-stage hardening: injection scan before secret masking (closes the secret-eats-trigger gap), reveal-family no-space detection in five languages, config extra-pattern compile-once (`CompiledRule`)
-- [ ] Deferred — Chinese-language injection, more optimizers (kubectl, terraform), `cargo-fuzz`/libFuzzer harness, performance regression gating
+- [x] Sub-project K — broader infra/optimizer coverage: `kubectl get` (collapse healthy resource rows, keep problem-state pods) and `terraform plan|apply` (collapse refresh chatter + attribute diffs, keep action headers/summary/errors); expanded secret-format coverage (GitLab, SendGrid, Twilio, npm, PyPI, Hugging Face, OpenAI project keys, bare JWTs)
+- [x] Sub-project L — `vallum doctor` install/health self-check: validates the config file, flags unknown `[optimizer] disabled` names, reports hook installation, checks the binary is on `PATH`, and probes log-dir writability (exit non-zero only on hard failures)
+- [ ] Deferred — Chinese-language injection, `cargo-fuzz`/libFuzzer harness, performance regression gating
 
 ## Name
 
@@ -293,5 +301,9 @@ Licensed under either of
 at your option.
 
 ### Contribution
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the local workflow (fmt/clippy/test
+gate, MSRV, how to add an optimizer or secret pattern) and [CHANGELOG.md](CHANGELOG.md)
+for the release history.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

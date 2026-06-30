@@ -243,6 +243,25 @@ fn tee_flag_writes_live_log_under_home() {
 }
 
 #[test]
+fn doctor_runs_and_reports_checks() {
+    let tmp = make_temp_fixture_dir("doctor_home");
+    let output = Command::new(vallum_bin())
+        .arg("doctor")
+        .env("HOME", &tmp)
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .output()
+        .expect("run vallum doctor");
+    // No hard failures in a clean temp home → exit 0.
+    assert!(output.status.success(), "exited {:?}", output.status.code());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("install check"), "got: {stdout}");
+    assert!(stdout.contains("config"));
+    assert!(stdout.contains("hook"));
+    assert!(stdout.contains("log dir"));
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
 fn redacts_secret_in_arguments_json() {
     let bin = env!("CARGO_BIN_EXE_vallum");
     let output = std::process::Command::new(bin)

@@ -3,6 +3,7 @@ pub mod ansi;
 pub mod audit;
 pub mod cli;
 pub mod config;
+pub mod doctor;
 pub mod executor;
 pub mod fsutil;
 pub mod hook;

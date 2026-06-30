@@ -69,7 +69,8 @@ pub struct SecurityConfig {
 pub struct OptimizerConfig {
     /// Names of optimizers to disable. All optimizers are on by default.
     /// Valid names: git_status, git_diff, git_log, cargo, pytest, npm,
-    /// docker, go_test, make.
+    /// docker, go_test, make, kubectl, terraform, grep, file_list.
+    /// `vallum doctor` warns about names here that match no optimizer.
     pub disabled: Vec<String>,
 }
 

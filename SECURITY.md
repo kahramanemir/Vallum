@@ -48,9 +48,11 @@ Strength vocabulary used below:
 Two layers run on every command's output (and on command names/args before
 they are logged):
 
-1. **Format patterns** — OpenAI `sk-`, GitHub `ghp_`/`github_pat_`, Slack
-   `xox*`, JWT bearer headers, PEM private keys, AWS `AKIA…`, Google
-   `AIza…`, Stripe `sk_live_`/`rk_live_`, Anthropic `sk-ant-…`,
+1. **Format patterns** — OpenAI `sk-`/`sk-proj-`, Anthropic `sk-ant-…`,
+   GitHub `ghp_`/`github_pat_`, GitLab `glpat-`, Slack `xox*`, AWS `AKIA…`,
+   Google `AIza…`, Stripe `sk_live_`/`rk_live_`, SendGrid `SG.…`, Twilio
+   `SK…`, npm `npm_…`, PyPI `pypi-…`, Hugging Face `hf_…`, JWTs (both
+   `Bearer`-prefixed and bare `eyJ….eyJ….sig`), PEM private keys,
    connection-string passwords, and uppercase `.env`-style assignments.
    Extensible via `[scrubber] extra_secret_patterns`.
 2. **Context-gated entropy detection** (default on; `[scrubber] entropy =
