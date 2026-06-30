@@ -130,6 +130,23 @@ model. This is a cost feature, **not a security control**: summarization
 never hides error lines, and the scrub → wrap stages run on every command
 whether or not an optimizer fired.
 
+## Supply-chain integrity
+
+Release binaries are built in GitHub Actions by the `dist` pipeline. Each
+artifact carries a **SHA-256 checksum** (`*.sha256`, plus a combined
+`sha256.sum`) and a **GitHub build-provenance attestation** binding the binary
+to the exact source commit and release workflow. Verify a download before
+trusting it:
+
+```bash
+gh attestation verify ./vallum --repo kahramanemir/Vallum
+```
+
+**Known gap:** macOS binaries are **not** Apple-notarized or Developer-ID
+signed in this release line, so Gatekeeper may quarantine a binary extracted
+from a direct `.tar.xz` download (Homebrew and the shell installer are
+unaffected). Code signing / notarization is deferred.
+
 ## What Vallum does NOT guarantee
 
 - **It is not a sandbox.** Vallum does not restrict which commands run or

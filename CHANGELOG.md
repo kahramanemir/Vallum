@@ -23,8 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   project keys (`sk-proj-`), and bare (non-`Bearer`) JWTs.
 
 ### Changed
-- Documented a minimum supported Rust version (`rust-version = "1.82"`) and
-  enforce it with a dedicated CI job.
+- Documented a minimum supported Rust version (`rust-version = "1.85"`, raised
+  from 1.82 to track the `clap` 4.6 edition-2024 floor) and enforce it with a
+  dedicated, `--locked` CI job.
 
 ### Security
 - New scheduled `cargo audit` GitHub Actions workflow that fails on known
