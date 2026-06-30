@@ -6,6 +6,7 @@ rust-version = "1.82"
 license = "MIT OR Apache-2.0"
 description = "A Rust CLI proxy between AI agents and your shell — sanitizes secrets, flags prompt injections, strips ANSI, compresses output, audits commands."
 repository = "https://github.com/kahramanemir/Vallum"
+homepage = "https://github.com/kahramanemir/Vallum"
 readme = "README.md"
 authors = ["Emir Kahraman"]
 keywords = ["ai", "cli", "proxy", "security", "tokens"]
