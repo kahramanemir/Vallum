@@ -29,7 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - New scheduled `cargo audit` GitHub Actions workflow that fails on known
-  advisories in the dependency tree.
+  advisories in the dependency tree. Granted it `checks: write` so it can post
+  results instead of erroring on the check-run API.
+- Bumped the `anyhow` dev-dependency to 1.0.103, clearing RUSTSEC-2026-0190
+  (unsoundness in `Error::downcast_mut`).
 
 ### Distribution
 - Prebuilt binaries for macOS (Intel + ARM) and Linux (x86_64 + aarch64, musl
