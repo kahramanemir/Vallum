@@ -1,3 +1,5 @@
+//! Context-preserving head/tail truncation that keeps error lines in place.
+
 const CONTEXT: usize = 2;
 
 /// Truncate a single line longer than `max_len` chars to

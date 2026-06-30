@@ -1,4 +1,5 @@
-// src/stats.rs
+//! Aggregate and render the `vallum stats` token-savings report.
+
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;

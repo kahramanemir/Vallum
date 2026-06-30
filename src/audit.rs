@@ -1,4 +1,5 @@
-// src/audit.rs
+//! Append-only writer for the raw and sanitized audit logs under `~/.vallum/logs`.
+
 use chrono::Local;
 use std::fs;
 use std::io::Write;

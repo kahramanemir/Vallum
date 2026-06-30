@@ -1,4 +1,5 @@
-// src/ansi.rs
+//! Strip ANSI escape sequences (color and cursor-control) from captured output.
+
 use regex::Regex;
 use std::sync::OnceLock;
 

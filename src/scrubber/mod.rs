@@ -1,4 +1,6 @@
-// src/scrubber/mod.rs
+//! The scrub pipeline: secret redaction, prompt-injection neutralization,
+//! input normalization, and untrusted-output wrapping.
+
 use crate::config::RedactionRule;
 use regex::Regex;
 

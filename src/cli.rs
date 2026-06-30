@@ -1,4 +1,5 @@
-// src/cli.rs
+//! Command-line argument parsing (`clap`) for the `vallum` subcommands.
+
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
@@ -41,7 +42,7 @@ pub enum Commands {
         /// Install at user level (~/.claude/settings.json) — default
         #[arg(long)]
         user: bool,
-        /// Install at project level (<cwd>/.claude/settings.json)
+        /// Install at project level (.claude/settings.json in the current directory)
         #[arg(long)]
         project: bool,
         /// Replace an existing Vallum hook entry if present

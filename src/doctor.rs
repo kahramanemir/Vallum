@@ -1,3 +1,5 @@
+//! `vallum doctor` — install/health self-checks (config, hook, `PATH`, log dir).
+
 // src/doctor.rs — `vallum doctor`: a self-check of the local install.
 //
 // Each check is a pure-ish function over explicit inputs so it can be unit

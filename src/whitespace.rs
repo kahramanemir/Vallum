@@ -1,4 +1,4 @@
-// src/whitespace.rs
+//! Collapse runs of blank lines and strip trailing whitespace.
 
 pub fn collapse(input: &str) -> String {
     let mut result = String::with_capacity(input.len());

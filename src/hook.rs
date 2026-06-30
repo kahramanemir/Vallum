@@ -1,3 +1,5 @@
+//! Claude Code `PreToolUse` hook: rewrite Bash tool calls to run through `vallum run`.
+
 // src/hook.rs — Claude Code PreToolUse hook implementation.
 use serde::Deserialize;
 use serde::Serialize;

@@ -1,4 +1,6 @@
-// src/executor.rs
+//! Run the child command with concurrent capture, a byte cap, a timeout,
+//! inherited stdin, and an optional live tee.
+
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
