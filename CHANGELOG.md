@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0]
 
 ### Added
 - `vallum doctor` — install/health self-check that validates the config file,
@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New scheduled `cargo audit` GitHub Actions workflow that fails on known
   advisories in the dependency tree.
 
+### Distribution
+- Prebuilt binaries for macOS (Intel + ARM) and Linux (x86_64 + aarch64, musl
+  static) published on tagged releases via `dist`, with shell, Homebrew,
+  `cargo install`, and npm installers, SHA-256 checksums, and GitHub build
+  provenance attestations.
+
 ## [0.2.0]
 
 ### Added
@@ -51,6 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
-[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.2.0...HEAD
+[0.3.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.1.0
