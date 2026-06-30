@@ -44,3 +44,35 @@ criterion = "0.5"
 [[bench]]
 name = "pipeline"
 harness = false
+
+# Config for 'dist'
+[workspace.metadata.dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell", "npm", "homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-apple-darwin", "x86_64-unknown-linux-musl"]
+# A GitHub repo to push Homebrew formulas to
+tap = "kahramanemir/homebrew-tap"
+# Publish jobs to run in CI
+publish-jobs = ["homebrew", "npm"]
+# The npm package should have this name
+npm-package = "vallum"
+# Checksums to generate for each App
+checksum = "sha256"
+# Whether to enable GitHub Attestations
+github-attestations = true
+# Which actions to run on pull requests
+pr-run-mode = "plan"
+# Whether to install an updater program
+install-updater = false
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
