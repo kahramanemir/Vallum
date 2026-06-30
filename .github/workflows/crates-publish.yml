@@ -1,0 +1,31 @@
+name: Publish to crates.io
+on:
+  push:
+    # dist already owns binary releases; this only publishes the crate.
+    # Tag refspecs can't express regex, so match all v* tags and gate inside
+    # the job (prerelease skip + tag/version match).
+    tags:
+      - "v*"
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish to crates.io (final tags only)
+        run: |
+          # Skip prereleases — crates.io forbids re-publishing a version, and
+          # rc/pre tags share the base version with the eventual final tag.
+          case "$GITHUB_REF_NAME" in
+            *-rc*|*-pre*|*-beta*|*-alpha*)
+              echo "Prerelease tag $GITHUB_REF_NAME — skipping crates.io publish"
+              exit 0 ;;
+          esac
+          # Guard: the tag (minus the leading v) must match Cargo.toml's version.
+          TAG="${GITHUB_REF_NAME#v}"
+          CRATE="$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          if [ "$TAG" != "$CRATE" ]; then
+            echo "tag $TAG != Cargo.toml version $CRATE"; exit 1
+          fi
+          cargo publish --token "${{ secrets.CARGO_REGISTRY_TOKEN }}"
