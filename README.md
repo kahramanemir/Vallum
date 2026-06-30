@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/vallum.svg)](https://crates.io/crates/vallum)
-[![license](https://img.shields.io/crates/l/vallum.svg)](#license)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 A Rust CLI proxy that sits between AI agents and your shell as a **security boundary**. When an agent runs a command, Vallum redacts secrets, neutralizes prompt-injection attempts, wraps the result as untrusted data, preserves the child exit code, and audits everything — so what reaches the model is exactly what you intend it to see. As a side benefit, it strips ANSI noise and compresses long output, which also saves tokens.
 
@@ -324,7 +324,8 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Sub-project J — scrub-stage hardening: injection scan before secret masking (closes the secret-eats-trigger gap), reveal-family no-space detection in five languages, config extra-pattern compile-once (`CompiledRule`)
 - [x] Sub-project K — broader infra/optimizer coverage: `kubectl get` (collapse healthy resource rows, keep problem-state pods) and `terraform plan|apply` (collapse refresh chatter + attribute diffs, keep action headers/summary/errors); expanded secret-format coverage (GitLab, SendGrid, Twilio, npm, PyPI, Hugging Face, OpenAI project keys, bare JWTs)
 - [x] Sub-project L — `vallum doctor` install/health self-check: validates the config file, flags unknown `[optimizer] disabled` names, reports hook installation, checks the binary is on `PATH`, and probes log-dir writability (exit non-zero only on hard failures)
-- [ ] Deferred — Chinese-language injection, `cargo-fuzz`/libFuzzer harness, performance regression gating
+- [x] Sub-project M — distribution: `dist`-based tagged-release pipeline producing prebuilt binaries for macOS (Intel + ARM) and Linux (x86_64 + aarch64, musl static) with shell/Homebrew/`cargo install`/npm installers, SHA-256 checksums, and GitHub build-provenance attestations; crates.io publish on final tags; MSRV raised to 1.85 and the MSRV CI check pinned with `--locked`
+- [ ] Deferred — Chinese-language injection, `cargo-fuzz`/libFuzzer harness, performance regression gating, Windows support (the `0600`/timeout-backed guarantees need a Windows equivalent first)
 
 ## Name
 
