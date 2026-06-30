@@ -24,14 +24,16 @@ jobs:
         run: cargo test --all --features bpe
 
   msrv:
-    name: Minimum supported Rust (1.82)
+    name: Minimum supported Rust (1.85)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.82.0
+      - uses: dtolnay/rust-toolchain@1.85.0
       # Check only lib + binary so the runtime MSRV is not held hostage to
       # dev-dependencies (criterion/proptest) that track a newer floor.
+      # --locked pins the resolved dependency versions to Cargo.lock so the
+      # MSRV check is reproducible and not broken by a newer transitive release.
       - name: Check (no default features)
-        run: cargo check --lib --bins
+        run: cargo check --locked --lib --bins
       - name: Check (bpe feature)
-        run: cargo check --lib --bins --features bpe
+        run: cargo check --locked --lib --bins --features bpe

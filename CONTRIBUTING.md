@@ -11,7 +11,7 @@ cd Vallum
 cargo build
 ```
 
-The minimum supported Rust version is **1.82** (enforced by CI). Use a recent
+The minimum supported Rust version is **1.85** (enforced by CI). Use a recent
 stable toolchain for day-to-day work.
 
 ## Before you open a pull request
