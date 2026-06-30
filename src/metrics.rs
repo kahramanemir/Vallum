@@ -1,4 +1,5 @@
-// src/metrics.rs
+//! Token estimation and the per-command JSONL stats writer (`~/.vallum/stats.jsonl`).
+
 use serde::Serialize;
 use std::fs;
 use std::io::Write;

@@ -1,4 +1,5 @@
-// src/optimizer/mod.rs
+//! Per-command output optimizers: the `CommandOptimizer` trait and dispatch registry.
+
 pub mod cargo;
 pub mod docker;
 pub mod file_list;

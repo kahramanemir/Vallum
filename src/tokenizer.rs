@@ -1,4 +1,5 @@
-// src/tokenizer.rs
+//! Pluggable `TokenEstimator` with a dependency-free heuristic default.
+
 use regex::Regex;
 use std::sync::OnceLock;
 

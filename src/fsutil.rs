@@ -1,4 +1,5 @@
-// src/fsutil.rs
+//! Private (`0600`) append-file helper shared by the audit and stats writers.
+
 use std::fs::{File, OpenOptions};
 use std::path::Path;
 

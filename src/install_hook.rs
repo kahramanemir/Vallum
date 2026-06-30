@@ -1,3 +1,5 @@
+//! Install/uninstall the Vallum `PreToolUse` hook in a Claude Code `settings.json`.
+
 // src/install_hook.rs — install/uninstall the Vallum PreToolUse hook in
 // Claude Code's settings.json.
 

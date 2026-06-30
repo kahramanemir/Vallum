@@ -14,12 +14,12 @@
 //!   `find`, `fd`, or plain `ls`. The top-`N` directory components are
 //!   summarised in a `[top dirs: …]` footer.
 //!
-//! In all modes the first [`KEEP_ENTRIES`] lines are shown verbatim, excess
+//! In all modes the first `KEEP_ENTRIES` lines are shown verbatim, excess
 //! lines collapse into a single `[N … hidden]` marker, and error lines
 //! (`Permission denied`, `find:`, `ls:`, `fd:`, `tree:` prefixes) are never
 //! hidden wherever they appear.
 //!
-//! Pass-through (returns `None`) when the input has fewer than [`MIN_LINES`]
+//! Pass-through (returns `None`) when the input has fewer than `MIN_LINES`
 //! lines or when nothing actually collapses.
 //!
 //! **Shape detection is best-effort substring matching** (tree glyphs,

@@ -1,3 +1,5 @@
+//! Configuration: loading, defaults, and validation of `~/.vallum/config.toml`.
+
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::env;
