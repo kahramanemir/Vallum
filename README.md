@@ -2,6 +2,10 @@
 
 *A security boundary between AI coding agents (Claude Code, Cursor, etc.) and your shell — secret redaction, prompt-injection defense, ANSI stripping, and command auditing in a single Rust binary.*
 
+[![CI](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/vallum.svg)](https://crates.io/crates/vallum)
+[![license](https://img.shields.io/crates/l/vallum.svg)](#license)
+
 A Rust CLI proxy that sits between AI agents and your shell as a **security boundary**. When an agent runs a command, Vallum redacts secrets, neutralizes prompt-injection attempts, wraps the result as untrusted data, preserves the child exit code, and audits everything — so what reaches the model is exactly what you intend it to see. As a side benefit, it strips ANSI noise and compresses long output, which also saves tokens.
 
 ---
@@ -128,6 +132,41 @@ Supported settings:
 - `security.strict`: when `true` (or `--strict`), the output is replaced with `[OUTPUT BLOCKED: prompt injection detected]` if any injection is detected — **default `false`**
 
 ## Install
+
+**Shell (macOS + Linux):**
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh
+```
+
+**Homebrew:**
+
+```bash
+brew install kahramanemir/homebrew-tap/vallum
+```
+
+**Cargo:**
+
+```bash
+cargo install vallum                  # heuristic token counts (default)
+cargo install vallum --features bpe   # exact BPE token counts (adds tiktoken-rs)
+```
+
+**npm:**
+
+```bash
+npm install -g vallum
+```
+
+**Prebuilt binaries** for macOS (Intel + ARM) and Linux (x86_64 + aarch64) are
+attached to every [GitHub Release](https://github.com/kahramanemir/Vallum/releases),
+with SHA-256 checksums and build-provenance attestations. Verify a download with:
+
+```bash
+gh attestation verify ./vallum --repo kahramanemir/Vallum
+```
+
+### Build from source
 
 ```bash
 cargo build --release                 # default: dependency-free heuristic token counts
