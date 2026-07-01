@@ -2,6 +2,7 @@
 //! confusion-matrix metrics, and deterministic markdown rendering. Consumed by
 //! `tests/security_corpus.rs` and `examples/eval.rs`. Not a stable API.
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use serde::de::DeserializeOwned;
@@ -262,6 +263,98 @@ pub fn build_report() -> Report {
     }
 }
 
+fn misses_block(title: &str, items: &[String]) -> String {
+    let mut s = format!("{title}\n\n");
+    if items.is_empty() {
+        s.push_str("- none\n");
+    } else {
+        for item in items {
+            // One-line, escaped so newlines in a sample don't break the list.
+            let flat = item.replace('\n', "\\n");
+            let _ = writeln!(s, "- `{flat}`");
+        }
+    }
+    s
+}
+
+pub fn render_report(r: &Report) -> String {
+    let inj = &r.injection;
+    let sec = &r.secrets;
+    let ent = &r.entropy;
+
+    let mut s = String::new();
+    s.push_str("# Vallum — detection eval report\n\n");
+    s.push_str("<!-- DO NOT EDIT — regenerate with: cargo run --example eval -- --write -->\n\n");
+    s.push_str(
+        "Measured over the committed corpus in `evals/corpus/`. Numbers reflect the current \
+         detector; they are evidence, not a guarantee.\n\n",
+    );
+
+    s.push_str("## Injection detection\n\n");
+    s.push_str("| metric | value |\n| --- | --- |\n");
+    let _ = writeln!(
+        s,
+        "| samples (injection / benign) | {} / {} |",
+        inj.true_pos + inj.false_neg,
+        inj.false_pos + inj.true_neg
+    );
+    let _ = writeln!(s, "| precision | {:.3} |", inj.precision);
+    let _ = writeln!(s, "| recall | {:.3} |", inj.recall);
+    let _ = writeln!(s, "| F1 | {:.3} |", inj.f1);
+    let _ = writeln!(s, "| benign false-positive rate | {:.3} |", inj.fp_rate);
+    s.push('\n');
+
+    s.push_str("### Recall by language\n\n");
+    s.push_str("| lang | detected / total | recall |\n| --- | --- | --- |\n");
+    for (lang, det, tot) in &inj.recall_by_lang {
+        let _ = writeln!(
+            s,
+            "| {} | {} / {} | {:.3} |",
+            lang,
+            det,
+            tot,
+            ratio(*det, *tot)
+        );
+    }
+    s.push('\n');
+
+    s.push_str("## Secret redaction\n\n");
+    s.push_str("| metric | value |\n| --- | --- |\n");
+    let _ = writeln!(
+        s,
+        "| known-format recall | {:.3} ({}/{}) |",
+        sec.recall, sec.redacted, sec.total
+    );
+    let _ = writeln!(
+        s,
+        "| entropy recall | {:.3} ({}/{}) |",
+        ent.secret_recall, ent.secret_redacted, ent.secret_total
+    );
+    let _ = writeln!(
+        s,
+        "| entropy benign false-positive rate | {:.3} ({}/{}) |",
+        ent.benign_fp_rate, ent.benign_fp, ent.benign_total
+    );
+    s.push('\n');
+
+    s.push_str("## Known misses\n\n");
+    s.push_str(&misses_block("### Injections missed", &inj.missed));
+    s.push('\n');
+    s.push_str(&misses_block("### Benign flagged", &inj.flagged));
+    s.push('\n');
+    s.push_str(&misses_block(
+        "### Entropy secrets missed",
+        &ent.missed_secrets,
+    ));
+    s.push('\n');
+    s.push_str(&misses_block(
+        "### Entropy benign false positives",
+        &ent.false_positives,
+    ));
+
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,5 +434,21 @@ mod tests {
         assert_eq!(m.total, 2);
         assert_eq!(m.redacted, 1);
         assert_eq!(m.missed, vec!["not-a-secret-plain-text".to_string()]);
+    }
+
+    #[test]
+    fn render_is_deterministic_and_labeled() {
+        let r = build_report();
+        let a = render_report(&r);
+        let b = render_report(&r);
+        assert_eq!(a, b, "rendering must be deterministic");
+        assert!(a.starts_with("# Vallum — detection eval report"));
+        assert!(a.contains("DO NOT EDIT"));
+        assert!(a.contains("## Injection detection"));
+        assert!(a.contains("## Secret redaction"));
+        assert!(a.contains("## Known misses"));
+        // No churn-inducing markers.
+        assert!(!a.contains("generated at"));
+        assert!(!a.to_lowercase().contains("version"));
     }
 }
