@@ -269,12 +269,29 @@ fn misses_block(title: &str, items: &[String]) -> String {
         s.push_str("- none\n");
     } else {
         for item in items {
-            // One-line, escaped so newlines in a sample don't break the list.
-            let flat = item.replace('\n', "\\n");
-            let _ = writeln!(s, "- `{flat}`");
+            // Flatten to one line so a multi-line sample stays one list item.
+            let flat = item.replace('\n', "\\n").replace('\r', "");
+            let _ = writeln!(s, "- {}", inline_code(&flat));
         }
     }
     s
+}
+
+/// Wrap `text` as a Markdown inline-code span that survives embedded backticks:
+/// per CommonMark, use a backtick fence one longer than the longest backtick run
+/// inside, and pad with spaces when the content touches a fence backtick.
+fn inline_code(text: &str) -> String {
+    let longest_run = text
+        .split(|c| c != '`')
+        .map(|run| run.len())
+        .max()
+        .unwrap_or(0);
+    let fence = "`".repeat(longest_run + 1);
+    if text.starts_with('`') || text.ends_with('`') {
+        format!("{fence} {text} {fence}")
+    } else {
+        format!("{fence}{text}{fence}")
+    }
 }
 
 pub fn render_report(r: &Report) -> String {
@@ -341,6 +358,8 @@ pub fn render_report(r: &Report) -> String {
     s.push_str(&misses_block("### Injections missed", &inj.missed));
     s.push('\n');
     s.push_str(&misses_block("### Benign flagged", &inj.flagged));
+    s.push('\n');
+    s.push_str(&misses_block("### Secrets missed", &sec.missed));
     s.push('\n');
     s.push_str(&misses_block(
         "### Entropy secrets missed",
@@ -450,5 +469,31 @@ mod tests {
         // No churn-inducing markers.
         assert!(!a.contains("generated at"));
         assert!(!a.to_lowercase().contains("version"));
+    }
+
+    #[test]
+    fn misses_block_escapes_backticks_and_newlines() {
+        let items = vec!["warning `x` here".to_string(), "line1\nline2".to_string()];
+        let out = super::misses_block("### T", &items);
+        // A single embedded backtick is wrapped in a two-backtick fence so the
+        // inline-code span is not broken.
+        assert!(
+            out.contains("``warning `x` here``"),
+            "backtick not fenced: {out}"
+        );
+        // Newlines are flattened to a single list line.
+        assert!(
+            out.contains("line1\\nline2"),
+            "newline not flattened: {out}"
+        );
+    }
+
+    #[test]
+    fn render_has_secrets_missed_section() {
+        let out = render_report(&build_report());
+        assert!(
+            out.contains("### Secrets missed"),
+            "missing secrets-missed section"
+        );
     }
 }
