@@ -41,6 +41,10 @@ Strength vocabulary used below:
 | Log exposure | Secrets don't reach disk by default | Raw (unredacted) log **off by default**; sanitized log and stats written `0600`; cmd/args redacted even in the raw log header | Structural defaults |
 | Noisy output / token bloat | Compressed before reaching the model | Command optimizers, truncation, whitespace collapse | Not a security control |
 
+Detection strength is measured, not asserted: see
+[`evals/report.md`](evals/report.md) for precision/recall over the committed
+`evals/corpus/`, including the honest list of known misses.
+
 ## Per-threat detail and known gaps
 
 ### Secrets in terminal output

@@ -1,7 +1,7 @@
 //! # Vallum
 //!
-//! A security boundary between AI coding agents (Claude Code, Cursor, …) and
-//! your shell. When an agent runs a command, Vallum redacts secrets,
+//! A security boundary between AI coding agents (Claude Code, and any agent via
+//! `vallum run`) and your shell. When an agent runs a command, Vallum redacts secrets,
 //! neutralizes prompt-injection attempts, wraps the result as untrusted data,
 //! preserves the child exit code, and audits everything — so what reaches the
 //! model is exactly what you intend it to see. As a side benefit it strips
