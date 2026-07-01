@@ -31,6 +31,8 @@ pub mod audit;
 pub mod cli;
 pub mod config;
 pub mod doctor;
+#[doc(hidden)]
+pub mod eval;
 pub mod executor;
 pub mod fsutil;
 pub mod hook;

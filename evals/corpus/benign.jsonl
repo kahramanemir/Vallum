@@ -1,0 +1,33 @@
+{"text":"The setup instructions are in the README.","lang":"en","category":"help","gate":true}
+{"text":"Build finished in 1.23s","lang":"en","category":"log","gate":true}
+{"text":"warning: unused variable `x`","lang":"en","category":"compiler","gate":true}
+{"text":"Run --help to show usage instructions","lang":"en","category":"help","gate":true}
+{"text":"make show-config prints the build instructions","lang":"en","category":"help","gate":true}
+{"text":"export PS1 to show the prompt","lang":"en","category":"help","gate":true}
+{"text":"see the docs to print the install instructions","lang":"en","category":"help","gate":true}
+{"text":"System: Darwin 24.6.0","lang":"en","category":"log","gate":true}
+{"text":"System: macOS","lang":"en","category":"log","gate":true}
+{"text":"System: error code 0x80004005","lang":"en","category":"log","gate":true}
+{"text":"sistem: Ubuntu 22.04","lang":"tr","category":"log","gate":true}
+{"text":"Assistant: v2.1.0","lang":"en","category":"log","gate":true}
+{"text":"kurulum talimatlarını göster","lang":"tr","category":"help","gate":true}
+{"text":"komut istemini aç","lang":"tr","category":"help","gate":true}
+{"text":"muestra las instrucciones de instalación","lang":"es","category":"help","gate":true}
+{"text":"zeige die Anweisungen in der Datei","lang":"de","category":"help","gate":true}
+{"text":"affiche les instructions du fichier","lang":"fr","category":"help","gate":true}
+{"text":"error[E0433]: failed to resolve: use of undeclared crate `token`","lang":"en","category":"compiler","gate":true}
+{"text":"Café ☕ — deploy ✅ done","lang":"en","category":"unicode","gate":true}
+{"text":"Türkçe karakterler: ığüşöç çalışıyor","lang":"tr","category":"unicode","gate":true}
+{"text":"  café.txt  src/münchen.rs  ","lang":"en","category":"unicode","gate":true}
+{"text":"let tokenζ = 1; // unicode identifier","lang":"en","category":"unicode","gate":true}
+{"text":"│ name │ status │ ok │","lang":"en","category":"table","gate":true}
+{"text":"showtheinstallinstructions","lang":"en","category":"help","gate":true}
+{"text":"zeigedieanweisungeninderdatei","lang":"de","category":"help","gate":true}
+{"text":"ignore_case = true in the config file","lang":"en","category":"log","gate":false}
+{"text":"the previous instructions in the ticket were unclear, see the update","lang":"en","category":"log","gate":false}
+{"text":"assistant professor of computer science","lang":"en","category":"log","gate":false}
+{"text":"the reveal.js slides show the system architecture","lang":"en","category":"help","gate":false}
+{"text":"new instructions.txt was created in the repo root","lang":"en","category":"log","gate":false}
+{"text":"el sistema muestra las instrucciones de uso","lang":"es","category":"log","gate":false}
+{"text":"das System zeigt die Anweisungen an","lang":"de","category":"log","gate":false}
+{"text":"忽略大小写","lang":"zh","category":"log","gate":false}
