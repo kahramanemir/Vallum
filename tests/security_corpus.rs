@@ -10,8 +10,10 @@ use vallum::scrubber;
 #[test]
 fn gate_injections_all_detected() {
     let rows: Vec<InjectionRecord> = load_jsonl("injections.jsonl");
+    let gate: Vec<_> = rows.iter().filter(|r| r.gate).collect();
+    assert!(!gate.is_empty(), "no gate==true injection rows loaded");
     let mut missed = Vec::new();
-    for r in rows.iter().filter(|r| r.gate) {
+    for r in gate {
         if !scrubber::scrub_injections(&r.text, true).1 {
             missed.push(r.text.clone());
         }
@@ -22,8 +24,10 @@ fn gate_injections_all_detected() {
 #[test]
 fn gate_benign_none_flagged() {
     let rows: Vec<BenignRecord> = load_jsonl("benign.jsonl");
+    let gate: Vec<_> = rows.iter().filter(|r| r.gate).collect();
+    assert!(!gate.is_empty(), "no gate==true benign rows loaded");
     let mut flagged = Vec::new();
-    for r in rows.iter().filter(|r| r.gate) {
+    for r in gate {
         if scrubber::scrub_injections(&r.text, true).1 {
             flagged.push(r.text.clone());
         }
@@ -34,7 +38,9 @@ fn gate_benign_none_flagged() {
 #[test]
 fn gate_secrets_all_redacted() {
     let rows: Vec<SecretRecord> = load_jsonl("secrets.jsonl");
-    for r in rows.iter().filter(|r| r.gate) {
+    let gate: Vec<_> = rows.iter().filter(|r| r.gate).collect();
+    assert!(!gate.is_empty(), "no gate==true secret rows loaded");
+    for r in gate {
         let out = scrubber::redact(&r.text, &[], true, true);
         assert!(
             !out.contains(&r.secret),
@@ -47,7 +53,9 @@ fn gate_secrets_all_redacted() {
 #[test]
 fn gate_entropy_secrets_all_redacted() {
     let rows: Vec<EntropySecretRecord> = load_jsonl("entropy_secrets.jsonl");
-    for r in rows.iter().filter(|r| r.gate) {
+    let gate: Vec<_> = rows.iter().filter(|r| r.gate).collect();
+    assert!(!gate.is_empty(), "no gate==true entropy-secret rows loaded");
+    for r in gate {
         let out = scrubber::redact(&r.text, &[], true, true);
         assert!(
             !out.contains(&r.secret),
@@ -60,7 +68,9 @@ fn gate_entropy_secrets_all_redacted() {
 #[test]
 fn gate_entropy_benign_untouched() {
     let rows: Vec<EntropyBenignRecord> = load_jsonl("entropy_benign.jsonl");
-    for r in rows.iter().filter(|r| r.gate) {
+    let gate: Vec<_> = rows.iter().filter(|r| r.gate).collect();
+    assert!(!gate.is_empty(), "no gate==true entropy-benign rows loaded");
+    for r in gate {
         let out = scrubber::redact(&r.text, &[], true, true);
         assert_eq!(out, r.text, "false positive on benign sample");
     }

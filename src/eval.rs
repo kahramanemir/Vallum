@@ -466,9 +466,13 @@ mod tests {
         assert!(a.contains("## Injection detection"));
         assert!(a.contains("## Secret redaction"));
         assert!(a.contains("## Known misses"));
-        // No churn-inducing markers.
-        assert!(!a.contains("generated at"));
-        assert!(!a.to_lowercase().contains("version"));
+        // The generated preamble (before the first section) must carry no
+        // crate-version or timestamp marker, so `--check` only trips on real
+        // metric drift. The body embeds verbatim corpus samples, which may
+        // legitimately contain the word "version", so scope this to the preamble.
+        let preamble = a.split("## Injection detection").next().unwrap_or(&a);
+        assert!(!preamble.to_lowercase().contains("version"));
+        assert!(!preamble.to_lowercase().contains("generated at"));
     }
 
     #[test]
