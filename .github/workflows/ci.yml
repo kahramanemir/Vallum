@@ -22,6 +22,8 @@ jobs:
         run: cargo test --all
       - name: Test (bpe feature)
         run: cargo test --all --features bpe
+      - name: Detection eval (report freshness + metric floors)
+        run: cargo run --example eval -- --check
 
   msrv:
     name: Minimum supported Rust (1.85)

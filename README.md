@@ -1,6 +1,6 @@
 # Vallum
 
-*A security boundary between AI coding agents (Claude Code, Cursor, etc.) and your shell — secret redaction, prompt-injection defense, ANSI stripping, and command auditing in a single Rust binary.*
+*A security boundary between AI coding agents and your shell — secret redaction, prompt-injection defense, ANSI stripping, and command auditing in a single Rust binary. `vallum run` works with any agent that runs shell commands; automatic zero-config interception ships for Claude Code today.*
 
 [![CI](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/vallum.svg)](https://crates.io/crates/vallum)
@@ -67,6 +67,21 @@ private-by-default logging (raw log opt-in, `0600` permissions).
 **Full threat model:** see [SECURITY.md](SECURITY.md) — what is protected,
 by which mechanism, at what strength, and what is explicitly **not**
 guaranteed.
+
+## Measured detection
+
+The scrubber is evaluated against a committed, labeled corpus in
+`evals/corpus/` (injection payloads, hard benign negatives, and secret
+samples across several languages). Headline figures from the latest run
+(full report: [`evals/report.md`](evals/report.md)):
+
+- Injection recall: **0.838** · precision: **1.000** · benign false-positive rate: **0.000**
+- Known-format secret recall: **1.000** · entropy secret recall: **1.000**
+
+These are measured over a fixed corpus and are **evidence, not a guarantee** —
+see the honest "Known misses" list in the report. Regenerate with
+`cargo run --example eval -- --write`; CI fails on regressions below the
+committed floors.
 
 ## Built-in Optimizers
 
@@ -231,7 +246,7 @@ Note how a tiny output ends up *larger* after wrapping: the security wrapper has
 
 ## Claude Code integration
 
-`vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry.
+`vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry. Other agents (Cursor, Codex, Gemini CLI) can still route commands through Vallum by invoking `vallum run` directly; a zero-config hook for them is on the roadmap.
 
 Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps simple scripts (no pipes, redirects, quoting, or other shell metacharacters) before optimizer matching, so `bash -c 'git status'` still hits the `git_status` optimizer; complex scripts fall back to generic compression. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are skipped because Vallum captures stdout and would break their TTY requirements. Commands already starting with `vallum` are skipped for idempotency.
 

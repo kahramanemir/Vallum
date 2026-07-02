@@ -1,0 +1,8 @@
+{"text":"commit 9f86d081884c7d659a2feaa0c55ad015afc366b7","gate":true}
+{"text":"9f86d08 fix(optimizer): unwrap bash -c scripts\nac8541d fix(optimizer): tighten grouping","gate":true}
+{"text":"id: 550e8400-e29b-41d4-a716-446655440000","gate":true}
+{"text":"cache_key=user:123","gate":true}
+{"text":"registry_token: https://registry.npmjs.org/some/long/package","gate":true}
+{"text":"KEY_PATH=/home/user/.ssh/id_rsa_with_long_name","gate":true}
+{"text":"password: hunter2supersecret","gate":true}
+{"text":"token::SomeVeryLongGeneratedTypeName","gate":true}
