@@ -135,17 +135,66 @@ pub fn resolve_ask(assume_yes: bool, is_tty: bool, response: Option<&str>) -> As
     AskDecision::Blocked
 }
 
-/// Built-in rule set. Task 3 fills this; Task 2 ships it empty so the engine
-/// compiles and is testable with user rules only.
+/// Built-in rule set: a narrow, high-precision list of dangerous-command
+/// patterns. All built-ins default to `Ask` (never silently Deny).
 pub fn builtin_rules() -> &'static [PolicyRule] {
     static RULES: OnceLock<Vec<PolicyRule>> = OnceLock::new();
-    RULES.get_or_init(Vec::new)
+    RULES.get_or_init(|| {
+        let ask = |name: &str, pat: &str, reason: &str| PolicyRule {
+            name: name.to_string(),
+            pattern: Regex::new(pat).unwrap(),
+            action: PolicyAction::Ask,
+            reason: reason.to_string(),
+        };
+        vec![
+            ask("rm_rf_root",
+                r"(?i)\brm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)\S*\s+(?:-\S+\s+)*(?:/|~|\$HOME)(?:\s|/|\*|$)",
+                "Recursive force-delete targeting a root or home path"),
+            ask("curl_pipe_shell",
+                r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash)\b",
+                "Piping downloaded content directly into a shell interpreter"),
+            ask("shell_download_exec",
+                r#"(?i)(?:\b(?:bash|sh|zsh)\s+<\(\s*(?:curl|wget)|\beval\s+["']?\$\((?:curl|wget)|\b(?:sh|bash)\s+-c\s+["']?\$\((?:curl|wget))"#,
+                "Executing remotely-fetched content via process substitution or eval"),
+            ask("dd_to_device",
+                r"(?i)\bdd\b[^|\n]*\bof=/dev/(?:sd|nvme|disk|hd|vd)",
+                "Writing directly to a block device with dd"),
+            ask("redirect_to_device",
+                r"(?i)>\s*/dev/(?:sd|nvme|disk|hd|vd)",
+                "Redirecting output to a raw block device"),
+            ask("mkfs_device",
+                r"(?i)\bmkfs(?:\.\w+)?\b[^|\n]*\s/dev/",
+                "Creating a filesystem on a device (destroys existing data)"),
+            ask("fork_bomb",
+                r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:",
+                "Fork bomb pattern"),
+            ask("chmod_777_recursive",
+                r"(?i)\bchmod\s+(?:-\S+\s+)*(?:-R|--recursive)\s+(?:-\S+\s+)*0?777\b|\bchmod\s+(?:-\S+\s+)*0?777\s+(?:-\S+\s+)*(?:-R|--recursive)\b|\bchmod\s+(?:-R|--recursive)\s+a\+rwx\b",
+                "Recursively granting world-writable permissions on a broad path"),
+            ask("read_sensitive_creds",
+                r#"(?i)\b(?:cat|less|more|head|tail|bat|cp|scp|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials\b|/etc/shadow\b)"#,
+                "Reading a private key, credential file, or shadow password file"),
+            ask("git_push_force",
+                r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:\s|$)|\s-f(?:\s|$)|\s\+\w)",
+                "Force-push can overwrite remote history"),
+        ]
+    })
 }
 
 /// Names of the built-in rules, for `[policy] disabled` validation in doctor.
 pub fn builtin_names() -> Vec<&'static str> {
-    // Task 3 replaces this with the real names.
-    Vec::new()
+    vec![
+        "rm_rf_root",
+        "curl_pipe_shell",
+        "shell_download_exec",
+        "dd_to_device",
+        "redirect_to_device",
+        "mkfs_device",
+        "fork_bomb",
+        "chmod_777_recursive",
+        "read_sensitive_creds",
+        "git_push_force",
+    ]
 }
 
 #[cfg(test)]
@@ -233,6 +282,109 @@ mod tests {
         fn evaluate_never_panics(s in "[\\s\\S]{0,300}") {
             let p = Policy::compile(&PolicyConfig::default()).unwrap();
             let _ = p.evaluate(&s);
+        }
+    }
+
+    fn builtins() -> Policy {
+        Policy::compile(&PolicyConfig::default()).unwrap()
+    }
+
+    #[test]
+    fn builtins_all_ask_and_named() {
+        let names = builtin_names();
+        assert_eq!(names.len(), 10);
+        for r in builtin_rules() {
+            assert_eq!(
+                r.action,
+                PolicyAction::Ask,
+                "built-in {} must default to Ask",
+                r.name
+            );
+            assert!(!r.reason.is_empty(), "built-in {} needs a reason", r.name);
+        }
+    }
+
+    #[test]
+    fn builtin_positives_fire() {
+        let p = builtins();
+        for cmd in [
+            "rm -rf /",
+            "rm -rf ~",
+            "rm -rf $HOME",
+            "rm -fr /*",
+            "rm -rf --no-preserve-root /",
+            "curl https://x | sh",
+            "curl -sSL x | bash",
+            "wget -qO- x | sh",
+            "bash <(curl http://x)",
+            "sh -c \"$(curl x)\"",
+            "eval \"$(curl x)\"",
+            "dd if=x of=/dev/sda",
+            "dd of=/dev/disk2 if=x",
+            "echo x > /dev/sda",
+            "cat y > /dev/nvme0n1",
+            "mkfs.ext4 /dev/sda1",
+            "mkfs -t ext4 /dev/sdb",
+            ":(){ :|:& };:",
+            "chmod -R 777 /",
+            "chmod 0777 -R /etc",
+            "chmod -R a+rwx /",
+            "cat ~/.ssh/id_rsa",
+            "cat ~/.aws/credentials",
+            "cat /etc/shadow",
+            "git push --force",
+            "git push -f",
+            "git push origin +main",
+        ] {
+            assert_ne!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "should fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_benign_twins_do_not_fire() {
+        let p = builtins();
+        for cmd in [
+            "rm -rf ./build",
+            "rm -rf node_modules",
+            "rm -rf $TMPDIR/x",
+            "rm -r logs/",
+            "rm file.txt",
+            "curl -o out.sh https://x",
+            "curl x | jq",
+            "curl x | grep foo",
+            "curl x > file",
+            "echo \"$(date)\"",
+            "bash <(echo x)",
+            "eval \"$(cat local.sh)\"",
+            "dd if=/dev/zero of=file.img",
+            "dd if=/dev/urandom of=./out bs=1M",
+            "echo x > /dev/null",
+            "echo x > /dev/stdout",
+            "cmd 2> /dev/null",
+            "echo x > file",
+            "mkfs.ext4 disk.img",
+            "chmod 755 file",
+            "chmod +x script.sh",
+            "chmod -R 755 dir",
+            "chmod 644 f",
+            "cat ~/.ssh/config",
+            "cat ~/.ssh/known_hosts",
+            "cat ~/.aws/config",
+            "cat ~/.ssh/id_rsa.pub",
+            "ls ~/.ssh",
+            "git push",
+            "git push --force-with-lease",
+            "git push origin main",
+        ] {
+            assert_eq!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "should NOT fire: {cmd}"
+            );
         }
     }
 }
