@@ -5,6 +5,27 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Guardrail / policy layer** — Vallum now evaluates each command *before it
+  runs* against a set of dangerous-command rules and returns Allow / Ask / Deny.
+  Enforced through the Claude Code `PreToolUse` hook (native allow/ask/deny) and
+  through direct `vallum run` (deny → exit 125; ask → terminal prompt or
+  fail-closed when non-interactive). Ships with a narrow built-in rule set
+  (`rm -rf` on root/home, `curl … | sh`, `dd` to a block device, fork bomb,
+  recursive `chmod 777`, reading private keys/credentials, force-push, …),
+  a benign-command precision gate, redacted `policy.log` auditing, and
+  `vallum doctor` reporting. User rules and disables live under `[policy]`.
+
+### Changed
+- **Behavior change:** the guardrail is **enabled by default**
+  (`security.guardrail = true`) with **all built-in rules set to `ask`** — a
+  genuinely dangerous command now prompts for confirmation instead of running
+  silently. Built-in patterns are deliberately narrow so ordinary commands are
+  unaffected. Opt out with `security.guardrail = false`; auto-approve prompts in
+  scripts with `security.assume_yes = true` or `VALLUM_ASSUME_YES=1`.
+
 ## [0.4.0]
 
 ### Added

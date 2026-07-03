@@ -40,6 +40,7 @@ Strength vocabulary used below:
 | Forged `[UNTRUSTED TERMINAL OUTPUT]` markers | Output cannot close the wrapper early or smuggle "trusted" text | Marker defang after all content transforms; exactly one wrapper survives | **Structural** |
 | Log exposure | Secrets don't reach disk by default | Raw (unredacted) log **off by default**; sanitized log and stats written `0600`; cmd/args redacted even in the raw log header | Structural defaults |
 | Noisy output / token bloat | Compressed before reaching the model | Command optimizers, truncation, whitespace collapse | Not a security control |
+| Accidental / dangerous command execution | Command is prompted on (`Ask`) or refused (`Deny`) before it runs | Pre-exec guardrail: plain-text pattern rules over the joined command line → Allow/Ask/Deny (default on, built-ins all `Ask`) | Best-effort |
 
 Detection strength is measured, not asserted: see
 [`evals/report.md`](evals/report.md) for precision/recall over the committed
@@ -134,6 +135,36 @@ model. This is a cost feature, **not a security control**: summarization
 never hides error lines, and the scrub → wrap stages run on every command
 whether or not an optimizer fired.
 
+### Dangerous command execution (guardrail)
+
+Before a command runs, Vallum evaluates the **joined command line** against a
+narrow set of pattern rules and returns Allow / Ask / Deny (most-severe-wins).
+The guardrail is on by default; every built-in rule is `Ask`, so a matched
+command prompts for confirmation rather than being blocked outright. Built-ins
+cover `rm -rf` on a root/home path, `curl … | sh`, remote-fetch-and-exec,
+`dd`/redirect/`mkfs` to a block device, the classic fork bomb, recursive
+`chmod 777`, reading private keys / credential files / `/etc/shadow`, and
+`git push --force`. Users can add `ask`/`deny` rules under `[policy]`.
+
+**Strength: best-effort.** This raises the cost of an *accidental* destructive
+command and gives the model (or you) a confirmation checkpoint — it is **not a
+sandbox**.
+
+**Known gaps**
+
+- Matching is **plain-text over the command string** — no shell parsing, no
+  path resolution, no variable/alias expansion. A determined author can evade a
+  rule by obfuscation (unusual quoting, indirection, alternate tools,
+  base64-then-decode). The built-ins target the *common, obvious* forms.
+- Rules are deliberately **narrow to preserve precision** (a committed
+  benign-command gate keeps them from firing on legitimate commands), so they
+  under-match rather than risk nagging — they are not an exhaustive catalog of
+  dangerous commands.
+- **Path-aware matching is deferred:** the guardrail cannot tell
+  `rm -rf ./build` from `rm -rf /` beyond the literal patterns encoded today.
+- Setting `security.guardrail = false` disables the layer entirely (Vallum then
+  behaves exactly as it did before it existed).
+
 ## Supply-chain integrity
 
 Release binaries are built in GitHub Actions by the `dist` pipeline. Each
@@ -153,9 +184,12 @@ unaffected). Code signing / notarization is deferred.
 
 ## What Vallum does NOT guarantee
 
-- **It is not a sandbox.** Vallum does not restrict which commands run or
-  what they do. This is deliberate: there is no allowlist; the
-  untrusted-output wrapper is the size- and command-independent boundary.
+- **It is not a sandbox.** The guardrail prompts on (`Ask`) or refuses
+  (`Deny`) a *narrow, pattern-matched* set of dangerous commands — best-effort
+  and evadable by obfuscation (see the guardrail section). It is not an
+  allowlist and does not otherwise restrict what a command does; anything it
+  does not match runs as given, and it can be turned off entirely
+  (`security.guardrail = false`).
 - **It cannot make the model obey.** Treating wrapped output as untrusted is
   prompt-side discipline; keep your agent instructed accordingly.
 - **It covers only what flows through it.** The Claude Code hook rewrites
