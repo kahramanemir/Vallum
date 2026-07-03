@@ -2,6 +2,8 @@
 //! rules and return Allow / Ask / Deny. Plain-text regex matching over one
 //! joined command line — no shell parsing (same posture as the scrubber).
 
+pub mod audit;
+
 use crate::config::PolicyConfig;
 use regex::Regex;
 use serde::Serialize;
