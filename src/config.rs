@@ -93,10 +93,63 @@ pub struct OptimizerConfig {
     pub disabled: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RedactionRule {
     pub pattern: String,
     pub replacement: String,
+}
+
+// Hand-rolled so a bare string entry gets an error that shows the expected
+// table form instead of serde's "invalid type: string, expected struct".
+impl<'de> Deserialize<'de> for RedactionRule {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct RuleVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for RuleVisitor {
+            type Value = RedactionRule;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "a table like {{ pattern = \"…\", replacement = \"…\" }}")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<Self::Value, E> {
+                Err(E::custom(format!(
+                    "bare string \"{s}\" is not a valid secret pattern entry; use a table: \
+                     extra_secret_patterns = [{{ pattern = \"{s}\", replacement = \"***\" }}]"
+                )))
+            }
+
+            fn visit_map<M: serde::de::MapAccess<'de>>(
+                self,
+                mut map: M,
+            ) -> Result<Self::Value, M::Error> {
+                let mut pattern = None;
+                let mut replacement = None;
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "pattern" => pattern = Some(map.next_value()?),
+                        "replacement" => replacement = Some(map.next_value()?),
+                        other => {
+                            return Err(serde::de::Error::unknown_field(
+                                other,
+                                &["pattern", "replacement"],
+                            ))
+                        }
+                    }
+                }
+                Ok(RedactionRule {
+                    pattern: pattern.ok_or_else(|| serde::de::Error::missing_field("pattern"))?,
+                    replacement: replacement
+                        .ok_or_else(|| serde::de::Error::missing_field("replacement"))?,
+                })
+            }
+        }
+
+        deserializer.deserialize_any(RuleVisitor)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -273,6 +326,52 @@ extra_secret_patterns = [ { pattern = "token-(", replacement = "token-***" } ]
 
         let err = AppConfig::from_path(&path).unwrap_err();
         assert!(err.contains("invalid scrubber regex"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bare_string_secret_pattern_error_shows_expected_form() {
+        let dir = unique_temp_path("barestr");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        fs::write(
+            &path,
+            r#"
+[scrubber]
+extra_secret_patterns = ["token-[0-9]+"]
+"#,
+        )
+        .unwrap();
+
+        let err = AppConfig::from_path(&path).unwrap_err();
+        assert!(
+            err.contains("pattern =") && err.contains("replacement ="),
+            "error must show the expected table form, got: {err}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn table_secret_pattern_missing_field_still_clear() {
+        let dir = unique_temp_path("missingfield");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        fs::write(
+            &path,
+            r#"
+[scrubber]
+extra_secret_patterns = [ { pattern = "token-[0-9]+" } ]
+"#,
+        )
+        .unwrap();
+
+        let err = AppConfig::from_path(&path).unwrap_err();
+        assert!(
+            err.contains("replacement"),
+            "error must name the missing field, got: {err}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

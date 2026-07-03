@@ -18,6 +18,20 @@ fn test_cli_help() {
 }
 
 #[test]
+fn run_help_shows_double_dash_example() {
+    let output = Command::new(vallum_bin())
+        .args(["run", "--help"])
+        .output()
+        .expect("Failed to execute command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("vallum run -- "),
+        "run --help must show a `--` example for commands with their own flags; got: {stdout}"
+    );
+}
+
+#[test]
 fn test_cli_help_lists_stats() {
     let output = std::process::Command::new(vallum_bin())
         .arg("--help")

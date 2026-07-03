@@ -13,6 +13,14 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Run a command through the proxy
+    #[command(after_help = "\
+Examples:
+  vallum run git status
+  vallum run -- sh -c 'make 2>&1 | tail -20'
+  vallum run -- cargo test --workspace
+
+Put `--` before the command when it has flags of its own, so they are not
+parsed as vallum's.")]
     Run {
         /// Emit structured JSON instead of plain text
         #[arg(long)]
