@@ -62,9 +62,13 @@ pub enum HookDecision {
     /// Rewrite to run through vallum, permission "allow".
     Allow { command: String },
     /// Rewrite + ask the user (permission "ask").
-    Ask { command: String, reason: String },
+    Ask {
+        command: String,
+        reason: String,
+        rule_name: String,
+    },
     /// Refuse (permission "deny", no rewrite).
-    Deny { reason: String },
+    Deny { reason: String, rule_name: String },
 }
 
 /// Decide whether to rewrite, and whether the pre-exec policy allows, asks
@@ -86,11 +90,17 @@ pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>)
     if let Some(p) = policy {
         let v = p.evaluate(command);
         match v.action {
-            PolicyAction::Deny => return HookDecision::Deny { reason: v.reason },
+            PolicyAction::Deny => {
+                return HookDecision::Deny {
+                    reason: v.reason,
+                    rule_name: v.rule_name,
+                }
+            }
             PolicyAction::Ask => {
                 return HookDecision::Ask {
                     command: wrapped,
                     reason: v.reason,
+                    rule_name: v.rule_name,
                 }
             }
             PolicyAction::Allow => {}
@@ -133,11 +143,15 @@ pub fn run() -> i32 {
             reason: None,
             updated_input: Some(UpdatedInput { command }),
         },
-        HookDecision::Ask { command, reason } => {
+        HookDecision::Ask {
+            command,
+            reason,
+            rule_name,
+        } => {
             let verdict = crate::policy::PolicyVerdict {
                 action: PolicyAction::Ask,
                 reason: reason.clone(),
-                rule_name: String::new(),
+                rule_name,
             };
             crate::policy::audit::log_verdict(&verdict, &input.tool_input.command, &config);
             HookSpecificOutput {
@@ -147,11 +161,11 @@ pub fn run() -> i32 {
                 updated_input: Some(UpdatedInput { command }),
             }
         }
-        HookDecision::Deny { reason } => {
+        HookDecision::Deny { reason, rule_name } => {
             let verdict = crate::policy::PolicyVerdict {
                 action: PolicyAction::Deny,
                 reason: reason.clone(),
-                rule_name: String::new(),
+                rule_name,
             };
             crate::policy::audit::log_verdict(&verdict, &input.tool_input.command, &config);
             HookSpecificOutput {
@@ -196,11 +210,35 @@ mod tests {
     fn dangerous_command_asks_with_reason() {
         let d = rewrite_decision("Bash", "rm -rf /", Some(&guardrail()));
         match d {
-            HookDecision::Ask { command, reason } => {
+            HookDecision::Ask {
+                command, reason, ..
+            } => {
                 assert_eq!(command, "vallum run -- bash -c 'rm -rf /'");
                 assert!(reason.contains("root or home"));
             }
             other => panic!("expected Ask, got {other:?}"),
+        }
+    }
+
+    fn guardrail_with_deny() -> Policy {
+        use crate::config::{PolicyConfig, PolicyRuleConfig};
+        Policy::compile(&PolicyConfig {
+            rules: vec![PolicyRuleConfig {
+                pattern: "SECRETDROP".into(),
+                action: "deny".into(),
+                reason: "denied in test".into(),
+            }],
+            disabled: vec![],
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn denied_command_returns_deny_no_rewrite() {
+        let d = rewrite_decision("Bash", "echo SECRETDROP", Some(&guardrail_with_deny()));
+        match d {
+            HookDecision::Deny { reason, .. } => assert!(reason.contains("denied in test")),
+            other => panic!("expected Deny, got {other:?}"),
         }
     }
 
