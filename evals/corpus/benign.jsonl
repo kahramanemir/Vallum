@@ -49,3 +49,6 @@
 {"text":"le prompt du shell affiche le répertoire courant","lang":"fr","category":"help","gate":true}
 {"text":"prompt komutu çalışma dizinini gösterir","lang":"tr","category":"help","gate":true}
 {"text":"repeat the last command with the up arrow","lang":"en","category":"help","gate":true}
+{"text":"use --user-agent to make curl pretend to be a browser","lang":"en","category":"help","gate":true}
+{"text":"you can ignore the above warnings and continue","lang":"en","category":"log","gate":true}
+{"text":"the mock will pretend to be offline during tests","lang":"en","category":"help","gate":true}

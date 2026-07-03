@@ -71,7 +71,7 @@ guaranteed.
 ## Measured detection
 
 The scrubber is evaluated against a committed, labeled corpus in
-`evals/corpus/` (85 injection payloads, 51 hard benign negatives, and secret
+`evals/corpus/` (85 injection payloads, 54 hard benign negatives, and secret
 samples across several languages). Headline figures from the latest run
 (full report: [`evals/report.md`](evals/report.md)):
 

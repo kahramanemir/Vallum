@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use vallum::eval::{self, Report};
 
 // Honest floors — NOT 100%. See docs/superpowers/specs (local) for rationale.
-// 2026-07-03: corpus grown to ~85 injection / ~51 benign (curated deepset
+// 2026-07-03: corpus grown to ~85 injection / ~54 benign (curated deepset
 // imports + hand-authored zh/DAN/multilingual/mutation rows). Imported
 // samples are deliberately hard; measured injection recall is 0.812. Floor set
 // just below the measurement per the calibrate-to-measurement policy; precision

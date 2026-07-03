@@ -8,7 +8,7 @@ Measured over the committed corpus in `evals/corpus/`. Numbers reflect the curre
 
 | metric | value |
 | --- | --- |
-| samples (injection / benign) | 85 / 51 |
+| samples (injection / benign) | 85 / 54 |
 | precision | 1.000 |
 | recall | 0.812 |
 | F1 | 0.896 |
