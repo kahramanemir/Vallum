@@ -71,11 +71,11 @@ guaranteed.
 ## Measured detection
 
 The scrubber is evaluated against a committed, labeled corpus in
-`evals/corpus/` (injection payloads, hard benign negatives, and secret
+`evals/corpus/` (85 injection payloads, 54 hard benign negatives, and secret
 samples across several languages). Headline figures from the latest run
 (full report: [`evals/report.md`](evals/report.md)):
 
-- Injection recall: **0.838** · precision: **1.000** · benign false-positive rate: **0.000**
+- Injection recall: **0.812** · precision: **1.000** · benign false-positive rate: **0.000**
 - Known-format secret recall: **1.000** · entropy secret recall: **1.000**
 
 These are measured over a fixed corpus and are **evidence, not a guarantee** —

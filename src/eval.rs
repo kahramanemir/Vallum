@@ -15,6 +15,8 @@ pub struct InjectionRecord {
     pub category: String,
     #[serde(default)]
     pub gate: bool,
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +26,8 @@ pub struct BenignRecord {
     pub category: String,
     #[serde(default)]
     pub gate: bool,
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,6 +90,8 @@ pub struct InjectionMetrics {
     pub fp_rate: f64,
     /// (lang, detected, total), sorted by lang.
     pub recall_by_lang: Vec<(String, usize, usize)>,
+    /// (category, detected, total), sorted by category.
+    pub recall_by_category: Vec<(String, usize, usize)>,
     pub missed: Vec<String>,
     pub flagged: Vec<String>,
 }
@@ -139,13 +145,17 @@ pub fn evaluate_injections(inj: &[InjectionRecord], ben: &[BenignRecord]) -> Inj
     let mut missed = Vec::new();
     // (detected, total) per language.
     let mut by_lang: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    let mut by_category: BTreeMap<String, (usize, usize)> = BTreeMap::new();
 
     for r in inj {
         let entry = by_lang.entry(r.lang.clone()).or_insert((0, 0));
         entry.1 += 1;
+        let cat = by_category.entry(r.category.clone()).or_insert((0, 0));
+        cat.1 += 1;
         if is_injection(&r.text) {
             true_pos += 1;
             entry.0 += 1;
+            cat.0 += 1;
         } else {
             false_neg += 1;
             missed.push(r.text.clone());
@@ -178,6 +188,11 @@ pub fn evaluate_injections(inj: &[InjectionRecord], ben: &[BenignRecord]) -> Inj
         .map(|(lang, (det, tot))| (lang, det, tot))
         .collect();
 
+    let recall_by_category = by_category
+        .into_iter()
+        .map(|(cat, (det, tot))| (cat, det, tot))
+        .collect();
+
     InjectionMetrics {
         true_pos,
         false_neg,
@@ -188,6 +203,7 @@ pub fn evaluate_injections(inj: &[InjectionRecord], ben: &[BenignRecord]) -> Inj
         f1,
         fp_rate,
         recall_by_lang,
+        recall_by_category,
         missed,
         flagged,
     }
@@ -335,6 +351,20 @@ pub fn render_report(r: &Report) -> String {
     }
     s.push('\n');
 
+    s.push_str("### Recall by category\n\n");
+    s.push_str("| category | detected / total | recall |\n| --- | --- | --- |\n");
+    for (cat, det, tot) in &inj.recall_by_category {
+        let _ = writeln!(
+            s,
+            "| {} | {} / {} | {:.3} |",
+            cat,
+            det,
+            tot,
+            ratio(*det, *tot)
+        );
+    }
+    s.push('\n');
+
     s.push_str("## Secret redaction\n\n");
     s.push_str("| metric | value |\n| --- | --- |\n");
     let _ = writeln!(
@@ -398,12 +428,14 @@ mod tests {
                 lang: "en".into(),
                 category: "ignore".into(),
                 gate: true,
+                source: None,
             },
             InjectionRecord {
                 text: "hello world".into(),
                 lang: "en".into(),
                 category: "ignore".into(),
                 gate: false,
+                source: None,
             },
         ];
         let ben = vec![BenignRecord {
@@ -411,6 +443,7 @@ mod tests {
             lang: "en".into(),
             category: "log".into(),
             gate: true,
+            source: None,
         }];
         let m = evaluate_injections(&inj, &ben);
         // one true injection detected, one injection missed, benign clean.
@@ -498,6 +531,15 @@ mod tests {
         assert!(
             out.contains("### Secrets missed"),
             "missing secrets-missed section"
+        );
+    }
+
+    #[test]
+    fn report_has_category_breakdown() {
+        let out = render_report(&build_report());
+        assert!(
+            out.contains("### Recall by category"),
+            "missing category breakdown section"
         );
     }
 }

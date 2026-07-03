@@ -5,6 +5,24 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Chinese (zh) injection detection across all four pattern families
+  (ignore / reveal / roleplay / new-instructions), plus zh benign coverage so
+  zh precision is measurable.
+- Detection for noun-free "disregard everything above" phrasing, DAN/persona
+  jailbreaks, French negative-imperative and adjective-free ignore, Spanish
+  adjective-free ignore, and the Turkish `prompt` loanword reveal.
+- Per-category recall breakdown in the detection eval report.
+
+### Changed
+- Grew the labeled eval corpus with curated, permissively-licensed samples
+  from `deepset/prompt-injections` (Apache-2.0) plus hand-authored multilingual
+  and mutation rows; provenance recorded in `evals/corpus/SOURCES.md`.
+- Recalibrated `MIN_INJECTION_RECALL` to the grown-corpus measurement
+  (calibrate-to-measurement policy); precision 1.000 and benign FP 0.000 hold.
+
 ## [0.3.1]
 
 ### Documentation
