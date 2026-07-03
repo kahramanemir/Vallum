@@ -3,7 +3,11 @@
 *Prompt-injection defense, secret redaction, untrusted-output sanitization, and command auditing for AI coding agents — a single Rust CLI proxy that acts as an LLM security guardrail on your terminal. `vallum run` works with any agent that runs shell commands (Claude Code, Cursor, Codex, Gemini CLI, or your own agent); automatic zero-config interception ships for Claude Code today.*
 
 [![CI](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml)
+[![Security audit](https://github.com/kahramanemir/Vallum/actions/workflows/audit.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/audit.yml)
 [![crates.io](https://img.shields.io/crates/v/vallum.svg)](https://crates.io/crates/vallum)
+[![docs.rs](https://img.shields.io/docsrs/vallum)](https://docs.rs/vallum)
+[![npm](https://img.shields.io/npm/v/vallum.svg)](https://www.npmjs.com/package/vallum)
+[![MSRV](https://img.shields.io/crates/msrv/vallum?label=msrv)](https://github.com/kahramanemir/Vallum/blob/main/Cargo.toml)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 A Rust CLI proxy that sits between AI agents and your shell as a **security boundary**. When an agent runs a command, Vallum redacts secrets, neutralizes prompt-injection attempts, wraps the result as untrusted data, preserves the child exit code, and audits everything — so what reaches the model is exactly what you intend it to see. As a side benefit, it strips ANSI noise and compresses long output, which also saves tokens.
