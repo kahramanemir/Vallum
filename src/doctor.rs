@@ -95,6 +95,49 @@ pub fn check_optimizer_names(disabled: &[String], known: &[&str]) -> Check {
     }
 }
 
+/// Report guardrail status and flag unknown `[policy] disabled` names.
+pub fn check_guardrail(
+    guardrail: bool,
+    disabled: &[String],
+    user_rule_count: usize,
+    known: &[&str],
+) -> Check {
+    if !guardrail {
+        return Check::new(
+            "guardrail",
+            Status::Warn,
+            "off — dangerous-command gating disabled ([security] guardrail = false)",
+        );
+    }
+    let unknown: Vec<&str> = disabled
+        .iter()
+        .filter(|d| !known.contains(&d.as_str()))
+        .map(|d| d.as_str())
+        .collect();
+    if unknown.is_empty() {
+        Check::new(
+            "guardrail",
+            Status::Ok,
+            format!(
+                "on — {} built-in rule(s), {} disabled, {} user rule(s)",
+                known.len(),
+                disabled.len(),
+                user_rule_count
+            ),
+        )
+    } else {
+        Check::new(
+            "guardrail",
+            Status::Warn,
+            format!(
+                "on, but unknown name(s) in [policy] disabled: {} — valid: {}",
+                unknown.join(", "),
+                known.join(", ")
+            ),
+        )
+    }
+}
+
 /// Report whether the Claude Code PreToolUse hook is installed. A missing or
 /// hook-less settings file is a Warn (Vallum still works when invoked
 /// directly); malformed JSON is a Fail.
@@ -228,6 +271,12 @@ pub fn run() -> i32 {
     let checks = vec![
         check_config(&config_path),
         check_optimizer_names(&config.optimizer.disabled, &crate::optimizer::names()),
+        check_guardrail(
+            config.security.guardrail,
+            &config.policy.disabled,
+            config.policy.rules.len(),
+            &crate::policy::builtin_names(),
+        ),
         check_hook(&settings_path),
         check_binary_on_path(&path_var, exe),
         check_log_dir(&resolve_log_dir(&config)),
@@ -355,5 +404,25 @@ mod tests {
         ];
         let (_text, any_fail) = render(&checks);
         assert!(!any_fail);
+    }
+
+    #[test]
+    fn guardrail_on_reports_ok() {
+        let c = check_guardrail(true, &[], 0, &["rm_rf_root"]);
+        assert_eq!(c.status, Status::Ok);
+        assert!(c.detail.contains("on"));
+    }
+
+    #[test]
+    fn guardrail_off_warns() {
+        let c = check_guardrail(false, &[], 0, &["rm_rf_root"]);
+        assert_eq!(c.status, Status::Warn);
+    }
+
+    #[test]
+    fn unknown_disabled_name_warns() {
+        let c = check_guardrail(true, &["nope".to_string()], 0, &["rm_rf_root"]);
+        assert_eq!(c.status, Status::Warn);
+        assert!(c.detail.contains("nope"));
     }
 }
