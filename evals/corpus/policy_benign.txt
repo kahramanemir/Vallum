@@ -1,0 +1,37 @@
+# Common legitimate commands the guardrail must NEVER flag (Allow).
+git status
+git push
+git push origin main
+git push --force-with-lease
+git commit -m "fix: thing"
+git log --oneline -20
+npm install
+npm ci
+npm run build
+cargo test --all
+cargo build --release
+cargo clippy -- -D warnings
+rm -rf node_modules
+rm -rf ./target
+rm -rf dist
+rm file.txt
+rm -r logs/
+sudo apt install ripgrep
+sudo systemctl restart nginx
+curl -o out.tar.gz https://example.com/x
+curl -sSL https://example.com/api | jq
+wget https://example.com/file.zip
+chmod +x script.sh
+chmod 644 config.toml
+chmod -R 755 public/
+dd if=/dev/zero of=disk.img bs=1M count=100
+cat ~/.ssh/config
+cat ~/.ssh/known_hosts
+cat ~/.aws/config
+cat README.md
+echo "done" > out.txt
+echo "err" > /dev/null
+docker build -t app .
+kubectl get pods
+mkfs.ext4 loopback.img
+ls -la ~/.ssh
