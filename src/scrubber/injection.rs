@@ -150,7 +150,11 @@ fn injection_patterns() -> &'static [Regex] {
             // and "let's forget everything and start over" stay benign ---
             Regex::new(r"(?is)\b(ignore|disregard|forget)\b\s+((everything|all)\s+)?(the\s+)?(above|before|prior|preceding|previously\s+said)\b.{0,30}?\b(and|then|instead|now|just|print|write|say|do|follow|output|execute|repeat|show)\b[^\n]*").unwrap(),
             // --- DAN / persona jailbreak family ---
-            Regex::new(r"(?i)\bfrom now on\b[^\n]*\b(act as|unrestricted|jailbroken|no restrictions|no content policy|pretend you|ignore\b[^\n]*\b(rules|instructions|guidelines))\b[^\n]*").unwrap(),
+            // The bare "act as" alternative is object-gated (mirrors the
+            // standalone "act as" pattern below) so a natural role
+            // announcement like "from now on, Alex will act as team lead"
+            // does not get falsely flagged; only "act as <persona>" counts.
+            Regex::new(r"(?i)\bfrom now on\b[^\n]*\b(act as\s+(an?\s+)?(dan|unrestricted|jailbroken|evil|unfiltered|uncensored)|unrestricted|jailbroken|no restrictions|no content policy|pretend you|ignore\b[^\n]*\b(rules|instructions|guidelines))\b[^\n]*").unwrap(),
             Regex::new(r"(?i)\bact as\b\s+(an?\s+)?(dan|unrestricted|jailbroken|evil|unfiltered|uncensored)\b[^\n]*").unwrap(),
             Regex::new(r"(?i)\bpretend\b\s+(you\s+(are|can)|to\s+be)\b[^\n]*").unwrap(),
 
@@ -246,7 +250,8 @@ fn shadow_injection_patterns() -> &'static [Regex] {
             Regex::new(r"新(指令|指示|任务)\s*:[^\n]*").unwrap(),
 
             Regex::new(r"(?is)\b(ignore|disregard|forget)\b\s+((everything|all)\s+)?(the\s+)?(above|before|prior|preceding|previously\s+said)\b.{0,30}?\b(and|then|instead|now|just|print|write|say|do|follow|output|execute|repeat|show)\b[^\n]*").unwrap(),
-            Regex::new(r"(?i)\bfrom now on\b[^\n]*\b(act as|unrestricted|jailbroken|no restrictions|no content policy|pretend you|ignore\b[^\n]*\b(rules|instructions|guidelines))\b[^\n]*").unwrap(),
+            // Object-gated "act as" sub-alternative — see raw copy above for rationale.
+            Regex::new(r"(?i)\bfrom now on\b[^\n]*\b(act as\s+(an?\s+)?(dan|unrestricted|jailbroken|evil|unfiltered|uncensored)|unrestricted|jailbroken|no restrictions|no content policy|pretend you|ignore\b[^\n]*\b(rules|instructions|guidelines))\b[^\n]*").unwrap(),
             Regex::new(r"(?i)\bact as\b\s+(an?\s+)?(dan|unrestricted|jailbroken|evil|unfiltered|uncensored)\b[^\n]*").unwrap(),
             Regex::new(r"(?i)\bpretend\b\s+(you\s+(are|can)|to\s+be)\b[^\n]*").unwrap(),
 
@@ -701,6 +706,8 @@ mod tests {
             "From now on, Dan will handle onboarding",
             "let's forget everything and start over",
             "ignore everything above the threshold of 100ms",
+            "from now on, Alex will act as team lead",
+            "from now on we'll act as your main point of contact",
         ] {
             assert!(!scrub_injections(s, true).1, "benign flagged: {s}");
         }
