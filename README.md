@@ -1,6 +1,6 @@
-# Vallum
+# Vallum — a security boundary between AI coding agents and your shell
 
-*A security boundary between AI coding agents and your shell — secret redaction, prompt-injection defense, ANSI stripping, and command auditing in a single Rust binary. `vallum run` works with any agent that runs shell commands; automatic zero-config interception ships for Claude Code today.*
+*Prompt-injection defense, secret redaction, untrusted-output sanitization, and command auditing for AI coding agents — a single Rust CLI proxy that acts as an LLM security guardrail on your terminal. `vallum run` works with any agent that runs shell commands (Claude Code, Cursor, Codex, Gemini CLI, or your own agent); automatic zero-config interception ships for Claude Code today.*
 
 [![CI](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/vallum.svg)](https://crates.io/crates/vallum)
