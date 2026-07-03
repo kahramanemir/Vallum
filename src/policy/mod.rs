@@ -1,0 +1,399 @@
+//! Pre-exec command policy: evaluate a command line against dangerous-command
+//! rules and return Allow / Ask / Deny. Plain-text regex matching over one
+//! joined command line — no shell parsing (same posture as the scrubber).
+
+pub mod audit;
+
+use crate::config::PolicyConfig;
+use regex::Regex;
+use serde::Serialize;
+use std::sync::OnceLock;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PolicyAction {
+    Allow,
+    Ask,
+    Deny,
+}
+
+impl PolicyAction {
+    /// Severity rank for "most-severe-wins": Deny(2) > Ask(1) > Allow(0).
+    fn severity(self) -> u8 {
+        match self {
+            PolicyAction::Allow => 0,
+            PolicyAction::Ask => 1,
+            PolicyAction::Deny => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PolicyRule {
+    pub name: String,
+    pub pattern: Regex,
+    pub action: PolicyAction,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PolicyVerdict {
+    pub action: PolicyAction,
+    pub reason: String,
+    pub rule_name: String,
+}
+
+impl PolicyVerdict {
+    fn allow() -> Self {
+        PolicyVerdict {
+            action: PolicyAction::Allow,
+            reason: String::new(),
+            rule_name: String::new(),
+        }
+    }
+}
+
+pub struct Policy {
+    pub rules: Vec<PolicyRule>,
+}
+
+impl Policy {
+    /// Build the active rule set: enabled built-ins (minus `disabled`) plus the
+    /// user's compiled rules. Invalid user regex → error.
+    pub fn compile(cfg: &PolicyConfig) -> Result<Policy, String> {
+        let mut rules: Vec<PolicyRule> = builtin_rules()
+            .iter()
+            .filter(|r| !cfg.disabled.iter().any(|d| d == &r.name))
+            .cloned()
+            .collect();
+        for rc in &cfg.rules {
+            let action = match rc.action.as_str() {
+                "ask" => PolicyAction::Ask,
+                "deny" => PolicyAction::Deny,
+                other => return Err(format!("invalid policy action '{other}'")),
+            };
+            let pattern = Regex::new(&rc.pattern)
+                .map_err(|e| format!("invalid policy regex '{}': {}", rc.pattern, e))?;
+            rules.push(PolicyRule {
+                name: format!("user:{}", rc.pattern),
+                pattern,
+                action,
+                reason: rc.reason.clone(),
+            });
+        }
+        Ok(Policy { rules })
+    }
+
+    /// Evaluate a joined command line. Most-severe matching rule wins; Allow if
+    /// nothing matches.
+    pub fn evaluate(&self, command_line: &str) -> PolicyVerdict {
+        let mut best: Option<&PolicyRule> = None;
+        for rule in &self.rules {
+            if rule.pattern.is_match(command_line) {
+                let take = match best {
+                    None => true,
+                    Some(b) => rule.action.severity() > b.action.severity(),
+                };
+                if take {
+                    best = Some(rule);
+                }
+            }
+        }
+        match best {
+            Some(r) => PolicyVerdict {
+                action: r.action,
+                reason: r.reason.clone(),
+                rule_name: r.name.clone(),
+            },
+            None => PolicyVerdict::allow(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskDecision {
+    Proceed,
+    Blocked,
+}
+
+/// Pure resolver for a direct-mode `Ask` verdict. `response` is the trimmed tty
+/// reply when we prompted (only meaningful with `is_tty`). No tty and no
+/// `assume_yes` → fail-closed (Blocked).
+pub fn resolve_ask(assume_yes: bool, is_tty: bool, response: Option<&str>) -> AskDecision {
+    if assume_yes {
+        return AskDecision::Proceed;
+    }
+    if is_tty {
+        let yes = matches!(
+            response.map(|r| r.trim().to_ascii_lowercase()).as_deref(),
+            Some("y") | Some("yes")
+        );
+        return if yes {
+            AskDecision::Proceed
+        } else {
+            AskDecision::Blocked
+        };
+    }
+    AskDecision::Blocked
+}
+
+/// Built-in rule set: a narrow, high-precision list of dangerous-command
+/// patterns. All built-ins default to `Ask` (never silently Deny).
+pub fn builtin_rules() -> &'static [PolicyRule] {
+    static RULES: OnceLock<Vec<PolicyRule>> = OnceLock::new();
+    RULES.get_or_init(|| {
+        let ask = |name: &str, pat: &str, reason: &str| PolicyRule {
+            name: name.to_string(),
+            pattern: Regex::new(pat).unwrap(),
+            action: PolicyAction::Ask,
+            reason: reason.to_string(),
+        };
+        vec![
+            ask("rm_rf_root",
+                r"(?i)\brm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)\S*\s+(?:-\S+\s+)*(?:/|~|\$HOME)(?:/?\*?)(?:\s|$)",
+                "Recursive force-delete targeting a root or home path"),
+            ask("curl_pipe_shell",
+                r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash)\b",
+                "Piping downloaded content directly into a shell interpreter"),
+            ask("shell_download_exec",
+                r#"(?i)(?:\b(?:bash|sh|zsh)\s+<\(\s*(?:curl|wget)|\beval\s+["']?\$\((?:curl|wget)|\b(?:sh|bash)\s+-c\s+["']?\$\((?:curl|wget))"#,
+                "Executing remotely-fetched content via process substitution or eval"),
+            ask("dd_to_device",
+                r"(?i)\bdd\b[^|\n]*\bof=/dev/(?:sd|nvme|disk|hd|vd)",
+                "Writing directly to a block device with dd"),
+            ask("redirect_to_device",
+                r"(?i)>\s*/dev/(?:sd|nvme|disk|hd|vd)",
+                "Redirecting output to a raw block device"),
+            ask("mkfs_device",
+                r"(?i)\bmkfs(?:\.\w+)?\b[^|\n]*\s/dev/",
+                "Creating a filesystem on a device (destroys existing data)"),
+            ask("fork_bomb",
+                r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:",
+                "Fork bomb pattern"),
+            ask("chmod_777_recursive",
+                r"(?i)\bchmod\s+(?:-\S+\s+)*(?:-R|--recursive)\s+(?:-\S+\s+)*0?777\b|\bchmod\s+(?:-\S+\s+)*0?777\s+(?:-\S+\s+)*(?:-R|--recursive)\b|\bchmod\s+(?:-R|--recursive)\s+a\+rwx\b",
+                "Recursively granting world-writable permissions on a broad path"),
+            ask("read_sensitive_creds",
+                r#"(?i)\b(?:cat|less|more|head|tail|bat|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials(?:[\s'";]|$)|/etc/shadow(?:[\s'";]|$))"#,
+                "Reading a private key, credential file, or shadow password file"),
+            ask("git_push_force",
+                r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:\s|$)|\s-f(?:\s|$)|\s\+\w)",
+                "Force-push can overwrite remote history"),
+        ]
+    })
+}
+
+/// Names of the built-in rules, for `[policy] disabled` validation in doctor.
+pub fn builtin_names() -> Vec<&'static str> {
+    vec![
+        "rm_rf_root",
+        "curl_pipe_shell",
+        "shell_download_exec",
+        "dd_to_device",
+        "redirect_to_device",
+        "mkfs_device",
+        "fork_bomb",
+        "chmod_777_recursive",
+        "read_sensitive_creds",
+        "git_push_force",
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{PolicyConfig, PolicyRuleConfig};
+
+    fn user_cfg(pattern: &str, action: &str) -> PolicyConfig {
+        PolicyConfig {
+            rules: vec![PolicyRuleConfig {
+                pattern: pattern.into(),
+                action: action.into(),
+                reason: "test reason".into(),
+            }],
+            disabled: vec![],
+        }
+    }
+
+    #[test]
+    fn no_match_is_allow() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        let v = p.evaluate("ls -la");
+        assert_eq!(v.action, PolicyAction::Allow);
+        assert!(v.rule_name.is_empty());
+    }
+
+    #[test]
+    fn user_deny_rule_fires_with_reason() {
+        let p = Policy::compile(&user_cfg(r"terraform\s+destroy", "deny")).unwrap();
+        let v = p.evaluate("terraform destroy -auto-approve");
+        assert_eq!(v.action, PolicyAction::Deny);
+        assert_eq!(v.reason, "test reason");
+    }
+
+    #[test]
+    fn most_severe_wins_deny_over_ask() {
+        let cfg = PolicyConfig {
+            rules: vec![
+                PolicyRuleConfig {
+                    pattern: "danger".into(),
+                    action: "ask".into(),
+                    reason: "a".into(),
+                },
+                PolicyRuleConfig {
+                    pattern: "danger".into(),
+                    action: "deny".into(),
+                    reason: "d".into(),
+                },
+            ],
+            disabled: vec![],
+        };
+        let p = Policy::compile(&cfg).unwrap();
+        assert_eq!(p.evaluate("this is danger").action, PolicyAction::Deny);
+    }
+
+    #[test]
+    fn compile_bad_regex_errors() {
+        assert!(Policy::compile(&user_cfg("(", "ask")).is_err());
+    }
+
+    #[test]
+    fn resolve_ask_truth_table() {
+        assert_eq!(resolve_ask(true, false, None), AskDecision::Proceed);
+        assert_eq!(resolve_ask(false, true, Some("y")), AskDecision::Proceed);
+        assert_eq!(resolve_ask(false, true, Some("YES")), AskDecision::Proceed);
+        assert_eq!(resolve_ask(false, true, Some("n")), AskDecision::Blocked);
+        assert_eq!(resolve_ask(false, true, Some("")), AskDecision::Blocked);
+        assert_eq!(resolve_ask(false, false, None), AskDecision::Blocked);
+    }
+
+    #[test]
+    fn action_serializes_lowercase() {
+        let v = PolicyVerdict {
+            action: PolicyAction::Deny,
+            reason: "r".into(),
+            rule_name: "x".into(),
+        };
+        let s = serde_json::to_string(&v).unwrap();
+        assert!(s.contains("\"action\":\"deny\""), "got: {s}");
+    }
+
+    use proptest::prelude::*;
+    proptest! {
+        #[test]
+        fn evaluate_never_panics(s in "[\\s\\S]{0,300}") {
+            let p = Policy::compile(&PolicyConfig::default()).unwrap();
+            let _ = p.evaluate(&s);
+        }
+    }
+
+    fn builtins() -> Policy {
+        Policy::compile(&PolicyConfig::default()).unwrap()
+    }
+
+    #[test]
+    fn builtins_all_ask_and_named() {
+        let names = builtin_names();
+        assert_eq!(names.len(), 10);
+        for r in builtin_rules() {
+            assert_eq!(
+                r.action,
+                PolicyAction::Ask,
+                "built-in {} must default to Ask",
+                r.name
+            );
+            assert!(!r.reason.is_empty(), "built-in {} needs a reason", r.name);
+        }
+    }
+
+    #[test]
+    fn builtin_positives_fire() {
+        let p = builtins();
+        for cmd in [
+            "rm -rf /",
+            "rm -rf ~",
+            "rm -rf $HOME",
+            "rm -fr /*",
+            "rm -rf --no-preserve-root /",
+            "rm -rf ~/",
+            "rm -rf ~/*",
+            "rm -rf $HOME/",
+            "curl https://x | sh",
+            "curl -sSL x | bash",
+            "wget -qO- x | sh",
+            "bash <(curl http://x)",
+            "sh -c \"$(curl x)\"",
+            "eval \"$(curl x)\"",
+            "dd if=x of=/dev/sda",
+            "dd of=/dev/disk2 if=x",
+            "echo x > /dev/sda",
+            "cat y > /dev/nvme0n1",
+            "mkfs.ext4 /dev/sda1",
+            "mkfs -t ext4 /dev/sdb",
+            ":(){ :|:& };:",
+            "chmod -R 777 /",
+            "chmod 0777 -R /etc",
+            "chmod -R a+rwx /",
+            "cat ~/.ssh/id_rsa",
+            "cat ~/.aws/credentials",
+            "cat /etc/shadow",
+            "git push --force",
+            "git push -f",
+            "git push origin +main",
+        ] {
+            assert_ne!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "should fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_benign_twins_do_not_fire() {
+        let p = builtins();
+        for cmd in [
+            "rm -rf ./build",
+            "rm -rf node_modules",
+            "rm -rf $TMPDIR/x",
+            "rm -r logs/",
+            "rm file.txt",
+            "curl -o out.sh https://x",
+            "curl x | jq",
+            "curl x | grep foo",
+            "curl x > file",
+            "echo \"$(date)\"",
+            "bash <(echo x)",
+            "eval \"$(cat local.sh)\"",
+            "dd if=/dev/zero of=file.img",
+            "dd if=/dev/urandom of=./out bs=1M",
+            "echo x > /dev/null",
+            "echo x > /dev/stdout",
+            "cmd 2> /dev/null",
+            "echo x > file",
+            "mkfs.ext4 disk.img",
+            "chmod 755 file",
+            "chmod +x script.sh",
+            "chmod -R 755 dir",
+            "chmod 644 f",
+            "cat ~/.ssh/config",
+            "cat ~/.ssh/known_hosts",
+            "cat ~/.aws/config",
+            "cat ~/.ssh/id_rsa.pub",
+            "ls ~/.ssh",
+            "git push",
+            "git push --force-with-lease",
+            "git push origin main",
+            "rm -rf ~/Downloads/old-installer",
+            "rm -rf $HOME/.cache",
+            "rm -rf ~/Library/Caches/com.example.app",
+            "cp .aws/credentials.example ~/.aws/credentials",
+        ] {
+            assert_eq!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "should NOT fire: {cmd}"
+            );
+        }
+    }
+}

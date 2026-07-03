@@ -23,6 +23,11 @@ pub enum Commands {
         /// Mirror raw child output to ~/.vallum/live.log as lines arrive
         #[arg(long)]
         tee: bool,
+        /// Internal: the guardrail has already ruled on this command (set by the
+        /// hook when it re-wraps an approved command through `vallum run`), so
+        /// skip re-evaluating the policy. Hidden; not a user-facing knob.
+        #[arg(long = "policy-approved", hide = true)]
+        policy_approved: bool,
         /// The command to run
         cmd: String,
         /// Arguments for the command

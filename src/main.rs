@@ -19,6 +19,58 @@ struct RunOutput<'a> {
     tokens_before: usize,
     tokens_after: usize,
     sanitized_output: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    policy: Option<&'a vallum::policy::PolicyVerdict>,
+}
+
+/// Whether stdin is an interactive terminal (drives direct-mode Ask prompting).
+fn atty_stdin() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal()
+}
+
+/// Prompt on the controlling terminal and read one line. Returns None on error.
+fn prompt_tty(reason: &str) -> Option<String> {
+    use std::io::{BufRead, Write};
+    let mut tty = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .ok()?;
+    write!(tty, "[vallum] {reason} — proceed? [y/N] ").ok()?;
+    tty.flush().ok()?;
+    let mut reader = std::io::BufReader::new(tty);
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+    Some(line)
+}
+
+/// Emit a block result and exit 125. In JSON mode, serialize a RunOutput with
+/// the policy verdict; otherwise print a stderr message.
+fn emit_block(
+    json: bool,
+    verdict: &vallum::policy::PolicyVerdict,
+    cmd: &str,
+    args: &[String],
+) -> ! {
+    if json {
+        let payload = RunOutput {
+            command: cmd,
+            args,
+            exit_code: 125,
+            optimizer: None,
+            tokens_before: 0,
+            tokens_after: 0,
+            sanitized_output: "[BLOCKED BY POLICY]\n",
+            policy: Some(verdict),
+        };
+        if let Ok(s) = serde_json::to_string(&payload) {
+            println!("{s}");
+        }
+    } else {
+        eprintln!("[vallum] blocked: {}", verdict.reason);
+    }
+    std::process::exit(125);
 }
 
 fn main() {
@@ -29,6 +81,7 @@ fn main() {
             json,
             strict,
             tee,
+            policy_approved,
             cmd,
             args,
         } => {
@@ -39,6 +92,56 @@ fn main() {
                     std::process::exit(125);
                 }
             };
+
+            // --- Guardrail: evaluate the command before running it. ---
+            // `--policy-approved` means the hook already ruled on this exact
+            // command and re-wrapped it through `vallum run`; re-evaluating here
+            // would double-gate (and, being non-interactive, fail closed on an
+            // already-approved Ask), so we skip.
+            if config.security.guardrail && !*policy_approved {
+                // Unreachable Err: AppConfig::load() -> validate() already
+                // compiled every user regex, so a failure here means config
+                // drift. Fail closed rather than silently running ungated.
+                let policy = match vallum::policy::Policy::compile(&config.policy) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("Config Error: policy failed to compile: {}", e);
+                        std::process::exit(125);
+                    }
+                };
+                let command_line = if args.is_empty() {
+                    cmd.clone()
+                } else {
+                    format!("{} {}", cmd, args.join(" "))
+                };
+                let verdict = policy.evaluate(&command_line);
+                match verdict.action {
+                    vallum::policy::PolicyAction::Allow => {}
+                    vallum::policy::PolicyAction::Deny => {
+                        vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+                        emit_block(*json, &verdict, cmd, args);
+                    }
+                    vallum::policy::PolicyAction::Ask => {
+                        // Record the Ask once, whether it proceeds or blocks.
+                        vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+                        let assume_yes = config.security.assume_yes
+                            || std::env::var("VALLUM_ASSUME_YES")
+                                .map(|v| v == "1")
+                                .unwrap_or(false);
+                        let decision = if assume_yes {
+                            vallum::policy::AskDecision::Proceed
+                        } else if !*json && atty_stdin() {
+                            let resp = prompt_tty(&verdict.reason);
+                            vallum::policy::resolve_ask(false, true, resp.as_deref())
+                        } else {
+                            vallum::policy::resolve_ask(false, false, None)
+                        };
+                        if decision == vallum::policy::AskDecision::Blocked {
+                            emit_block(*json, &verdict, cmd, args);
+                        }
+                    }
+                }
+            }
 
             let tee_path = if *tee {
                 dirs::home_dir().map(|h| h.join(".vallum").join("live.log"))
@@ -145,6 +248,7 @@ fn main() {
                     tokens_before,
                     tokens_after,
                     sanitized_output: &sanitized,
+                    policy: None,
                 };
 
                 match serde_json::to_string(&payload) {

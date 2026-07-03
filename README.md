@@ -64,9 +64,75 @@ fail-closed mode), secret redaction (known-format patterns plus context-gated
 entropy detection), untrusted-output wrapping with marker defang, and
 private-by-default logging (raw log opt-in, `0600` permissions).
 
+Ahead of those four output-side mechanisms, an opt-outable **guardrail**
+evaluates each command *before* it runs and can prompt (`Ask`) or block
+(`Deny`) a narrow set of dangerous operations — see
+[Guardrail / policy](#guardrail--policy) below.
+
 **Full threat model:** see [SECURITY.md](SECURITY.md) — what is protected,
 by which mechanism, at what strength, and what is explicitly **not**
 guaranteed.
+
+## Guardrail / policy
+
+Vallum evaluates every command *before it executes* and returns one of three
+verdicts:
+
+- **Allow** — runs normally (the default for anything no rule matches).
+- **Ask** — pauses for explicit confirmation before running.
+- **Deny** — refuses to run the command.
+
+The guardrail is **on by default**, and every built-in rule is `Ask` — a
+genuinely dangerous command prompts for confirmation instead of running
+silently, but nothing is silently blocked. The built-in patterns are
+deliberately narrow so ordinary commands are never touched (a committed
+benign-command precision gate guards against nagging on legitimate commands).
+
+Built-in rules (all default to `Ask`):
+
+| Rule | Catches |
+|---|---|
+| `rm_rf_root` | Recursive force-delete targeting a root or home path |
+| `curl_pipe_shell` | Piping downloaded content directly into a shell (`curl … \| sh`) |
+| `shell_download_exec` | Executing remotely-fetched content via process substitution or `eval` |
+| `dd_to_device` | Writing directly to a block device with `dd` |
+| `redirect_to_device` | Redirecting output to a raw block device |
+| `mkfs_device` | Creating a filesystem on a device (destroys existing data) |
+| `fork_bomb` | Classic `:(){ :\|:& };:` fork bomb |
+| `chmod_777_recursive` | Recursively granting world-writable permissions |
+| `read_sensitive_creds` | Reading a private key, credential file, or `/etc/shadow` |
+| `git_push_force` | Force-push that can overwrite remote history |
+
+**How `Ask` surfaces:**
+
+- **Hook mode** (Claude Code): the verdict maps to Claude Code's native
+  approval UI — `Ask` prompts you in the agent, `Deny` blocks the tool call.
+- **Direct `vallum run`:** `Ask` prompts on `/dev/tty`; when there is no
+  terminal (piped, CI, `--json`) it **fails closed** (blocked) unless you
+  set `security.assume_yes = true` or `VALLUM_ASSUME_YES=1`. A `Deny`
+  verdict exits **`125`**.
+
+Configure it under `[security]` and `[policy]`:
+
+```toml
+[security]
+guardrail = true    # pre-exec policy layer — default true; set false to bypass entirely
+assume_yes = false  # auto-approve direct-mode `ask` verdicts (for scripts/CI)
+
+[policy]
+disabled = []       # built-in rule names to turn off (e.g. ["git_push_force"])
+
+# Add your own rules. `action` is "ask" or "deny" (never "allow").
+[[policy.rules]]
+pattern = '^\s*sudo\b'
+action = "ask"
+reason = "Elevated privileges"
+```
+
+Setting `guardrail = false` makes Vallum behave byte-for-byte as it did before
+this layer existed. User rules are matched with the same most-severe-wins
+resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every non-Allow
+verdict is recorded (redacted) to `policy.log`.
 
 ## Measured detection
 
@@ -127,7 +193,16 @@ extra_secret_patterns = [
 ]
 
 [security]
-strict = false   # block the entire output when a prompt injection is detected
+strict = false      # block the entire output when a prompt injection is detected
+guardrail = true    # pre-exec policy layer (Allow/Ask/Deny) — default true
+assume_yes = false  # auto-approve direct-mode `ask` verdicts (scripts/CI)
+
+[policy]
+disabled = []       # built-in rule names to disable; all on by default
+# [[policy.rules]]   # optional user rules; action = "ask" | "deny"
+# pattern = '^\s*sudo\b'
+# action = "ask"
+# reason = "Elevated privileges"
 ```
 
 Supported settings:
@@ -145,6 +220,10 @@ Supported settings:
 - `scrubber.entropy`: context-gated entropy redaction of credential-ish assignment values — **default `true`**
 - `scrubber.normalize`: strip invisible/bidi characters and fold homoglyphs for injection matching — **default `true`**
 - `security.strict`: when `true` (or `--strict`), the output is replaced with `[OUTPUT BLOCKED: prompt injection detected]` if any injection is detected — **default `false`**
+- `security.guardrail`: enable the pre-exec policy layer that gates dangerous commands (Allow/Ask/Deny) — **default `true`**; set `false` to bypass entirely
+- `security.assume_yes`: auto-approve direct-mode `ask` verdicts (also via `VALLUM_ASSUME_YES=1`) — **default `false`**
+- `policy.rules`: user policy rules — each has `pattern`, `action` (`ask` or `deny`; `allow` is rejected), and `reason`
+- `policy.disabled`: built-in rule names to disable (rm_rf_root, curl_pipe_shell, shell_download_exec, dd_to_device, redirect_to_device, mkfs_device, fork_bomb, chmod_777_recursive, read_sensitive_creds, git_push_force) — default none
 
 ## Install
 
@@ -207,7 +286,7 @@ vallum uninstall-hook                # remove the vallum hook entry
 vallum hook                          # internal: invoked by Claude Code (don't run directly)
 vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
-vallum doctor                        # self-check: config, hook, PATH, log dir
+vallum doctor                        # self-check: config, hook, guardrail, PATH, log dir
 vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
 
@@ -243,6 +322,7 @@ Note how a tiny output ends up *larger* after wrapping: the security wrapper has
 
 - The child's own exit code is propagated as Vallum's exit code on success.
 - Vallum-level failures (bad config, executor spawn error, JSON serialization error) exit **`125`** — the `env(1)` "command not invoked" convention — so they are distinguishable from the child's real exit 1.
+- A guardrail **`Deny`** (or an `Ask` that is declined / fails closed in a non-interactive session) also exits **`125`** — the command is never run. An `Ask` prompts on `/dev/tty`; set `security.assume_yes` / `VALLUM_ASSUME_YES=1` to auto-approve in scripts.
 
 ## Claude Code integration
 
