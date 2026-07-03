@@ -39,6 +39,7 @@ pub mod hook;
 pub mod install_hook;
 pub mod metrics;
 pub mod optimizer;
+pub mod policy;
 pub mod scrubber;
 pub mod stats;
 pub mod tokenizer;
