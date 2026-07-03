@@ -5,6 +5,33 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1]
+
+### Fixed
+- **Hook mode no longer degrades silently on a broken config.** A TOML or
+  regex error in the config file used to drop the user's custom policy rules
+  (and every other custom setting) without any diagnostic while the hook kept
+  running with defaults. The hook now prints a warning to stderr (surfaced by
+  Claude Code) and keeps gating with the built-in policy; direct `vallum run`
+  still refuses to run (exit 125) on a broken config.
+- **Trivial shell obfuscation no longer slips past the guardrail.** Command
+  lines are lightly normalized before rule matching — empty quote pairs and
+  identity backslash escapes are stripped — so `r''m -rf /` and `\rm -rf /`
+  now trigger `rm_rf_root` just like the plain spelling. Raw matches are never
+  lost, and the benign-command precision gate is unchanged.
+
+### Changed
+- A bare string in `[scrubber] extra_secret_patterns` now fails with an error
+  that shows the expected `{ pattern = "…", replacement = "…" }` table form
+  instead of a generic serde type error.
+- `vallum run --help` now shows examples, including the `--` separator needed
+  when the wrapped command has flags of its own.
+
+### Documentation
+- README: documented the guardrail's honest scope (text-pattern matching is a
+  defense-in-depth speed bump, not a sandbox) and the broken-config fallback
+  behavior in hook mode vs direct `vallum run`.
+
 ## [0.5.0]
 
 ### Added
@@ -113,6 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.5.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.1
 [0.5.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.0
 [0.4.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.4.0
 [0.3.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.3.1
