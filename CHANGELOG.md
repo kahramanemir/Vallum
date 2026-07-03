@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0]
 
 ### Added
 - Chinese (zh) injection detection across all four pattern families
@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and mutation rows; provenance recorded in `evals/corpus/SOURCES.md`.
 - Recalibrated `MIN_INJECTION_RECALL` to the grown-corpus measurement
   (calibrate-to-measurement policy); precision 1.000 and benign FP 0.000 hold.
+
+### Documentation
+- Enriched the README title/intro and crates.io metadata (keywords,
+  categories, description) for discoverability.
 
 ## [0.3.1]
 
