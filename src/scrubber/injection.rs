@@ -145,10 +145,12 @@ fn injection_patterns() -> &'static [Regex] {
             Regex::new(r"新(指令|指示|任务)\s*[:：][^\n]*").unwrap(),
 
             // --- noun-free "disregard everything above" family: gated on a
-            // trailing action so "ignore everything above the fold" is benign ---
-            Regex::new(r"(?is)\b(ignore|disregard|forget)\b\s+(everything|all|the\s+above|above)\b.{0,30}?\b(and|then|instead|now|just|print|write|say|do|follow|output|execute|repeat|show)\b[^\n]*").unwrap(),
+            // directional word (above/before/prior/preceding/previously said)
+            // and a trailing action, so "ignore everything above the fold"
+            // and "let's forget everything and start over" stay benign ---
+            Regex::new(r"(?is)\b(ignore|disregard|forget)\b\s+((everything|all)\s+)?(the\s+)?(above|before|prior|preceding|previously\s+said)\b.{0,30}?\b(and|then|instead|now|just|print|write|say|do|follow|output|execute|repeat|show)\b[^\n]*").unwrap(),
             // --- DAN / persona jailbreak family ---
-            Regex::new(r"(?i)\bfrom now on\b[^\n]*\b(you|act|dan|unrestricted|no restrictions|jailbroken|pretend)\b[^\n]*").unwrap(),
+            Regex::new(r"(?i)\bfrom now on\b[^\n]*\b(act as|unrestricted|jailbroken|no restrictions|no content policy|pretend you|ignore\b[^\n]*\b(rules|instructions|guidelines))\b[^\n]*").unwrap(),
             Regex::new(r"(?i)\bact as\b\s+(an?\s+)?(dan|unrestricted|jailbroken|evil|unfiltered|uncensored)\b[^\n]*").unwrap(),
             Regex::new(r"(?i)\bpretend\b\s+(you\s+(are|can)|to\s+be)\b[^\n]*").unwrap(),
 
@@ -243,8 +245,8 @@ fn shadow_injection_patterns() -> &'static [Regex] {
             Regex::new(r"(你现在是|现在你是|从现在开始[，,]?你)[^\n]*").unwrap(),
             Regex::new(r"新(指令|指示|任务)\s*:[^\n]*").unwrap(),
 
-            Regex::new(r"(?is)\b(ignore|disregard|forget)\b\s+(everything|all|the\s+above|above)\b.{0,30}?\b(and|then|instead|now|just|print|write|say|do|follow|output|execute|repeat|show)\b[^\n]*").unwrap(),
-            Regex::new(r"(?i)\bfrom now on\b[^\n]*\b(you|act|dan|unrestricted|no restrictions|jailbroken|pretend)\b[^\n]*").unwrap(),
+            Regex::new(r"(?is)\b(ignore|disregard|forget)\b\s+((everything|all)\s+)?(the\s+)?(above|before|prior|preceding|previously\s+said)\b.{0,30}?\b(and|then|instead|now|just|print|write|say|do|follow|output|execute|repeat|show)\b[^\n]*").unwrap(),
+            Regex::new(r"(?i)\bfrom now on\b[^\n]*\b(act as|unrestricted|jailbroken|no restrictions|no content policy|pretend you|ignore\b[^\n]*\b(rules|instructions|guidelines))\b[^\n]*").unwrap(),
             Regex::new(r"(?i)\bact as\b\s+(an?\s+)?(dan|unrestricted|jailbroken|evil|unfiltered|uncensored)\b[^\n]*").unwrap(),
             Regex::new(r"(?i)\bpretend\b\s+(you\s+(are|can)|to\s+be)\b[^\n]*").unwrap(),
 
@@ -687,6 +689,18 @@ mod tests {
             "the migration guide explains how to act as a replica node",
             "from now on the cache is warmed on startup",
             "pretend mode is disabled in production config",
+        ] {
+            assert!(!scrub_injections(s, true).1, "benign flagged: {s}");
+        }
+    }
+
+    #[test]
+    fn en_persona_broad_benign_not_flagged() {
+        for s in [
+            "from now on you should submit reports by Friday",
+            "From now on, Dan will handle onboarding",
+            "let's forget everything and start over",
+            "ignore everything above the threshold of 100ms",
         ] {
             assert!(!scrub_injections(s, true).1, "benign flagged: {s}");
         }
