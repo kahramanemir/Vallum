@@ -50,7 +50,7 @@ fn hook_rewrites_bash_command() {
         "got: {stdout}"
     );
     assert!(
-        stdout.contains("vallum run -- bash -c 'git status'"),
+        stdout.contains("vallum run --policy-approved -- bash -c 'git status'"),
         "got: {stdout}"
     );
 }

@@ -59,6 +59,7 @@ mod tests {
             !dir.join("policy.log").exists(),
             "Allow verdict must not write policy.log"
         );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -77,5 +78,6 @@ mod tests {
             !dir.join("policy.log").exists(),
             "disabled logging must not write policy.log"
         );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -86,7 +86,15 @@ pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>)
     if TUI_SKIP.contains(&head) || head == "vallum" {
         return HookDecision::PassThrough;
     }
-    let wrapped = format!("vallum run -- bash -c {}", shell_escape(command));
+    // The hook is the single point of policy enforcement in hook mode. The
+    // wrapped command carries `--policy-approved` so the inner `vallum run` does
+    // NOT re-evaluate the policy — otherwise an approved Ask would be re-gated
+    // and (non-interactively) fail closed, and a user rule matching the
+    // `bash -c` wrapper could block even Allowed commands.
+    let wrapped = format!(
+        "vallum run --policy-approved -- bash -c {}",
+        shell_escape(command)
+    );
     if let Some(p) = policy {
         let v = p.evaluate(command);
         match v.action {
@@ -200,7 +208,10 @@ mod tests {
         let d = rewrite_decision("Bash", "git status", Some(&guardrail()));
         match d {
             HookDecision::Allow { command } => {
-                assert_eq!(command, "vallum run -- bash -c 'git status'")
+                assert_eq!(
+                    command,
+                    "vallum run --policy-approved -- bash -c 'git status'"
+                )
             }
             other => panic!("expected Allow, got {other:?}"),
         }
@@ -213,7 +224,10 @@ mod tests {
             HookDecision::Ask {
                 command, reason, ..
             } => {
-                assert_eq!(command, "vallum run -- bash -c 'rm -rf /'");
+                assert_eq!(
+                    command,
+                    "vallum run --policy-approved -- bash -c 'rm -rf /'"
+                );
                 assert!(reason.contains("root or home"));
             }
             other => panic!("expected Ask, got {other:?}"),
@@ -247,7 +261,10 @@ mod tests {
         let d = rewrite_decision("Bash", "rm -rf /", None);
         match d {
             HookDecision::Allow { command } => {
-                assert_eq!(command, "vallum run -- bash -c 'rm -rf /'")
+                assert_eq!(
+                    command,
+                    "vallum run --policy-approved -- bash -c 'rm -rf /'"
+                )
             }
             other => panic!("expected Allow, got {other:?}"),
         }

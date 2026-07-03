@@ -81,6 +81,7 @@ fn main() {
             json,
             strict,
             tee,
+            policy_approved,
             cmd,
             args,
         } => {
@@ -93,41 +94,50 @@ fn main() {
             };
 
             // --- Guardrail: evaluate the command before running it. ---
-            if config.security.guardrail {
-                if let Ok(policy) = vallum::policy::Policy::compile(&config.policy) {
-                    let command_line = if args.is_empty() {
-                        cmd.clone()
-                    } else {
-                        format!("{} {}", cmd, args.join(" "))
-                    };
-                    let verdict = policy.evaluate(&command_line);
-                    match verdict.action {
-                        vallum::policy::PolicyAction::Allow => {}
-                        vallum::policy::PolicyAction::Deny => {
-                            vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+            // `--policy-approved` means the hook already ruled on this exact
+            // command and re-wrapped it through `vallum run`; re-evaluating here
+            // would double-gate (and, being non-interactive, fail closed on an
+            // already-approved Ask), so we skip.
+            if config.security.guardrail && !*policy_approved {
+                // Unreachable Err: AppConfig::load() -> validate() already
+                // compiled every user regex, so a failure here means config
+                // drift. Fail closed rather than silently running ungated.
+                let policy = match vallum::policy::Policy::compile(&config.policy) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("Config Error: policy failed to compile: {}", e);
+                        std::process::exit(125);
+                    }
+                };
+                let command_line = if args.is_empty() {
+                    cmd.clone()
+                } else {
+                    format!("{} {}", cmd, args.join(" "))
+                };
+                let verdict = policy.evaluate(&command_line);
+                match verdict.action {
+                    vallum::policy::PolicyAction::Allow => {}
+                    vallum::policy::PolicyAction::Deny => {
+                        vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+                        emit_block(*json, &verdict, cmd, args);
+                    }
+                    vallum::policy::PolicyAction::Ask => {
+                        // Record the Ask once, whether it proceeds or blocks.
+                        vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+                        let assume_yes = config.security.assume_yes
+                            || std::env::var("VALLUM_ASSUME_YES")
+                                .map(|v| v == "1")
+                                .unwrap_or(false);
+                        let decision = if assume_yes {
+                            vallum::policy::AskDecision::Proceed
+                        } else if !*json && atty_stdin() {
+                            let resp = prompt_tty(&verdict.reason);
+                            vallum::policy::resolve_ask(false, true, resp.as_deref())
+                        } else {
+                            vallum::policy::resolve_ask(false, false, None)
+                        };
+                        if decision == vallum::policy::AskDecision::Blocked {
                             emit_block(*json, &verdict, cmd, args);
-                        }
-                        vallum::policy::PolicyAction::Ask => {
-                            let assume_yes = config.security.assume_yes
-                                || std::env::var("VALLUM_ASSUME_YES")
-                                    .map(|v| v == "1")
-                                    .unwrap_or(false);
-                            let decision = if assume_yes {
-                                vallum::policy::AskDecision::Proceed
-                            } else if !*json && atty_stdin() {
-                                let resp = prompt_tty(&verdict.reason);
-                                vallum::policy::resolve_ask(false, true, resp.as_deref())
-                            } else {
-                                vallum::policy::resolve_ask(false, false, None)
-                            };
-                            if decision == vallum::policy::AskDecision::Blocked {
-                                vallum::policy::audit::log_verdict(
-                                    &verdict,
-                                    &command_line,
-                                    &config,
-                                );
-                                emit_block(*json, &verdict, cmd, args);
-                            }
                         }
                     }
                 }
