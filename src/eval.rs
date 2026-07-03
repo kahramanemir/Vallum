@@ -15,6 +15,8 @@ pub struct InjectionRecord {
     pub category: String,
     #[serde(default)]
     pub gate: bool,
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +26,8 @@ pub struct BenignRecord {
     pub category: String,
     #[serde(default)]
     pub gate: bool,
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -398,12 +402,14 @@ mod tests {
                 lang: "en".into(),
                 category: "ignore".into(),
                 gate: true,
+                source: None,
             },
             InjectionRecord {
                 text: "hello world".into(),
                 lang: "en".into(),
                 category: "ignore".into(),
                 gate: false,
+                source: None,
             },
         ];
         let ben = vec![BenignRecord {
@@ -411,6 +417,7 @@ mod tests {
             lang: "en".into(),
             category: "log".into(),
             gate: true,
+            source: None,
         }];
         let m = evaluate_injections(&inj, &ben);
         // one true injection detected, one injection missed, benign clean.
