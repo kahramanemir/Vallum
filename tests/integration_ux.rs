@@ -56,6 +56,62 @@ fn hook_rewrites_bash_command() {
 }
 
 #[test]
+fn hook_broken_config_warns_and_keeps_builtin_guardrail() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let dir = std::env::temp_dir().join(format!(
+        "vallum_hook_brokencfg_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("config.toml");
+    // Missing closing quote: parse error. The user's deny rules are lost, but
+    // the hook must not fail open — built-ins still gate, and stderr says why.
+    std::fs::write(
+        &cfg,
+        "[[policy.rules]]\npattern = 'kubectl delete\naction = \"deny\"\nreason = \"no\"\n",
+    )
+    .unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let mut child = Command::new(bin)
+        .arg("hook")
+        .env("VALLUM_CONFIG", &cfg)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn vallum hook");
+
+    let stdin_input = r#"{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}"#;
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(stdin_input.as_bytes())
+        .unwrap();
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().expect("wait");
+    assert!(output.status.success(), "hook exited non-zero");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("\"permissionDecision\":\"ask\""),
+        "broken config must fall back to built-ins (ask), not allow; got: {stdout}"
+    );
+    assert!(
+        stderr.contains("config"),
+        "stderr must explain the config fallback; got: {stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn hook_silently_allows_non_bash_tool() {
     use std::io::Write;
     use std::process::{Command, Stdio};

@@ -134,9 +134,29 @@ pub fn run() -> i32 {
         Err(_) => return 0, // malformed input: allow normal flow
     };
 
-    let config = crate::config::AppConfig::load().unwrap_or_default();
+    // A broken config must not fail open silently: warn on stderr (Claude Code
+    // surfaces hook stderr) and keep gating with the built-in defaults. Only a
+    // *missing* file is a silent default (from_path returns Ok for that).
+    let config = match crate::config::AppConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "vallum hook: config error — user rules ignored, using built-in policy defaults \
+                 (run 'vallum doctor'): {e}"
+            );
+            crate::config::AppConfig::default()
+        }
+    };
     let policy = if config.security.guardrail {
-        Policy::compile(&config.policy).ok()
+        match Policy::compile(&config.policy) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("vallum hook: policy failed to compile, using built-in defaults: {e}");
+                // Built-ins are compile-tested; the hook's never-panic contract
+                // wins over expect() for this unreachable branch.
+                Policy::compile(&crate::config::PolicyConfig::default()).ok()
+            }
+        }
     } else {
         None
     };

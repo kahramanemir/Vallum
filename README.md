@@ -138,6 +138,19 @@ this layer existed. User rules are matched with the same most-severe-wins
 resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every non-Allow
 verdict is recorded (redacted) to `policy.log`.
 
+**Scope, honestly:** the guardrail matches patterns against the command text —
+it is a speed bump / defense-in-depth layer, not a sandbox. Commands are
+lightly normalized before matching (empty quote pairs and identity backslash
+escapes are stripped, so `r''m -rf /` or `\rm -rf /` still fire), but a
+determined actor can always get around text matching with variable or `eval`
+indirection. The output-side protections — secret scrubbing and injection
+defusal — do not depend on the guardrail and remain the backstop.
+
+If the config file is broken (TOML or regex error), hook mode logs a warning
+to stderr and keeps gating with the **built-in** rules; your custom rules are
+ignored until the config is fixed (`vallum doctor` pinpoints the error).
+Direct `vallum run` refuses to run at all (exit `125`) on a broken config.
+
 ## Measured detection
 
 The scrubber is evaluated against a committed, labeled corpus in
