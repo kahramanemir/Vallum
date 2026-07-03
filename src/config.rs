@@ -75,7 +75,11 @@ pub struct SecurityConfig {
 
 impl Default for SecurityConfig {
     fn default() -> Self {
-        Self { strict: false, guardrail: true, assume_yes: false }
+        Self {
+            strict: false,
+            guardrail: true,
+            assume_yes: false,
+        }
     }
 }
 
