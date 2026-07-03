@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub scrubber: ScrubberConfig,
     pub security: SecurityConfig,
     pub optimizer: OptimizerConfig,
+    pub policy: PolicyConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,11 +60,23 @@ impl Default for ScrubberConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SecurityConfig {
     /// Block the entire output when an injection is detected.
     pub strict: bool,
+    /// Enable the pre-exec guardrail/policy layer. Default on; all built-in
+    /// rules default to `ask`, so ordinary commands are unaffected.
+    pub guardrail: bool,
+    /// Auto-approve direct-mode `ask` verdicts (for scripts/CI). Also honored
+    /// via the `VALLUM_ASSUME_YES=1` environment variable.
+    pub assume_yes: bool,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self { strict: false, guardrail: true, assume_yes: false }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -80,6 +93,23 @@ pub struct OptimizerConfig {
 pub struct RedactionRule {
     pub pattern: String,
     pub replacement: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct PolicyConfig {
+    /// Extra user rules, evaluated together with the built-ins.
+    pub rules: Vec<PolicyRuleConfig>,
+    /// Built-in rule names to disable. `vallum doctor` warns on unknown names.
+    pub disabled: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyRuleConfig {
+    pub pattern: String,
+    /// "ask" | "deny" ("allow" is rejected — use [policy] disabled to suppress a built-in).
+    pub action: String,
+    pub reason: String,
 }
 
 impl Default for AuditConfig {
@@ -128,6 +158,27 @@ impl AppConfig {
         for rule in &self.scrubber.extra_secret_patterns {
             Regex::new(&rule.pattern)
                 .map_err(|e| format!("invalid scrubber regex '{}': {}", rule.pattern, e))?;
+        }
+        for rule in &self.policy.rules {
+            match rule.action.as_str() {
+                "ask" | "deny" => {}
+                "allow" => {
+                    return Err(format!(
+                        "policy rule action \"allow\" is not allowed (pattern '{}'); \
+                         user rules may only \"ask\" or \"deny\" — use [policy] disabled \
+                         to suppress a built-in",
+                        rule.pattern
+                    ))
+                }
+                other => {
+                    return Err(format!(
+                        "invalid policy rule action \"{}\" (pattern '{}'); expected \"ask\" or \"deny\"",
+                        other, rule.pattern
+                    ))
+                }
+            }
+            Regex::new(&rule.pattern)
+                .map_err(|e| format!("invalid policy regex '{}': {}", rule.pattern, e))?;
         }
         Ok(())
     }
@@ -275,5 +326,69 @@ extra_secret_patterns = [ { pattern = "token-(", replacement = "token-***" } ]
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("vallum_config_test_{}_{}", name, suffix))
+    }
+
+    fn write_tmp(name: &str, body: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "vallum_cfg_{}_{}",
+            name,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("config.toml");
+        std::fs::write(&p, body).unwrap();
+        p
+    }
+
+    #[test]
+    fn guardrail_defaults_on_assume_yes_off() {
+        let cfg = AppConfig::default();
+        assert!(cfg.security.guardrail);
+        assert!(!cfg.security.assume_yes);
+        assert!(cfg.policy.rules.is_empty());
+        assert!(cfg.policy.disabled.is_empty());
+    }
+
+    #[test]
+    fn policy_rule_parses_and_validates() {
+        let p = write_tmp(
+            "ok",
+            "[[policy.rules]]\npattern = 'terraform\\s+destroy'\naction = \"deny\"\nreason = \"blocked\"\n",
+        );
+        let cfg = AppConfig::from_path(&p).unwrap();
+        assert_eq!(cfg.policy.rules.len(), 1);
+        assert_eq!(cfg.policy.rules[0].action, "deny");
+    }
+
+    #[test]
+    fn policy_rule_allow_action_is_error() {
+        let p = write_tmp(
+            "allow",
+            "[[policy.rules]]\npattern = 'x'\naction = \"allow\"\nreason = \"r\"\n",
+        );
+        let err = AppConfig::from_path(&p).unwrap_err();
+        assert!(err.contains("allow"), "got: {err}");
+    }
+
+    #[test]
+    fn policy_rule_bad_regex_is_error() {
+        let p = write_tmp(
+            "badre",
+            "[[policy.rules]]\npattern = '('\naction = \"ask\"\nreason = \"r\"\n",
+        );
+        assert!(AppConfig::from_path(&p).is_err());
+    }
+
+    #[test]
+    fn policy_rule_unknown_action_is_error() {
+        let p = write_tmp(
+            "unk",
+            "[[policy.rules]]\npattern = 'x'\naction = \"warn\"\nreason = \"r\"\n",
+        );
+        let err = AppConfig::from_path(&p).unwrap_err();
+        assert!(err.contains("warn") || err.contains("action"), "got: {err}");
     }
 }
