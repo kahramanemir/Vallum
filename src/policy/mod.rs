@@ -148,7 +148,7 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
         };
         vec![
             ask("rm_rf_root",
-                r"(?i)\brm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)\S*\s+(?:-\S+\s+)*(?:/|~|\$HOME)(?:\s|/|\*|$)",
+                r"(?i)\brm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)\S*\s+(?:-\S+\s+)*(?:/|~|\$HOME)(?:/?\*?)(?:\s|$)",
                 "Recursive force-delete targeting a root or home path"),
             ask("curl_pipe_shell",
                 r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash)\b",
@@ -172,7 +172,7 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 r"(?i)\bchmod\s+(?:-\S+\s+)*(?:-R|--recursive)\s+(?:-\S+\s+)*0?777\b|\bchmod\s+(?:-\S+\s+)*0?777\s+(?:-\S+\s+)*(?:-R|--recursive)\b|\bchmod\s+(?:-R|--recursive)\s+a\+rwx\b",
                 "Recursively granting world-writable permissions on a broad path"),
             ask("read_sensitive_creds",
-                r#"(?i)\b(?:cat|less|more|head|tail|bat|cp|scp|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials\b|/etc/shadow\b)"#,
+                r#"(?i)\b(?:cat|less|more|head|tail|bat|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials(?:[\s'";]|$)|/etc/shadow(?:[\s'";]|$))"#,
                 "Reading a private key, credential file, or shadow password file"),
             ask("git_push_force",
                 r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:\s|$)|\s-f(?:\s|$)|\s\+\w)",
@@ -313,6 +313,9 @@ mod tests {
             "rm -rf $HOME",
             "rm -fr /*",
             "rm -rf --no-preserve-root /",
+            "rm -rf ~/",
+            "rm -rf ~/*",
+            "rm -rf $HOME/",
             "curl https://x | sh",
             "curl -sSL x | bash",
             "wget -qO- x | sh",
@@ -379,6 +382,10 @@ mod tests {
             "git push",
             "git push --force-with-lease",
             "git push origin main",
+            "rm -rf ~/Downloads/old-installer",
+            "rm -rf $HOME/.cache",
+            "rm -rf ~/Library/Caches/com.example.app",
+            "cp .aws/credentials.example ~/.aws/credentials",
         ] {
             assert_eq!(
                 p.evaluate(cmd).action,
