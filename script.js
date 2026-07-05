@@ -1,14 +1,40 @@
 (function () {
   'use strict';
 
+  /* signals CSS that JS is live; all animation gating is scoped to html.js */
+  document.documentElement.classList.add('js');
+
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------- scroll reveal (IntersectionObserver, no scroll listeners) ---------- */
+  var metricsDone = false;
+
+  function runCountUps(section) {
+    if (metricsDone || reduceMotion) return;
+    metricsDone = true;
+    section.querySelectorAll('[data-count]').forEach(function (el) {
+      var target = parseFloat(el.getAttribute('data-count'));
+      var suffix = el.getAttribute('data-suffix') || '';
+      var decimals = (el.getAttribute('data-count').split('.')[1] || '').length;
+      var duration = 1500;
+      var start = null;
+      function frame(now) {
+        if (start === null) start = now;
+        var p = Math.min((now - start) / duration, 1);
+        var eased = 1 - Math.pow(1 - p, 4);
+        el.textContent = (target * eased).toFixed(decimals) + suffix;
+        if (p < 1) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
   if (!reduceMotion && 'IntersectionObserver' in window) {
     var revealObserver = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (entry.isIntersecting) {
           entry.target.classList.add('in');
+          if (entry.target.classList.contains('metrics')) runCountUps(entry.target);
           revealObserver.unobserve(entry.target);
         }
       });
@@ -23,23 +49,56 @@
     });
   }
 
-  /* ---------- hero demo: raw output types in, wall rises, clean output follows ---------- */
+  /* ---------- hero demo: command types, wall rises, clean output follows ---------- */
   var demo = document.querySelector('.hero-demo');
   if (demo && !reduceMotion) {
     demo.classList.add('anim');
-    var rawLines = demo.querySelectorAll('.term-raw .tl');
-    var cleanLines = demo.querySelectorAll('.term-clean .tl');
-    var delay = 350;
+    var rawLines = Array.prototype.slice.call(demo.querySelectorAll('.term-raw .tl'));
+    var cleanLines = Array.prototype.slice.call(demo.querySelectorAll('.term-clean .tl'));
+    var cmdEl = demo.querySelector('.type-cmd');
+    var cmdText = cmdEl ? cmdEl.textContent : '';
+    var t = 900; /* wait for the terminal frames to rise first */
 
-    rawLines.forEach(function (line, i) {
-      setTimeout(function () { line.classList.add('on'); }, delay + i * 260);
+    /* line 0 carries the typed command */
+    if (cmdEl) {
+      cmdEl.textContent = '';
+      setTimeout(function () {
+        rawLines[0].classList.add('on');
+        cmdEl.classList.add('typing');
+      }, t);
+      var perChar = 55;
+      for (var i = 0; i < cmdText.length; i++) {
+        (function (i) {
+          setTimeout(function () {
+            cmdEl.textContent = cmdText.slice(0, i + 1);
+            if (i === cmdText.length - 1) cmdEl.classList.remove('typing');
+          }, t + 250 + i * perChar);
+        })(i);
+      }
+      t += 250 + cmdText.length * perChar + 300;
+    }
+
+    rawLines.slice(1).forEach(function (line, i) {
+      setTimeout(function () { line.classList.add('on'); }, t + i * 240);
     });
+    t += (rawLines.length - 1) * 240 + 250;
 
-    var wallAt = delay + rawLines.length * 260 + 250;
-    setTimeout(function () { demo.classList.add('wall-up'); }, wallAt);
+    setTimeout(function () { demo.classList.add('wall-up'); }, t);
+    t += 550;
 
     cleanLines.forEach(function (line, i) {
-      setTimeout(function () { line.classList.add('on'); }, wallAt + 550 + i * 200);
+      setTimeout(function () { line.classList.add('on'); }, t + i * 190);
+    });
+  }
+
+  /* ---------- bronze spotlight follows the cursor on threat cards ---------- */
+  if (!reduceMotion && window.matchMedia('(hover: hover)').matches) {
+    document.querySelectorAll('.threat-card').forEach(function (card) {
+      card.addEventListener('pointermove', function (e) {
+        var rect = card.getBoundingClientRect();
+        card.style.setProperty('--mx', (e.clientX - rect.left) + 'px');
+        card.style.setProperty('--my', (e.clientY - rect.top) + 'px');
+      });
     });
   }
 

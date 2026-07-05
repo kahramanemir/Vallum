@@ -78,9 +78,20 @@ body::before {
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(900px 500px at 70% -10%, rgba(201, 162, 77, 0.07), transparent 65%),
-    radial-gradient(700px 700px at 0% 110%, rgba(201, 162, 77, 0.04), transparent 60%);
+    radial-gradient(900px 500px at 70% -10%, rgba(201, 162, 77, 0.09), transparent 65%),
+    radial-gradient(700px 700px at 0% 110%, rgba(201, 162, 77, 0.05), transparent 60%);
   pointer-events: none;
+}
+
+/* film grain: fixed, non-interactive, above everything */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
 }
 
 ::selection { background: var(--accent-dim); color: var(--text); }
@@ -95,7 +106,7 @@ h1, h2 {
   color: var(--text);
 }
 
-h2 { font-size: clamp(1.55rem, 3vw, 2.1rem); }
+h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); }
 
 h3 {
   font-family: var(--sans);
@@ -189,13 +200,38 @@ section {
 /* ---------- hero ---------- */
 
 .hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 10fr) minmax(0, 11fr);
   gap: 3.5rem;
   align-items: center;
-  padding-top: 3.5rem;
-  min-height: min(78dvh, 760px);
+  padding-top: 5.5rem;
+  min-height: min(82dvh, 780px);
 }
+
+/* the carved inscription behind the hero */
+.inscription {
+  position: absolute;
+  top: -0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(4.5rem, 12vw, 10.5rem);
+  letter-spacing: 0.18em;
+  text-indent: 0.18em; /* balance the trailing tracking */
+  white-space: nowrap;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(201, 162, 77, 0.17);
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+@supports not (-webkit-text-stroke: 1px black) {
+  .inscription { color: rgba(201, 162, 77, 0.07); }
+}
+
+.hero-copy, .hero-demo { position: relative; z-index: 1; }
 
 .hero h1 {
   font-size: clamp(1.9rem, 2.9vw, 2.3rem);
@@ -217,6 +253,8 @@ section {
 }
 
 .install-chip {
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
@@ -231,6 +269,20 @@ section {
   transition: border-color 0.2s ease;
 }
 .install-chip:hover { border-color: var(--accent); }
+/* bronze sheen sweep on hover */
+.install-chip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 35%;
+  background: linear-gradient(100deg, transparent, rgba(221, 185, 104, 0.16), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.55s ease;
+  pointer-events: none;
+}
+.install-chip:hover::before { left: 115%; }
 .chip-prompt { color: var(--accent); }
 .chip-copy {
   font-family: var(--sans);
@@ -338,6 +390,8 @@ section {
 }
 
 .threat-card {
+  position: relative;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--bg1);
@@ -345,7 +399,21 @@ section {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+  transition: border-color 0.3s ease;
 }
+.threat-card:hover { border-color: var(--line-strong); }
+/* bronze torchlight follows the cursor */
+.threat-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(201, 162, 77, 0.09), transparent 65%);
+}
+.threat-card:hover::after { opacity: 1; }
 .threat-card p { color: var(--text2); font-size: 0.95rem; }
 
 .threat-main {
@@ -451,6 +519,50 @@ section {
   font-size: 0.9rem;
   max-width: 68ch;
 }
+
+/* ---------- optimizer marquee ---------- */
+
+.optimizer-marquee {
+  margin-top: 4.5rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 1.05rem 0;
+  overflow: hidden;
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+}
+.mq-set {
+  display: flex;
+  align-items: center;
+  gap: 3.2rem;
+  padding-right: 3.2rem;
+}
+.mq-item {
+  display: flex;
+  align-items: center;
+  gap: 3.2rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  color: var(--text3);
+  white-space: nowrap;
+}
+/* merlon block as separator */
+.mq-item::after {
+  content: '';
+  width: 12px;
+  height: 6px;
+  background: var(--accent);
+  opacity: 0.3;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .marquee-track { animation: marquee 32s linear infinite; }
+  @keyframes marquee {
+    to { transform: translateX(-50%); }
+  }
+}
 .pipeline-note code {
   font-size: 0.82rem;
   color: var(--text2);
@@ -533,9 +645,10 @@ section {
   display: block;
   font-family: var(--mono);
   font-weight: 600;
-  font-size: clamp(1.9rem, 3.4vw, 2.7rem);
+  font-size: clamp(2.3rem, 4.2vw, 3.4rem);
   color: var(--accent);
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 .stat-label {
   display: block;
@@ -549,6 +662,28 @@ section {
   color: var(--text2);
   font-size: 0.92rem;
   max-width: 62ch;
+}
+
+/* ---------- motto ---------- */
+
+.motto {
+  text-align: center;
+  padding-top: 8.5rem;
+}
+.motto-latin {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(1.7rem, 4.4vw, 3.1rem);
+  letter-spacing: 0.07em;
+  line-height: 1.25;
+  color: var(--text);
+  text-wrap: balance;
+}
+.motto-hl { color: var(--accent); }
+.motto-en {
+  margin-top: 1.1rem;
+  color: var(--text3);
+  font-size: 0.95rem;
 }
 
 /* ---------- install ---------- */
@@ -709,21 +844,48 @@ section {
 .footer-links a:hover { color: var(--accent-bright); }
 .footer-license { color: var(--text3); font-size: 0.85rem; }
 
-/* ---------- scroll reveal ---------- */
+/* ---------- motion ----------
+   All gating classes below are scoped to html.js (added by script.js) so
+   content stays visible with JavaScript disabled or in headless renderers. */
 
 @media (prefers-reduced-motion: no-preference) {
-  .reveal {
+  html.js .reveal {
     opacity: 0;
     transform: translateY(22px);
     transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1),
                 transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .reveal.in {
+  html.js .reveal.in {
     opacity: 1;
     transform: none;
   }
 
-  /* hero demo line-by-line entrance, driven by JS adding .play */
+  /* page-load choreography: the inscription carves in, content rises */
+  html.js .inscription {
+    animation: carve 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes carve {
+    from { opacity: 0; letter-spacing: 0.3em; }
+    to   { opacity: 1; letter-spacing: 0.18em; }
+  }
+  html.js .hero-copy > *,
+  html.js .hero-demo .term,
+  html.js .hero-demo .boundary {
+    opacity: 0;
+    transform: translateY(18px);
+    animation: rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  html.js .hero-copy h1 { animation-delay: 0.30s; }
+  html.js .hero-copy .hero-sub { animation-delay: 0.44s; }
+  html.js .hero-copy .hero-actions { animation-delay: 0.58s; }
+  html.js .hero-demo .term-raw { animation-delay: 0.50s; }
+  html.js .hero-demo .boundary { animation-delay: 0.62s; }
+  html.js .hero-demo .term-clean { animation-delay: 0.74s; }
+  @keyframes rise {
+    to { opacity: 1; transform: none; }
+  }
+
+  /* hero demo line-by-line entrance, driven by JS */
   .hero-demo.anim .tl {
     opacity: 0;
     transform: translateY(4px);
@@ -741,6 +903,52 @@ section {
   .hero-demo.anim.wall-up .boundary::before {
     transform: translateY(-50%) scaleX(1);
   }
+
+  /* typing caret on the demo command */
+  .type-cmd.typing::after {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 0.95em;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    background: var(--accent);
+    animation: caret 0.9s steps(1) infinite;
+  }
+  @keyframes caret {
+    50% { opacity: 0; }
+  }
+
+  /* pipeline gates light up in sequence */
+  html.js .gate {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.2s ease, color 0.2s ease;
+  }
+  html.js .pipeline.in .gate { opacity: 1; transform: none; }
+  html.js .pipeline.in .gate:nth-child(1) { transition-delay: 0.10s; }
+  html.js .pipeline.in .gate:nth-child(2) { transition-delay: 0.20s; }
+  html.js .pipeline.in .gate:nth-child(3) { transition-delay: 0.30s; }
+  html.js .pipeline.in .gate:nth-child(4) { transition-delay: 0.40s; }
+  html.js .pipeline.in .gate:nth-child(5) { transition-delay: 0.50s; }
+  html.js .pipeline.in .gate:nth-child(6) { transition-delay: 0.60s; }
+
+  /* guardrail verdicts stamp in like seals */
+  html.js .verdict-tag {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+  html.js .guardrail.in .verdict-tag {
+    animation: stamp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  html.js .guardrail.in .verdict:nth-child(1) .verdict-tag { animation-delay: 0.35s; }
+  html.js .guardrail.in .verdict:nth-child(2) .verdict-tag { animation-delay: 0.65s; }
+  html.js .guardrail.in .verdict:nth-child(3) .verdict-tag { animation-delay: 0.95s; }
+  @keyframes stamp {
+    to { opacity: 1; transform: scale(1); }
+  }
 }
 
 /* ---------- responsive ---------- */
@@ -750,8 +958,9 @@ section {
     grid-template-columns: 1fr;
     gap: 3rem;
     min-height: 0;
-    padding-top: 3rem;
+    padding-top: 4.5rem;
   }
+  .inscription { top: 0.4rem; }
   .guardrail {
     grid-template-columns: 1fr;
     gap: 2.5rem;
@@ -778,4 +987,6 @@ section {
   .gates { flex-direction: column; }
   .gate { min-width: 0; }
   .footer-inner { padding: 3rem 1.25rem 2.5rem; }
+  .motto { padding-top: 5.5rem; }
+  .optimizer-marquee { margin-top: 3rem; }
 }
