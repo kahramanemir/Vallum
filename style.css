@@ -40,6 +40,9 @@
   --red: #c9705f;
   --radius-panel: 10px;
   --radius-ctl: 8px;
+  /* one elevation for every raised panel: warm soft drop + hairline top light */
+  --shadow-panel: 0 22px 44px -20px rgba(0, 0, 0, 0.55),
+                  inset 0 1px 0 rgba(236, 231, 220, 0.04);
   --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --display: 'Cinzel', 'Times New Roman', serif;
@@ -95,6 +98,11 @@ body::after {
 }
 
 ::selection { background: var(--accent-dim); color: var(--text); }
+
+a:focus-visible, button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
 
 code { font-family: var(--mono); }
 
@@ -227,7 +235,7 @@ section {
   gap: 3.5rem;
   align-items: center;
   padding-top: 5.5rem;
-  min-height: min(82dvh, 780px);
+  min-height: min(74dvh, 700px);
 }
 
 /* the carved inscription behind the hero */
@@ -354,6 +362,7 @@ section {
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   overflow: hidden;
+  box-shadow: var(--shadow-panel);
 }
 
 .term-bar {
@@ -406,19 +415,29 @@ section {
   outline-offset: 2px;
   border-radius: var(--radius-ctl);
 }
-.boundary::before {
+/* mirrored rampart wings growing outward from the label */
+.boundary::before,
+.boundary::after {
   content: '';
   position: absolute;
-  left: 9%;
-  right: 9%;
   top: 50%;
   height: 8px;
+  width: calc(50% - 92px);
   transform: translateY(-50%);
-  /* crenellated rampart line */
+  opacity: 0.55;
+}
+.boundary::before {
+  right: calc(50% + 76px);
+  /* anchored at the label side so both wings mirror perfectly */
+  background: repeating-linear-gradient(270deg,
+    var(--accent) 0 14px,
+    transparent 14px 24px);
+}
+.boundary::after {
+  left: calc(50% + 76px);
   background: repeating-linear-gradient(90deg,
     var(--accent) 0 14px,
     transparent 14px 24px);
-  opacity: 0.55;
 }
 .boundary-label {
   position: relative;
@@ -428,7 +447,6 @@ section {
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--accent);
-  background: var(--bg0);
   padding: 0.15rem 1.1rem;
 }
 
@@ -453,6 +471,7 @@ section {
   flex-direction: column;
   gap: 0.8rem;
   transition: border-color 0.3s ease;
+  box-shadow: var(--shadow-panel);
 }
 .threat-card:hover { border-color: var(--line-strong); }
 /* bronze torchlight follows the cursor */
@@ -532,7 +551,7 @@ section {
 
 .wall {
   position: relative;
-  margin-top: 3rem;
+  margin-top: 2.6rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--bg1);
@@ -540,6 +559,7 @@ section {
   display: flex;
   align-items: center;
   gap: 1.4rem;
+  box-shadow: var(--shadow-panel);
 }
 /* crenellated top edge of the wall */
 .wall::before {
@@ -555,29 +575,32 @@ section {
   opacity: 0.45;
 }
 
-.wall-ends { flex-shrink: 0; }
+/* mirrored end labels, equal width, hugging the gates from both sides */
+.wall-ends { flex-shrink: 0; width: 96px; }
 .wall-end-label {
   font-family: var(--mono);
   font-size: 0.78rem;
   color: var(--text3);
-  writing-mode: horizontal-tb;
-  max-width: 90px;
-  display: inline-block;
+  display: block;
 }
-.wall-out .wall-end-label { color: var(--accent); }
+.wall-in .wall-end-label { text-align: right; }
+.wall-out .wall-end-label { color: var(--accent); text-align: left; }
 
 .gates {
   display: flex;
+  align-items: stretch;
   flex: 1;
   gap: 0.5rem;
   list-style: none;
-  counter-reset: gate;
   flex-wrap: wrap;
 }
 .gate {
   position: relative;
   flex: 1 1 0;
   min-width: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   font-family: var(--mono);
   font-size: 0.78rem;
@@ -605,6 +628,8 @@ section {
   border-bottom: 1px solid var(--line);
   padding: 1.05rem 0;
   overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
 }
 .marquee-track {
   display: flex;
@@ -671,6 +696,7 @@ section {
   border-radius: var(--radius-panel);
   background: var(--bg1);
   overflow: hidden;
+  box-shadow: var(--shadow-panel);
 }
 .verdict {
   display: flex;
@@ -713,7 +739,7 @@ section {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 2rem;
-  margin-top: 2.8rem;
+  margin-top: 2.6rem;
   padding-top: 2.4rem;
   border-top: 1px solid var(--line);
 }
@@ -777,11 +803,12 @@ section {
 /* ---------- install ---------- */
 
 .install-box {
-  margin-top: 2.4rem;
+  margin-top: 2.6rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--bg1);
   overflow: hidden;
+  box-shadow: var(--shadow-panel);
 }
 
 .tabs {
@@ -806,14 +833,19 @@ section {
 
 .tab-panel {
   display: none;
-  position: relative;
   padding: 1.4rem 1.5rem;
 }
-.tab-panel.active { display: block; }
+/* command and button share a row; the button never overlaps the code */
+.tab-panel.active {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+}
 
 .install-code {
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
-  padding-right: 4.5rem;
 }
 .install-code code {
   font-size: 0.85rem;
@@ -822,10 +854,7 @@ section {
 }
 
 .copy-btn {
-  position: absolute;
-  top: 50%;
-  right: 1.1rem;
-  transform: translateY(-50%);
+  flex-shrink: 0;
   font-family: var(--sans);
   font-size: 0.78rem;
   color: var(--text3);
@@ -848,6 +877,7 @@ section {
   border-radius: var(--radius-panel);
   background: linear-gradient(120deg, var(--bg2), var(--bg1) 60%);
   padding: 1.6rem 1.8rem;
+  box-shadow: var(--shadow-panel);
 }
 .hook-text p { color: var(--text2); font-size: 0.93rem; margin-top: 0.4rem; max-width: 46ch; }
 .hook-code {
@@ -1005,12 +1035,15 @@ section {
     opacity: 1;
     transform: none;
   }
-  .hero-demo.anim .boundary::before {
+  .hero-demo.anim .boundary::before,
+  .hero-demo.anim .boundary::after {
     transform: translateY(-50%) scaleX(0);
-    transform-origin: left;
     transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .hero-demo.anim.wall-up .boundary::before {
+  .hero-demo.anim .boundary::before { transform-origin: right; }
+  .hero-demo.anim .boundary::after { transform-origin: left; }
+  .hero-demo.anim.wall-up .boundary::before,
+  .hero-demo.anim.wall-up .boundary::after {
     transform: translateY(-50%) scaleX(1);
   }
 
@@ -1093,7 +1126,8 @@ section {
     align-items: stretch;
     text-align: center;
   }
-  .wall-end-label { max-width: none; }
+  .wall-ends { width: auto; }
+  .wall-in .wall-end-label, .wall-out .wall-end-label { text-align: center; }
   .gates { flex-direction: column; }
   .gate { min-width: 0; }
   .footer-inner { padding: 3rem 1.25rem 2.5rem; }
