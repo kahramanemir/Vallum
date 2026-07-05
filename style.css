@@ -175,6 +175,27 @@ section {
   margin: 0 auto;
 }
 
+/* reading progress along the rampart (scroll-driven, no JS) */
+@supports (animation-timeline: scroll()) {
+  .nav::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    height: 2px;
+    width: 100%;
+    background: var(--accent);
+    opacity: 0.65;
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: nav-progress linear both;
+    animation-timeline: scroll(root);
+  }
+  @keyframes nav-progress {
+    to { transform: scaleX(1); }
+  }
+}
+
 .wordmark {
   font-family: var(--display);
   font-weight: 700;
@@ -231,7 +252,33 @@ section {
   .inscription { color: rgba(201, 162, 77, 0.07); }
 }
 
+/* rising bronze embers over the wall at night */
+.embers {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .hero-copy, .hero-demo { position: relative; z-index: 1; }
+
+/* ambient torchlight behind the demo, cursor-tilted panel */
+.hero-demo::before {
+  content: '';
+  position: absolute;
+  inset: -12% -8%;
+  z-index: -1;
+  background: radial-gradient(60% 55% at 50% 45%, rgba(201, 162, 77, 0.10), transparent 70%);
+  pointer-events: none;
+}
+.demo-tilt {
+  display: flex;
+  flex-direction: column;
+  transform-style: preserve-3d;
+  transition: transform 0.18s ease-out;
+  will-change: transform;
+}
+.hero-demo { perspective: 1100px; }
 
 .hero h1 {
   font-size: clamp(1.9rem, 2.9vw, 2.3rem);
@@ -352,6 +399,12 @@ section {
   align-items: center;
   height: 44px;
   z-index: 1;
+  cursor: pointer;
+}
+.boundary:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-ctl);
 }
 .boundary::before {
   content: '';
@@ -438,10 +491,34 @@ section {
   display: flex;
   align-items: baseline;
   gap: 0.8rem;
+  flex-wrap: wrap;
 }
-.threat-figure .t-redact {
+
+/* live redaction micro-story: a leaked key is swept and sealed */
+.redact-target {
+  position: relative;
+  display: inline-block;
   font-family: var(--mono);
-  font-size: 1.15rem;
+  font-size: 1.02rem;
+  min-width: 20ch;
+}
+.redact-text { color: var(--accent-bright); white-space: nowrap; }
+.redact-target.raw .redact-text { color: #d8b58a; }
+.redact-cover {
+  position: absolute;
+  inset: -2px -5px;
+  background: var(--accent);
+  border-radius: 3px;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .redact-cover { transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+  .redact-target.covering .redact-cover { transform: scaleX(1); }
+  .redact-target.uncover .redact-cover {
+    transform-origin: right;
+    transform: scaleX(0);
+  }
 }
 .big-num {
   font-family: var(--mono);
@@ -670,6 +747,17 @@ section {
   text-align: center;
   padding-top: 8.5rem;
 }
+.motto::before {
+  content: '';
+  display: block;
+  width: 128px;
+  height: 7px;
+  margin: 0 auto 2.4rem;
+  background: repeating-linear-gradient(90deg,
+    var(--accent) 0 14px,
+    transparent 14px 24px);
+  opacity: 0.45;
+}
 .motto-latin {
   font-family: var(--display);
   font-weight: 700;
@@ -792,6 +880,28 @@ section {
   margin-top: 7rem;
   border-top: 1px solid var(--line);
   position: relative;
+  overflow: hidden;
+}
+
+/* monumental bookend: the inscription sinks below the page edge */
+.footer-inscription {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(4.5rem, 15vw, 12.5rem);
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
+  line-height: 0.78;
+  text-align: center;
+  white-space: nowrap;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(201, 162, 77, 0.11);
+  transform: translateY(0.16em);
+  margin-top: 2.5rem;
+  pointer-events: none;
+  user-select: none;
+}
+@supports not (-webkit-text-stroke: 1px black) {
+  .footer-inscription { color: rgba(201, 162, 77, 0.05); }
 }
 /* crenellation over the footer border: closing echo of the wall motif */
 .footer::before {

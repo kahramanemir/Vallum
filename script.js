@@ -5,17 +5,123 @@
   document.documentElement.classList.add('js');
 
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var canHover = window.matchMedia('(hover: hover)').matches;
 
-  /* ---------- scroll reveal (IntersectionObserver, no scroll listeners) ---------- */
+  /* ---------- rising embers over the hero (canvas) ---------- */
+  var emberCanvas = document.querySelector('.embers');
+  if (emberCanvas && !reduceMotion && emberCanvas.getContext) {
+    var ctx = emberCanvas.getContext('2d');
+    var hero = emberCanvas.parentElement;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var W = 0, H = 0;
+    var motes = [];
+    var running = false;
+    var rafId = 0;
+
+    function sizeCanvas() {
+      W = hero.clientWidth;
+      H = hero.clientHeight;
+      emberCanvas.width = W * dpr;
+      emberCanvas.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function spawn(anywhere) {
+      return {
+        x: Math.random() * W,
+        y: anywhere ? Math.random() * H : H + 6,
+        r: 0.7 + Math.random() * 1.7,
+        v: 14 + Math.random() * 22,          /* px per second, upward */
+        sway: 8 + Math.random() * 18,
+        phase: Math.random() * Math.PI * 2,
+        alpha: 0.18 + Math.random() * 0.4
+      };
+    }
+
+    function initMotes() {
+      var count = Math.round(Math.min(70, Math.max(30, W / 24)));
+      motes = [];
+      for (var i = 0; i < count; i++) motes.push(spawn(true));
+    }
+
+    var last = 0;
+    function tick(now) {
+      if (!running) return;
+      var dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      ctx.clearRect(0, 0, W, H);
+      for (var i = 0; i < motes.length; i++) {
+        var m = motes[i];
+        m.y -= m.v * dt;
+        m.phase += dt * 0.9;
+        var x = m.x + Math.sin(m.phase) * m.sway;
+        /* fade near the top third, glow strongest mid-flight */
+        var lifeFade = Math.max(0, Math.min(1, m.y / (H * 0.38)));
+        ctx.globalAlpha = m.alpha * lifeFade;
+        ctx.fillStyle = '#d9b264';
+        ctx.beginPath();
+        ctx.arc(x, m.y, m.r, 0, Math.PI * 2);
+        ctx.fill();
+        if (m.y < -8) motes[i] = spawn(false);
+      }
+      ctx.globalAlpha = 1;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function start() {
+      if (running) return;
+      running = true;
+      last = performance.now();
+      rafId = requestAnimationFrame(tick);
+    }
+    function stop() {
+      running = false;
+      cancelAnimationFrame(rafId);
+    }
+
+    sizeCanvas();
+    initMotes();
+
+    window.addEventListener('resize', function () {
+      sizeCanvas();
+      initMotes();
+    });
+
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        entries[0].isIntersecting ? start() : stop();
+      }, { threshold: 0 }).observe(hero);
+    } else {
+      start();
+    }
+  }
+
+  /* ---------- cursor tilt on the demo panel ---------- */
+  var heroDemo = document.querySelector('.hero-demo');
+  var tiltEl = document.querySelector('.demo-tilt');
+  if (heroDemo && tiltEl && !reduceMotion && canHover) {
+    heroDemo.addEventListener('pointermove', function (e) {
+      var rect = heroDemo.getBoundingClientRect();
+      var px = (e.clientX - rect.left) / rect.width - 0.5;
+      var py = (e.clientY - rect.top) / rect.height - 0.5;
+      tiltEl.style.transform =
+        'rotateY(' + (px * 3.4).toFixed(2) + 'deg) rotateX(' + (-py * 2.6).toFixed(2) + 'deg)';
+    });
+    heroDemo.addEventListener('pointerleave', function () {
+      tiltEl.style.transform = '';
+    });
+  }
+
+  /* ---------- metric count-ups ---------- */
   var metricsDone = false;
-
   function runCountUps(section) {
     if (metricsDone || reduceMotion) return;
     metricsDone = true;
     section.querySelectorAll('[data-count]').forEach(function (el) {
-      var target = parseFloat(el.getAttribute('data-count'));
+      var raw = el.getAttribute('data-count');
+      var target = parseFloat(raw);
       var suffix = el.getAttribute('data-suffix') || '';
-      var decimals = (el.getAttribute('data-count').split('.')[1] || '').length;
+      var decimals = (raw.split('.')[1] || '').length;
       var duration = 1500;
       var start = null;
       function frame(now) {
@@ -23,18 +129,47 @@
         var p = Math.min((now - start) / duration, 1);
         var eased = 1 - Math.pow(1 - p, 4);
         el.textContent = (target * eased).toFixed(decimals) + suffix;
-        if (p < 1) requestAnimationFrame(frame);
+        if (p < 1) {
+          requestAnimationFrame(frame);
+        } else {
+          el.textContent = raw + suffix; /* land exactly on the real value */
+        }
       }
       requestAnimationFrame(frame);
     });
   }
 
+  /* ---------- redaction micro-story in the secret leakage card ---------- */
+  var redactTarget = document.querySelector('.redact-target');
+  var redactText = document.querySelector('.redact-text');
+  var redactPlayed = false;
+  var RAW_KEY = 'AKIA2E51X9MT7EXAMPLE';
+  var REDACTED = redactText ? redactText.textContent : '';
+
+  if (redactTarget && redactText && !reduceMotion) {
+    redactTarget.classList.add('raw');
+    redactText.textContent = RAW_KEY;
+  }
+
+  function playRedaction() {
+    if (redactPlayed || !redactTarget || reduceMotion) return;
+    redactPlayed = true;
+    setTimeout(function () { redactTarget.classList.add('covering'); }, 700);
+    setTimeout(function () {
+      redactText.textContent = REDACTED;
+      redactTarget.classList.remove('raw');
+    }, 1250);
+    setTimeout(function () { redactTarget.classList.add('uncover'); }, 1400);
+  }
+
+  /* ---------- scroll reveal (IntersectionObserver, no scroll listeners) ---------- */
   if (!reduceMotion && 'IntersectionObserver' in window) {
     var revealObserver = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (entry.isIntersecting) {
           entry.target.classList.add('in');
           if (entry.target.classList.contains('metrics')) runCountUps(entry.target);
+          if (entry.target.id === 'threats') playRedaction();
           revealObserver.unobserve(entry.target);
         }
       });
@@ -49,50 +184,93 @@
     });
   }
 
-  /* ---------- hero demo: command types, wall rises, clean output follows ---------- */
-  var demo = document.querySelector('.hero-demo');
+  /* ---------- hero demo: typed command, wall sweep, sanitized output ---------- */
+  var demoTimers = [];
+  function schedule(fn, ms) { demoTimers.push(setTimeout(fn, ms)); }
+
+  var demo = heroDemo;
   if (demo && !reduceMotion) {
     demo.classList.add('anim');
     var rawLines = Array.prototype.slice.call(demo.querySelectorAll('.term-raw .tl'));
     var cleanLines = Array.prototype.slice.call(demo.querySelectorAll('.term-clean .tl'));
     var cmdEl = demo.querySelector('.type-cmd');
     var cmdText = cmdEl ? cmdEl.textContent : '';
-    var t = 900; /* wait for the terminal frames to rise first */
+    var tokEl = demo.querySelector('.tok-n');
+    var tokTarget = tokEl ? parseInt(tokEl.textContent.replace(/\D/g, ''), 10) : 0;
 
-    /* line 0 carries the typed command */
-    if (cmdEl) {
-      cmdEl.textContent = '';
-      setTimeout(function () {
-        rawLines[0].classList.add('on');
-        cmdEl.classList.add('typing');
-      }, t);
-      var perChar = 55;
-      for (var i = 0; i < cmdText.length; i++) {
-        (function (i) {
-          setTimeout(function () {
-            cmdEl.textContent = cmdText.slice(0, i + 1);
-            if (i === cmdText.length - 1) cmdEl.classList.remove('typing');
-          }, t + 250 + i * perChar);
-        })(i);
+    function countTokens() {
+      if (!tokEl) return;
+      var duration = 650;
+      var start = null;
+      function frame(now) {
+        if (start === null) start = now;
+        var p = Math.min((now - start) / duration, 1);
+        var eased = 1 - Math.pow(1 - p, 3);
+        tokEl.textContent = Math.round(tokTarget * eased);
+        if (p < 1) requestAnimationFrame(frame);
       }
-      t += 250 + cmdText.length * perChar + 300;
+      requestAnimationFrame(frame);
     }
 
-    rawLines.slice(1).forEach(function (line, i) {
-      setTimeout(function () { line.classList.add('on'); }, t + i * 240);
-    });
-    t += (rawLines.length - 1) * 240 + 250;
+    function playDemo(initial) {
+      demoTimers.forEach(clearTimeout);
+      demoTimers = [];
+      rawLines.concat(cleanLines).forEach(function (l) { l.classList.remove('on'); });
+      demo.classList.remove('wall-up');
+      if (cmdEl) { cmdEl.textContent = ''; cmdEl.classList.remove('typing'); }
+      if (tokEl) tokEl.textContent = '0';
 
-    setTimeout(function () { demo.classList.add('wall-up'); }, t);
-    t += 550;
+      var t = initial ? 900 : 250; /* first run waits for the frames to rise */
 
-    cleanLines.forEach(function (line, i) {
-      setTimeout(function () { line.classList.add('on'); }, t + i * 190);
-    });
+      if (cmdEl) {
+        schedule(function () {
+          rawLines[0].classList.add('on');
+          cmdEl.classList.add('typing');
+        }, t);
+        var perChar = 55;
+        for (var i = 0; i < cmdText.length; i++) {
+          (function (i) {
+            schedule(function () {
+              cmdEl.textContent = cmdText.slice(0, i + 1);
+              if (i === cmdText.length - 1) cmdEl.classList.remove('typing');
+            }, t + 250 + i * perChar);
+          })(i);
+        }
+        t += 250 + cmdText.length * perChar + 300;
+      }
+
+      rawLines.slice(1).forEach(function (line, i) {
+        schedule(function () { line.classList.add('on'); }, t + i * 240);
+      });
+      t += (rawLines.length - 1) * 240 + 250;
+
+      schedule(function () { demo.classList.add('wall-up'); }, t);
+      t += 550;
+
+      cleanLines.forEach(function (line, i) {
+        schedule(function () {
+          line.classList.add('on');
+          if (line.querySelector('.tok-n')) countTokens();
+        }, t + i * 190);
+      });
+    }
+
+    playDemo(true);
+
+    var boundary = demo.querySelector('.boundary');
+    if (boundary) {
+      boundary.addEventListener('click', function () { playDemo(false); });
+      boundary.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          playDemo(false);
+        }
+      });
+    }
   }
 
   /* ---------- bronze spotlight follows the cursor on threat cards ---------- */
-  if (!reduceMotion && window.matchMedia('(hover: hover)').matches) {
+  if (!reduceMotion && canHover) {
     document.querySelectorAll('.threat-card').forEach(function (card) {
       card.addEventListener('pointermove', function (e) {
         var rect = card.getBoundingClientRect();
