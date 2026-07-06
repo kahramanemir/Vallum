@@ -146,13 +146,13 @@ pub fn check_hook(settings_path: &Path) -> Check {
         Ok(settings) => {
             if crate::install_hook::has_vallum_hook(&settings) {
                 Check::new(
-                    "hook",
+                    "hook (claude)",
                     Status::Ok,
                     format!("installed in {}", settings_path.display()),
                 )
             } else {
                 Check::new(
-                    "hook",
+                    "hook (claude)",
                     Status::Warn,
                     format!(
                         "not installed in {} — run `vallum install-hook`",
@@ -161,7 +161,41 @@ pub fn check_hook(settings_path: &Path) -> Check {
                 )
             }
         }
-        Err(e) => Check::new("hook", Status::Fail, e),
+        Err(e) => Check::new("hook (claude)", Status::Fail, e),
+    }
+}
+
+/// Report hook status for one non-Claude agent. An absent agent config dir
+/// means the agent itself is not on this machine — Ok/skip, not a warning.
+/// Malformed JSON in an existing hooks file is a hard Fail (the hook may
+/// silently never fire).
+pub fn check_agent_hook(
+    label: &str,
+    agent_dir: &Path,
+    hooks_path: &Path,
+    agent_flag: &str,
+    has_hook: fn(&serde_json::Value) -> bool,
+) -> Check {
+    if !agent_dir.exists() {
+        return Check::new(label, Status::Ok, "agent not detected — skipped");
+    }
+    match crate::install_hook::read_settings(hooks_path) {
+        Ok(settings) => {
+            if has_hook(&settings) {
+                Check::new(
+                    label,
+                    Status::Ok,
+                    format!("installed in {}", hooks_path.display()),
+                )
+            } else {
+                Check::new(
+                    label,
+                    Status::Warn,
+                    format!("not installed — run `vallum install-hook --agent {agent_flag}`"),
+                )
+            }
+        }
+        Err(e) => Check::new(label, Status::Fail, e),
     }
 }
 
@@ -268,6 +302,7 @@ pub fn run() -> i32 {
         "vallum"
     };
 
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let checks = vec![
         check_config(&config_path),
         check_optimizer_names(&config.optimizer.disabled, &crate::optimizer::names()),
@@ -278,6 +313,27 @@ pub fn run() -> i32 {
             &crate::policy::builtin_names(),
         ),
         check_hook(&settings_path),
+        check_agent_hook(
+            "hook (cursor)",
+            &home.join(".cursor"),
+            &home.join(".cursor").join("hooks.json"),
+            "cursor",
+            crate::install_hook::cursor::has_hook,
+        ),
+        check_agent_hook(
+            "hook (gemini)",
+            &home.join(".gemini"),
+            &home.join(".gemini").join("settings.json"),
+            "gemini",
+            crate::install_hook::gemini::has_hook,
+        ),
+        check_agent_hook(
+            "hook (codex)",
+            &home.join(".codex"),
+            &home.join(".codex").join("hooks.json"),
+            "codex",
+            crate::install_hook::codex::has_hook,
+        ),
         check_binary_on_path(&path_var, exe),
         check_log_dir(&resolve_log_dir(&config)),
     ];
@@ -424,5 +480,70 @@ mod tests {
         let c = check_guardrail(true, &["nope".to_string()], 0, &["rm_rf_root"]);
         assert_eq!(c.status, Status::Warn);
         assert!(c.detail.contains("nope"));
+    }
+
+    fn vallum_cursor_has_hook(v: &serde_json::Value) -> bool {
+        crate::install_hook::cursor::has_hook(v)
+    }
+
+    #[test]
+    fn agent_hook_absent_agent_dir_is_ok_skip() {
+        let dir = temp_dir("noagent");
+        let c = check_agent_hook(
+            "hook (cursor)",
+            &dir.join("no-such-agent-dir"),
+            &dir.join("no-such-agent-dir/hooks.json"),
+            "cursor",
+            vallum_cursor_has_hook,
+        );
+        assert_eq!(c.status, Status::Ok);
+        assert!(c.detail.contains("not detected"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn agent_hook_states() {
+        let dir = temp_dir("agenthook");
+        let agent_dir = dir.join(".cursor");
+        std::fs::create_dir_all(&agent_dir).unwrap();
+        let hooks = agent_dir.join("hooks.json");
+
+        // Agent present, hook missing → Warn with the install command.
+        let c = check_agent_hook(
+            "hook (cursor)",
+            &agent_dir,
+            &hooks,
+            "cursor",
+            vallum_cursor_has_hook,
+        );
+        assert_eq!(c.status, Status::Warn);
+        assert!(c.detail.contains("vallum install-hook --agent cursor"));
+
+        // Installed → Ok.
+        std::fs::write(
+            &hooks,
+            r#"{"version":1,"hooks":{"beforeShellExecution":[{"command":"vallum hook --agent cursor"}]}}"#,
+        )
+        .unwrap();
+        let c = check_agent_hook(
+            "hook (cursor)",
+            &agent_dir,
+            &hooks,
+            "cursor",
+            vallum_cursor_has_hook,
+        );
+        assert_eq!(c.status, Status::Ok);
+
+        // Malformed → Fail.
+        std::fs::write(&hooks, "{not json").unwrap();
+        let c = check_agent_hook(
+            "hook (cursor)",
+            &agent_dir,
+            &hooks,
+            "cursor",
+            vallum_cursor_has_hook,
+        );
+        assert_eq!(c.status, Status::Fail);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
