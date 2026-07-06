@@ -118,12 +118,22 @@ fn main() {
                 match verdict.action {
                     vallum::policy::PolicyAction::Allow => {}
                     vallum::policy::PolicyAction::Deny => {
-                        vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+                        vallum::policy::audit::log_verdict(
+                            &verdict,
+                            &command_line,
+                            "direct",
+                            &config,
+                        );
                         emit_block(*json, &verdict, cmd, args);
                     }
                     vallum::policy::PolicyAction::Ask => {
                         // Record the Ask once, whether it proceeds or blocks.
-                        vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+                        vallum::policy::audit::log_verdict(
+                            &verdict,
+                            &command_line,
+                            "direct",
+                            &config,
+                        );
                         let assume_yes = config.security.assume_yes
                             || std::env::var("VALLUM_ASSUME_YES")
                                 .map(|v| v == "1")

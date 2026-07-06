@@ -124,12 +124,14 @@ pub fn run() -> i32 {
             reason,
             rule_name,
         } => {
-            let verdict = crate::policy::PolicyVerdict {
-                action: PolicyAction::Ask,
-                reason: reason.clone(),
+            super::audit_verdict(
+                PolicyAction::Ask,
+                reason.clone(),
                 rule_name,
-            };
-            crate::policy::audit::log_verdict(&verdict, &input.tool_input.command, &config);
+                &input.tool_input.command,
+                "claude",
+                &config,
+            );
             HookSpecificOutput {
                 hook_event_name: "PreToolUse",
                 permission_decision: "ask",
@@ -138,12 +140,14 @@ pub fn run() -> i32 {
             }
         }
         HookDecision::Deny { reason, rule_name } => {
-            let verdict = crate::policy::PolicyVerdict {
-                action: PolicyAction::Deny,
-                reason: reason.clone(),
+            super::audit_verdict(
+                PolicyAction::Deny,
+                reason.clone(),
                 rule_name,
-            };
-            crate::policy::audit::log_verdict(&verdict, &input.tool_input.command, &config);
+                &input.tool_input.command,
+                "claude",
+                &config,
+            );
             HookSpecificOutput {
                 hook_event_name: "PreToolUse",
                 permission_decision: "deny",

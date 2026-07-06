@@ -97,6 +97,24 @@ pub(crate) fn load_config_and_policy() -> (AppConfig, Option<Policy>) {
     (config, policy)
 }
 
+/// Audit an Ask/Deny policy verdict from a hook codec (one line in
+/// policy.log, redacted, best-effort).
+pub(crate) fn audit_verdict(
+    action: PolicyAction,
+    reason: String,
+    rule_name: String,
+    command: &str,
+    agent: &str,
+    cfg: &AppConfig,
+) {
+    let verdict = crate::policy::PolicyVerdict {
+        action,
+        reason,
+        rule_name,
+    };
+    crate::policy::audit::log_verdict(&verdict, command, agent, cfg);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
