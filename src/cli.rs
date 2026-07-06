@@ -10,6 +10,8 @@ pub enum AgentArg {
     Claude,
     /// Cursor (`beforeShellExecution`; verdicts only, native ask)
     Cursor,
+    /// Gemini CLI (`BeforeTool`; verdicts only, Ask fails closed)
+    Gemini,
 }
 
 #[derive(Parser, Debug)]

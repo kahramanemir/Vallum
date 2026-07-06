@@ -292,6 +292,7 @@ fn main() {
             let code = match agent {
                 vallum::cli::AgentArg::Claude => hook::claude::run(),
                 vallum::cli::AgentArg::Cursor => hook::cursor::run(),
+                vallum::cli::AgentArg::Gemini => hook::gemini::run(),
             };
             std::process::exit(code);
         }

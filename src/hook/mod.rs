@@ -3,6 +3,7 @@
 
 pub mod claude;
 pub mod cursor;
+pub mod gemini;
 
 use crate::config::AppConfig;
 use crate::policy::{Policy, PolicyAction};
@@ -130,6 +131,16 @@ pub(crate) fn run_codec(respond: fn(&str, Option<&Policy>, &AppConfig) -> Option
     0
 }
 
+/// Fail-closed Ask denial text for agents with no native "ask" (Gemini CLI,
+/// Codex CLI): actionable — tells the user how to run or unblock the command.
+pub(crate) fn fail_closed_ask_message(reason: &str, rule_name: &str, command: &str) -> String {
+    format!(
+        "Vallum guardrail: {reason}. If you intend this, run it yourself \
+         (`vallum run -- {command}`) or disable the rule \
+         (`[policy] disabled = [\"{rule_name}\"]`)."
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,5 +179,13 @@ mod tests {
     #[test]
     fn decide_without_policy_allows() {
         assert_eq!(decide("rm -rf /", None), Verdict::Allow);
+    }
+
+    #[test]
+    fn ask_message_names_rule_command_and_escape_hatch() {
+        let m = fail_closed_ask_message("force push", "git_push_force", "git push --force");
+        assert!(m.contains("Vallum guardrail: force push"));
+        assert!(m.contains("vallum run -- git push --force"));
+        assert!(m.contains("[policy] disabled = [\"git_push_force\"]"));
     }
 }
