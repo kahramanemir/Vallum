@@ -1,6 +1,6 @@
 # Vallum — a security boundary between AI coding agents and your shell
 
-*Prompt-injection defense, secret redaction, untrusted-output sanitization, and command auditing for AI coding agents — a single Rust CLI proxy that acts as an LLM security guardrail on your terminal. `vallum run` works with any agent that runs shell commands (Claude Code, Cursor, Codex, Gemini CLI, or your own agent); automatic zero-config interception ships for Claude Code today.*
+*Prompt-injection defense, secret redaction, untrusted-output sanitization, and command auditing for AI coding agents — a single Rust CLI proxy that acts as an LLM security guardrail on your terminal. `vallum run` works with any agent that runs shell commands (Claude Code, Cursor, Codex, Gemini CLI, or your own agent); the pre-exec Allow/Ask/Deny guardrail now hooks natively into all four agents, but automatic output-sanitization and token-optimization interception still ships for Claude Code only.*
 
 [![CI](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml)
 [![Security audit](https://github.com/kahramanemir/Vallum/actions/workflows/audit.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/audit.yml)
@@ -109,8 +109,11 @@ Built-in rules (all default to `Ask`):
 
 **How `Ask` surfaces:**
 
-- **Hook mode** (Claude Code): the verdict maps to Claude Code's native
+- **Hook mode (Claude Code, Cursor):** the verdict maps to the agent's native
   approval UI — `Ask` prompts you in the agent, `Deny` blocks the tool call.
+- **Hook mode (Gemini CLI, Codex CLI):** neither exposes a native "ask"
+  decision, so `Ask` is enforced as a **Deny** with an actionable reason —
+  see [Multi-agent guardrail](#multi-agent-guardrail) below.
 - **Direct `vallum run`:** `Ask` prompts on `/dev/tty`; when there is no
   terminal (piped, CI, `--json`) it **fails closed** (blocked) unless you
   set `security.assume_yes = true` or `VALLUM_ASSUME_YES=1`. A `Deny`
@@ -150,6 +153,62 @@ If the config file is broken (TOML or regex error), hook mode logs a warning
 to stderr and keeps gating with the **built-in** rules; your custom rules are
 ignored until the config is fixed (`vallum doctor` pinpoints the error).
 Direct `vallum run` refuses to run at all (exit `125`) on a broken config.
+
+## Multi-agent guardrail
+
+The pre-exec Allow/Ask/Deny guardrail hooks into four coding agents. Output
+sanitization and token optimization remain Claude Code + `vallum run` only —
+on the other agents Vallum gates commands but does not rewrite them.
+
+| Agent | Hook point | Ask behavior | Install |
+|---|---|---|---|
+| Claude Code | `PreToolUse` (allow/ask/deny + rewrite through `vallum run`) | native ask | `vallum install-hook` |
+| Cursor | `beforeShellExecution` (verdicts only) | native ask | `vallum install-hook --agent cursor` |
+| Gemini CLI | `BeforeTool` (verdicts only) | fail-closed deny with instructions | `vallum install-hook --agent gemini` |
+| Codex CLI | `PreToolUse` (verdicts only) | fail-closed deny with instructions | `vallum install-hook --agent codex` |
+
+All four installers write to a user-level config
+(`~/.claude/settings.json`, `~/.cursor/hooks.json`, `~/.gemini/settings.json`,
+`~/.codex/hooks.json`) — new agents are **user-level installs only**;
+`--project` remains Claude Code-specific. `uninstall-hook --agent <x>`
+removes exactly the entry the installer added, and `vallum doctor` reports
+per-agent status (`hook (claude)`, `hook (cursor)`, `hook (gemini)`,
+`hook (codex)`), showing "agent not detected — skipped" for agents that
+aren't installed on the machine. Every Ask/Deny verdict, on any agent, is
+still recorded to `policy.log` with `agent=<claude|cursor|gemini|codex|direct>`.
+
+Limitations, stated plainly:
+
+- **Ask degrades to deny on Gemini CLI and Codex CLI.** Neither exposes a
+  native "ask the user" decision, and emitting no decision would silently
+  become *allow* under auto-approve modes. Vallum fails closed instead: the
+  deny reason tells you how to run the command yourself (`vallum run -- <cmd>`)
+  or disable the rule (`[policy] disabled = ["<rule>"]`).
+- **Codex CLI does not intercept every shell call.** Codex's own hooks
+  documentation says it plainly: *"This doesn't intercept all shell calls
+  yet, only the simple ones. The newer `unified_exec` mechanism allows richer
+  streaming stdin/stdout handling of shell, but interception is incomplete.
+  Similarly, this doesn't intercept `WebSearch` or other non-shell, non-MCP
+  tool calls."* (source: <https://developers.openai.com/codex/hooks>,
+  verified live 2026-07-06). A command that Codex doesn't route through the
+  hook never reaches Vallum at all — there is no verdict, logged or
+  otherwise, for it.
+- **Verify enforcement after installing:** run a known-Ask command like
+  `git push --force` in the agent and expect a prompt (Claude Code, Cursor) or
+  a deny with instructions (Gemini CLI, Codex CLI). `vallum doctor` reports
+  per-agent install status.
+- **These hook protocols are young.** Every field name above was confirmed
+  live against each agent's current documentation on 2026-07-06 (see
+  `docs/superpowers/research/2026-07-06-agent-hook-protocols.md`), and that
+  pass already caught real drift from what was originally assumed — Cursor's
+  stdout fields renamed camelCase to snake_case at some point after a ~Oct
+  2025 walkthrough, and Codex's shell tool name turned out to be `Bash`, not
+  `shell` or `local_shell`. None of the three agents' docs carries an
+  explicit CLI version stamp to pin, so treat this as validated against each
+  agent's live documentation as of that date, not against a fixed release
+  number — if a future agent update renames its hook event, the hook simply
+  never fires again silently, so re-run the verification command above after
+  upgrading any of these agents.
 
 ## Measured detection
 
@@ -299,8 +358,9 @@ vallum stats --reset                 # delete collected stats
 # Integration & UX
 vallum install-hook                  # register vallum in ~/.claude/settings.json
 vallum install-hook --project        # register in <cwd>/.claude/settings.json
+vallum install-hook --agent cursor   # register in ~/.cursor/hooks.json (also: gemini, codex)
 vallum uninstall-hook                # remove the vallum hook entry
-vallum hook                          # internal: invoked by Claude Code (don't run directly)
+vallum hook                          # internal: invoked by the agent's hook config (don't run directly)
 vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
 vallum doctor                        # self-check: config, hook, guardrail, PATH, log dir
@@ -343,7 +403,7 @@ Note how a tiny output ends up *larger* after wrapping: the security wrapper has
 
 ## Claude Code integration
 
-`vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry. Other agents (Cursor, Codex, Gemini CLI) can still route commands through Vallum by invoking `vallum run` directly; a zero-config hook for them is on the roadmap.
+`vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry. Other agents (Cursor, Codex, Gemini CLI) can always route commands through Vallum by invoking `vallum run` directly, and now also have their own native pre-exec guardrail hooks (`vallum install-hook --agent <cursor|gemini|codex>`) — see [Multi-agent guardrail](#multi-agent-guardrail). Only Claude Code's hook rewrites the command through the full `vallum run` pipeline; the other three gate the command (Allow/Ask/Deny) without rewriting it.
 
 Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps simple scripts (no pipes, redirects, quoting, or other shell metacharacters) before optimizer matching, so `bash -c 'git status'` still hits the `git_status` optimizer; complex scripts fall back to generic compression. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are skipped because Vallum captures stdout and would break their TTY requirements. Commands already starting with `vallum` are skipped for idempotency.
 
@@ -413,8 +473,16 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/audit.rs`                | Append-only log writer                               |
 | `src/metrics.rs`              | Token estimation + JSONL stats writer                |
 | `src/stats.rs`                | `vallum stats` aggregation and reporting             |
-| `src/hook.rs`                 | Claude Code PreToolUse handler: rewrites Bash calls to `vallum run` |
-| `src/install_hook.rs`         | `install-hook`/`uninstall-hook`: read-modify-write of Claude Code settings.json |
+| `src/hook/mod.rs`             | Shared Allow/Ask/Deny decision core + stdin/stdout driver used by every agent codec |
+| `src/hook/claude.rs`          | Claude Code `PreToolUse` codec: rewrites approved Bash calls to `vallum run` |
+| `src/hook/cursor.rs`          | Cursor `beforeShellExecution` codec: native ask, verdicts only |
+| `src/hook/gemini.rs`          | Gemini CLI `BeforeTool` codec: verdicts only, Ask fails closed |
+| `src/hook/codex.rs`           | Codex CLI `PreToolUse` codec: verdicts only, Ask fails closed |
+| `src/install_hook/mod.rs`     | Shared JSON read-modify-write machinery for `install-hook`/`uninstall-hook` |
+| `src/install_hook/claude.rs`  | Claude Code installer: `~/.claude/settings.json` (or `--project`) |
+| `src/install_hook/cursor.rs`  | Cursor installer: `~/.cursor/hooks.json` |
+| `src/install_hook/gemini.rs`  | Gemini CLI installer: `~/.gemini/settings.json` |
+| `src/install_hook/codex.rs`   | Codex CLI installer: `~/.codex/hooks.json` |
 | `src/doctor.rs`               | `vallum doctor`: install/health self-checks (config, hook, PATH, log dir) |
 | `src/main.rs`                 | Pipeline wiring                                      |
 | `src/lib.rs`                  | Library surface — re-exports modules so integration tests can exercise internals |
@@ -440,7 +508,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Detection eval harness — externalized labeled corpus (`evals/corpus/*.jsonl`), confusion-matrix metrics with a committed `evals/report.md` (`cargo run --example eval`), and a CI recall-floor gate so detection claims stay tied to measured numbers
 - [x] Detection corpus growth + Chinese-language injection — corpus grown to 85 injection / 54 benign samples (curated deepset imports with per-row provenance), full zh ignore/reveal/override family coverage, EN "disregard above" + DAN/persona patterns, FR/ES/TR gaps closed; per-category recall table in the eval report
 - [x] Guardrail / policy layer — pre-exec Allow/Ask/Deny verdict on every command via the Claude Code hook and direct `vallum run` (deny → exit 125); ten narrow built-in rules for destructive commands, `[[policy.rules]]` config, redacted `policy.log` audit, benign-command precision gate, `vallum doctor` guardrail check
-- [ ] Multi-agent hook support — pre-exec guardrail via native hooks for Cursor, Gemini CLI, and Codex CLI
+- [x] Multi-agent hook support — pre-exec guardrail via native hooks for Cursor, Gemini CLI, and Codex CLI
 - [ ] Deferred — `cargo-fuzz`/libFuzzer harness, performance regression gating, Windows support (the `0600`/timeout-backed guarantees need a Windows equivalent first)
 
 ## Name
