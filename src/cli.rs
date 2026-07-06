@@ -3,6 +3,13 @@
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
+/// Agents Vallum can speak a pre-exec hook protocol for.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AgentArg {
+    /// Claude Code (`PreToolUse`; rewrites approved commands through `vallum run`)
+    Claude,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "vallum", version = env!("CARGO_PKG_VERSION"), about = "AI CLI Proxy")]
 pub struct Cli {
@@ -48,8 +55,12 @@ parsed as vallum's.")]
         #[arg(long)]
         reset: bool,
     },
-    /// Run as a Claude Code PreToolUse hook (reads JSON from stdin)
-    Hook,
+    /// Run as an agent pre-exec guardrail hook (reads JSON from stdin)
+    Hook {
+        /// Which agent's hook protocol to speak
+        #[arg(long, value_enum, default_value_t = AgentArg::Claude)]
+        agent: AgentArg,
+    },
     /// Install the Vallum PreToolUse hook in Claude Code's settings.json
     InstallHook {
         /// Install at user level (~/.claude/settings.json) — default

@@ -1,10 +1,9 @@
-//! Claude Code `PreToolUse` hook: rewrite Bash tool calls to run through `vallum run`.
+//! Claude Code `PreToolUse` codec: rewrite Bash tool calls through `vallum run`.
 
-// src/hook.rs — Claude Code PreToolUse hook implementation.
+use super::Verdict;
 use crate::policy::{Policy, PolicyAction};
 use serde::Deserialize;
 use serde::Serialize;
-use std::io::Read;
 
 #[derive(Deserialize)]
 struct HookInput {
@@ -46,13 +45,6 @@ struct UpdatedInput {
     command: String,
 }
 
-/// First-word skip list. Commands whose head matches one of these are passed
-/// through unchanged because Vallum's executor captures stdout and would break
-/// the interactive TTY they need.
-const TUI_SKIP: &[&str] = &[
-    "vim", "vi", "nano", "less", "more", "top", "htop", "tmux", "screen",
-];
-
 /// Result of `rewrite_decision`: what the hook should tell Claude Code to do
 /// with this `PreToolUse` invocation.
 #[derive(Debug)]
@@ -78,14 +70,6 @@ pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>)
     if tool_name != "Bash" {
         return HookDecision::PassThrough;
     }
-    let trimmed = command.trim_start();
-    if trimmed.is_empty() {
-        return HookDecision::PassThrough;
-    }
-    let head = trimmed.split_whitespace().next().unwrap_or("");
-    if TUI_SKIP.contains(&head) || head == "vallum" {
-        return HookDecision::PassThrough;
-    }
     // The hook is the single point of policy enforcement in hook mode. The
     // wrapped command carries `--policy-approved` so the inner `vallum run` does
     // NOT re-evaluate the policy — otherwise an approved Ask would be re-gated
@@ -95,26 +79,16 @@ pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>)
         "vallum run --policy-approved -- bash -c {}",
         shell_escape(command)
     );
-    if let Some(p) = policy {
-        let v = p.evaluate(command);
-        match v.action {
-            PolicyAction::Deny => {
-                return HookDecision::Deny {
-                    reason: v.reason,
-                    rule_name: v.rule_name,
-                }
-            }
-            PolicyAction::Ask => {
-                return HookDecision::Ask {
-                    command: wrapped,
-                    reason: v.reason,
-                    rule_name: v.rule_name,
-                }
-            }
-            PolicyAction::Allow => {}
-        }
+    match super::decide(command, policy) {
+        Verdict::PassThrough => HookDecision::PassThrough,
+        Verdict::Allow => HookDecision::Allow { command: wrapped },
+        Verdict::Ask { reason, rule_name } => HookDecision::Ask {
+            command: wrapped,
+            reason,
+            rule_name,
+        },
+        Verdict::Deny { reason, rule_name } => HookDecision::Deny { reason, rule_name },
     }
-    HookDecision::Allow { command: wrapped }
 }
 
 /// POSIX-safe single-quote shell escaping.
@@ -125,41 +99,15 @@ fn shell_escape(s: &str) -> String {
 /// Entry point invoked from main: read stdin JSON, decide, write stdout JSON,
 /// return the exit code (always 0 — even malformed input is silently allowed).
 pub fn run() -> i32 {
-    let mut buf = String::new();
-    if std::io::stdin().lock().read_to_string(&mut buf).is_err() {
+    let Some(buf) = super::read_stdin() else {
         return 0;
-    }
+    };
     let input: HookInput = match serde_json::from_str(&buf) {
         Ok(v) => v,
         Err(_) => return 0, // malformed input: allow normal flow
     };
 
-    // A broken config must not fail open silently: warn on stderr (Claude Code
-    // surfaces hook stderr) and keep gating with the built-in defaults. Only a
-    // *missing* file is a silent default (from_path returns Ok for that).
-    let config = match crate::config::AppConfig::load() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!(
-                "vallum hook: config error — user rules ignored, using built-in policy defaults \
-                 (run 'vallum doctor'): {e}"
-            );
-            crate::config::AppConfig::default()
-        }
-    };
-    let policy = if config.security.guardrail {
-        match Policy::compile(&config.policy) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                eprintln!("vallum hook: policy failed to compile, using built-in defaults: {e}");
-                // Built-ins are compile-tested; the hook's never-panic contract
-                // wins over expect() for this unreachable branch.
-                Policy::compile(&crate::config::PolicyConfig::default()).ok()
-            }
-        }
-    } else {
-        None
-    };
+    let (config, policy) = super::load_config_and_policy();
 
     let decision = rewrite_decision(&input.tool_name, &input.tool_input.command, policy.as_ref());
 

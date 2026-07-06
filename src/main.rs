@@ -278,8 +278,11 @@ fn main() {
                 }
             }
         }
-        Commands::Hook => {
-            std::process::exit(hook::run());
+        Commands::Hook { agent } => {
+            let code = match agent {
+                vallum::cli::AgentArg::Claude => hook::claude::run(),
+            };
+            std::process::exit(code);
         }
         Commands::InstallHook {
             user,
