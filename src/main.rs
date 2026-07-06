@@ -298,6 +298,7 @@ fn main() {
             std::process::exit(code);
         }
         Commands::InstallHook {
+            agent,
             user,
             project,
             force,
@@ -309,7 +310,14 @@ fn main() {
                     std::process::exit(125);
                 }
             };
-            match install_hook::install(level, *force) {
+            if *project && !matches!(agent, vallum::cli::AgentArg::Claude) {
+                eprintln!(
+                    "install-hook: --project is Claude Code-only; {:?} installs are user-level in v1",
+                    agent
+                );
+                std::process::exit(125);
+            }
+            match install_hook::install_agent(agent_from_arg(*agent), level, *force) {
                 Ok(msg) => println!("{msg}"),
                 Err(e) => {
                     eprintln!("install-hook: {e}");
@@ -317,7 +325,11 @@ fn main() {
                 }
             }
         }
-        Commands::UninstallHook { user, project } => {
+        Commands::UninstallHook {
+            agent,
+            user,
+            project,
+        } => {
             let level = match resolve_level(*user, *project) {
                 Ok(l) => l,
                 Err(msg) => {
@@ -325,7 +337,14 @@ fn main() {
                     std::process::exit(125);
                 }
             };
-            match install_hook::uninstall(level) {
+            if *project && !matches!(agent, vallum::cli::AgentArg::Claude) {
+                eprintln!(
+                    "uninstall-hook: --project is Claude Code-only; {:?} installs are user-level in v1",
+                    agent
+                );
+                std::process::exit(125);
+            }
+            match install_hook::uninstall_agent(agent_from_arg(*agent), level) {
                 Ok(msg) => println!("{msg}"),
                 Err(e) => {
                     eprintln!("uninstall-hook: {e}");
@@ -373,6 +392,17 @@ fn resolve_level(user: bool, project: bool) -> Result<Level, String> {
         (true, true) => Err("--user and --project are mutually exclusive".to_string()),
         (false, true) => Ok(Level::Project),
         _ => Ok(Level::User), // default
+    }
+}
+
+fn agent_from_arg(a: vallum::cli::AgentArg) -> vallum::install_hook::Agent {
+    use vallum::cli::AgentArg;
+    use vallum::install_hook::Agent;
+    match a {
+        AgentArg::Claude => Agent::Claude,
+        AgentArg::Cursor => Agent::Cursor,
+        AgentArg::Gemini => Agent::Gemini,
+        AgentArg::Codex => Agent::Codex,
     }
 }
 

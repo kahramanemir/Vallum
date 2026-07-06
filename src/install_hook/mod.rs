@@ -3,6 +3,9 @@
 //! config path, entry shape, and add/remove logic.
 
 pub mod claude;
+pub mod codex;
+pub mod cursor;
+pub mod gemini;
 
 pub use claude::{has_vallum_hook, settings_path};
 
@@ -131,14 +134,33 @@ pub(crate) fn merge_uninstall(
     })
 }
 
-/// Claude Code install at the given level (kept as the historical public API;
-/// per-agent dispatch arrives with the multi-agent installers).
-pub fn install(level: Level, force: bool) -> Result<String, String> {
-    claude::install(level, force)
+/// Agents Vallum can install a hook for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Agent {
+    Claude,
+    Cursor,
+    Gemini,
+    Codex,
 }
 
-pub fn uninstall(level: Level) -> Result<String, String> {
-    claude::uninstall(level)
+/// Per-agent install. Non-Claude agents are user-level only; `level` is
+/// validated at the CLI boundary before this is called.
+pub fn install_agent(agent: Agent, level: Level, force: bool) -> Result<String, String> {
+    match agent {
+        Agent::Claude => claude::install(level, force),
+        Agent::Cursor => cursor::install(force),
+        Agent::Gemini => gemini::install(force),
+        Agent::Codex => codex::install(force),
+    }
+}
+
+pub fn uninstall_agent(agent: Agent, level: Level) -> Result<String, String> {
+    match agent {
+        Agent::Claude => claude::uninstall(level),
+        Agent::Cursor => cursor::uninstall(),
+        Agent::Gemini => gemini::uninstall(),
+        Agent::Codex => codex::uninstall(),
+    }
 }
 
 #[cfg(test)]
