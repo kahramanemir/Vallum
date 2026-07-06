@@ -1,18 +1,8 @@
-//! Install/uninstall the Vallum `PreToolUse` hook in a Claude Code `settings.json`.
+//! Claude Code installer: merges a `PreToolUse` entry into settings.json.
 
-// src/install_hook.rs — install/uninstall the Vallum PreToolUse hook in
-// Claude Code's settings.json.
-
+use super::Level;
 use serde_json::{json, Value};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-#[derive(Debug, Clone, Copy)]
-pub enum Level {
-    User,
-    Project,
-}
+use std::path::PathBuf;
 
 /// Resolve the settings.json path for the given level.
 pub fn settings_path(level: Level) -> Result<PathBuf, String> {
@@ -26,24 +16,6 @@ pub fn settings_path(level: Level) -> Result<PathBuf, String> {
             Ok(cwd.join(".claude").join("settings.json"))
         }
     }
-}
-
-/// Read settings.json into a serde_json::Value. Missing file → empty object.
-/// Malformed file → Err with a hint to restore from backup.
-pub fn read_settings(path: &Path) -> Result<Value, String> {
-    if !path.exists() {
-        return Ok(json!({}));
-    }
-    let raw = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    if raw.trim().is_empty() {
-        return Ok(json!({}));
-    }
-    serde_json::from_str::<Value>(&raw).map_err(|e| {
-        format!(
-            "{} is not valid JSON ({e}); aborting to avoid clobbering it — restore from the most recent .bak-* if needed",
-            path.display()
-        )
-    })
 }
 
 /// Return true if `settings` already has a Vallum hook entry.
@@ -117,93 +89,22 @@ pub fn remove_vallum(settings: &mut Value) -> bool {
     before != arr.len()
 }
 
-fn backup_suffix() -> String {
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    format!(".bak-{ts}")
-}
-
-/// Backup, atomic-write replacement. Returns the backup path if one was made.
-fn write_atomic_with_backup(path: &Path, contents: &str) -> Result<Option<PathBuf>, String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
-    }
-    let backup = if path.exists() {
-        let mut bk = path.as_os_str().to_owned();
-        bk.push(backup_suffix());
-        let bk_path = PathBuf::from(bk);
-        fs::copy(path, &bk_path).map_err(|e| format!("backup {}: {e}", path.display()))?;
-        Some(bk_path)
-    } else {
-        None
-    };
-    let mut tmp = path.as_os_str().to_owned();
-    tmp.push(format!(".tmp-{}", std::process::id()));
-    let tmp_path = PathBuf::from(tmp);
-    fs::write(&tmp_path, contents).map_err(|e| format!("write {}: {e}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path).map_err(|e| format!("rename {}: {e}", path.display()))?;
-    Ok(backup)
-}
-
-/// Public install action.
 pub fn install(level: Level, force: bool) -> Result<String, String> {
-    let path = settings_path(level)?;
-    let mut settings = read_settings(&path)?;
-    if !settings.is_object() {
-        return Err(format!("{} root is not a JSON object", path.display()));
-    }
-    let added = add_vallum(&mut settings, force);
-    if !added {
-        return Ok(format!(
-            "Vallum hook already present in {}; pass --force to replace.",
-            path.display()
-        ));
-    }
-    let rendered =
-        serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize: {e}"))?;
-    let backup = write_atomic_with_backup(&path, &rendered)?;
-    Ok(match backup {
-        Some(b) => format!(
-            "Installed Vallum hook → {} (backup: {})",
-            path.display(),
-            b.display()
-        ),
-        None => format!("Installed Vallum hook → {}", path.display()),
-    })
+    super::merge_install(&settings_path(level)?, force, add_vallum, "Claude Code")
 }
 
-/// Public uninstall action.
 pub fn uninstall(level: Level) -> Result<String, String> {
-    let path = settings_path(level)?;
-    if !path.exists() {
-        return Ok(format!("{} does not exist; nothing to do.", path.display()));
-    }
-    let mut settings = read_settings(&path)?;
-    if !settings.is_object() {
-        return Err(format!("{} root is not a JSON object", path.display()));
-    }
-    let removed = remove_vallum(&mut settings);
-    if !removed {
-        return Ok(format!("No Vallum hook found in {}.", path.display()));
-    }
-    let rendered =
-        serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize: {e}"))?;
-    let backup = write_atomic_with_backup(&path, &rendered)?;
-    Ok(match backup {
-        Some(b) => format!(
-            "Removed Vallum hook from {} (backup: {})",
-            path.display(),
-            b.display()
-        ),
-        None => format!("Removed Vallum hook from {}", path.display()),
-    })
+    super::merge_uninstall(&settings_path(level)?, remove_vallum, "Claude Code")
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::read_settings;
     use super::*;
+    use serde_json::json;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_dir() -> PathBuf {
         let p = std::env::temp_dir().join(format!(
@@ -285,33 +186,5 @@ mod tests {
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["matcher"], "Edit");
-    }
-
-    #[test]
-    fn read_settings_refuses_malformed_json() {
-        let dir = temp_dir();
-        let path = dir.join("settings.json");
-        fs::write(&path, "{not valid json").unwrap();
-        let err = read_settings(&path).unwrap_err();
-        assert!(err.contains("not valid JSON"), "got: {err}");
-        assert!(
-            err.contains(".bak-"),
-            "should hint at backup recovery; got: {err}"
-        );
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn atomic_write_creates_backup() {
-        let dir = temp_dir();
-        let path = dir.join("settings.json");
-        fs::write(&path, r#"{"theme":"old"}"#).unwrap();
-        let backup = write_atomic_with_backup(&path, r#"{"theme":"new"}"#).unwrap();
-        let backup = backup.expect("backup expected when file pre-existed");
-        let backup_contents = fs::read_to_string(&backup).unwrap();
-        assert!(backup_contents.contains("\"old\""));
-        let current = fs::read_to_string(&path).unwrap();
-        assert!(current.contains("\"new\""));
-        let _ = fs::remove_dir_all(&dir);
     }
 }
