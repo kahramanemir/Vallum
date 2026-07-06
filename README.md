@@ -437,7 +437,11 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Sub-project K — broader infra/optimizer coverage: `kubectl get` (collapse healthy resource rows, keep problem-state pods) and `terraform plan|apply` (collapse refresh chatter + attribute diffs, keep action headers/summary/errors); expanded secret-format coverage (GitLab, SendGrid, Twilio, npm, PyPI, Hugging Face, OpenAI project keys, bare JWTs)
 - [x] Sub-project L — `vallum doctor` install/health self-check: validates the config file, flags unknown `[optimizer] disabled` names, reports hook installation, checks the binary is on `PATH`, and probes log-dir writability (exit non-zero only on hard failures)
 - [x] Sub-project M — distribution: `dist`-based tagged-release pipeline producing prebuilt binaries for macOS (Intel + ARM) and Linux (x86_64 + aarch64, musl static) with shell/Homebrew/`cargo install`/npm installers, SHA-256 checksums, and GitHub build-provenance attestations; crates.io publish on final tags; MSRV raised to 1.85 and the MSRV CI check pinned with `--locked`
-- [ ] Deferred — Chinese-language injection, `cargo-fuzz`/libFuzzer harness, performance regression gating, Windows support (the `0600`/timeout-backed guarantees need a Windows equivalent first)
+- [x] Detection eval harness — externalized labeled corpus (`evals/corpus/*.jsonl`), confusion-matrix metrics with a committed `evals/report.md` (`cargo run --example eval`), and a CI recall-floor gate so detection claims stay tied to measured numbers
+- [x] Detection corpus growth + Chinese-language injection — corpus grown to 85 injection / 54 benign samples (curated deepset imports with per-row provenance), full zh ignore/reveal/override family coverage, EN "disregard above" + DAN/persona patterns, FR/ES/TR gaps closed; per-category recall table in the eval report
+- [x] Guardrail / policy layer — pre-exec Allow/Ask/Deny verdict on every command via the Claude Code hook and direct `vallum run` (deny → exit 125); ten narrow built-in rules for destructive commands, `[[policy.rules]]` config, redacted `policy.log` audit, benign-command precision gate, `vallum doctor` guardrail check
+- [ ] Multi-agent hook support — pre-exec guardrail via native hooks for Cursor, Gemini CLI, and Codex CLI
+- [ ] Deferred — `cargo-fuzz`/libFuzzer harness, performance regression gating, Windows support (the `0600`/timeout-backed guarantees need a Windows equivalent first)
 
 ## Name
 
