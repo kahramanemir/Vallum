@@ -291,6 +291,7 @@ fn main() {
         Commands::Hook { agent } => {
             let code = match agent {
                 vallum::cli::AgentArg::Claude => hook::claude::run(),
+                vallum::cli::AgentArg::Codex => hook::codex::run(),
                 vallum::cli::AgentArg::Cursor => hook::cursor::run(),
                 vallum::cli::AgentArg::Gemini => hook::gemini::run(),
             };

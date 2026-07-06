@@ -2,6 +2,7 @@
 //! per-agent stdin/stdout protocol codecs.
 
 pub mod claude;
+pub mod codex;
 pub mod cursor;
 pub mod gemini;
 
