@@ -2,6 +2,7 @@
 //! per-agent stdin/stdout protocol codecs.
 
 pub mod claude;
+pub mod cursor;
 
 use crate::config::AppConfig;
 use crate::policy::{Policy, PolicyAction};
@@ -113,6 +114,20 @@ pub(crate) fn audit_verdict(
         rule_name,
     };
     crate::policy::audit::log_verdict(&verdict, command, agent, cfg);
+}
+
+/// Shared stdin→stdout driver for verdict-only codecs (Cursor, Gemini,
+/// Codex): read stdin, load policy fail-loud, print the codec's response
+/// if any. Exit code is always 0 — a hook must never break the agent turn.
+pub(crate) fn run_codec(respond: fn(&str, Option<&Policy>, &AppConfig) -> Option<String>) -> i32 {
+    let Some(raw) = read_stdin() else {
+        return 0;
+    };
+    let (config, policy) = load_config_and_policy();
+    if let Some(out) = respond(&raw, policy.as_ref(), &config) {
+        println!("{out}");
+    }
+    0
 }
 
 #[cfg(test)]

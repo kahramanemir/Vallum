@@ -8,6 +8,8 @@ use clap_complete::Shell;
 pub enum AgentArg {
     /// Claude Code (`PreToolUse`; rewrites approved commands through `vallum run`)
     Claude,
+    /// Cursor (`beforeShellExecution`; verdicts only, native ask)
+    Cursor,
 }
 
 #[derive(Parser, Debug)]

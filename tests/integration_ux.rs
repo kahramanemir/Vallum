@@ -219,3 +219,37 @@ fn completions_emits_a_bash_script() {
     assert!(!stdout.is_empty());
     assert!(stdout.contains("vallum"));
 }
+
+#[test]
+fn hook_cursor_ask_emits_native_ask_json() {
+    use std::io::Write as _;
+    let home = std::env::temp_dir().join(format!(
+        "vallum_cursor_hook_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&home).unwrap();
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_vallum"))
+        .arg("hook")
+        .arg("--agent")
+        .arg("cursor")
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .env("HOME", &home)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn vallum hook");
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(br#"{"command":"rm -rf /","hook_event_name":"beforeShellExecution"}"#)
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "hook exited non-zero");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"permission\":\"ask\""), "got: {stdout}");
+    let _ = std::fs::remove_dir_all(&home);
+}
