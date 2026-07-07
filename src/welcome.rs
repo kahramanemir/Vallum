@@ -128,6 +128,97 @@ pub fn render(status: &WelcomeStatus, use_color: bool) -> String {
     )
 }
 
+use std::path::{Path, PathBuf};
+
+/// Classify one agent's hook install state. Best-effort: every failure mode
+/// maps to a `HookState`, never an error.
+pub fn hook_state(
+    agent_dir: &Path,
+    hooks_path: &Path,
+    has_hook: fn(&serde_json::Value) -> bool,
+) -> HookState {
+    if !agent_dir.exists() {
+        return HookState::AgentAbsent;
+    }
+    match crate::install_hook::read_settings(hooks_path) {
+        Ok(settings) => {
+            if has_hook(&settings) {
+                HookState::Installed
+            } else {
+                HookState::NotInstalled
+            }
+        }
+        Err(_) => HookState::Unknown,
+    }
+}
+
+/// Guardrail summary from a config-load result. Active = built-ins minus
+/// disabled built-ins, plus user rules ([policy] disabled only filters
+/// built-in names, so user rules always count).
+pub fn guardrail_state(loaded: Result<crate::config::AppConfig, String>) -> GuardrailState {
+    match loaded {
+        Ok(cfg) if cfg.security.guardrail => {
+            let builtin_active = crate::policy::builtin_names()
+                .iter()
+                .filter(|name| !cfg.policy.disabled.iter().any(|d| d == *name))
+                .count();
+            GuardrailState::On {
+                active_rules: builtin_active + cfg.policy.rules.len(),
+            }
+        }
+        Ok(_) => GuardrailState::Off,
+        Err(_) => GuardrailState::Unknown,
+    }
+}
+
+/// Gather live status from the real environment. Never panics; every probe
+/// degrades to an "unknown"-ish state instead.
+pub fn gather() -> WelcomeStatus {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+
+    let claude_dir = home.join(".claude");
+    let claude_settings = crate::install_hook::settings_path(crate::install_hook::Level::User)
+        .unwrap_or_else(|_| claude_dir.join("settings.json"));
+
+    let config_path = crate::config::config_path_from_env_or_default();
+
+    WelcomeStatus {
+        guardrail: guardrail_state(crate::config::AppConfig::from_path(&config_path)),
+        claude: hook_state(
+            &claude_dir,
+            &claude_settings,
+            crate::install_hook::has_vallum_hook,
+        ),
+        codex: hook_state(
+            &home.join(".codex"),
+            &home.join(".codex").join("hooks.json"),
+            crate::install_hook::codex::has_hook,
+        ),
+        gemini: hook_state(
+            &home.join(".gemini"),
+            &home.join(".gemini").join("settings.json"),
+            crate::install_hook::gemini::has_hook,
+        ),
+        cursor: hook_state(
+            &home.join(".cursor"),
+            &home.join(".cursor").join("hooks.json"),
+            crate::install_hook::cursor::has_hook,
+        ),
+    }
+}
+
+/// Print the welcome screen to stdout. Color only on an interactive stdout
+/// with NO_COLOR unset and TERM != dumb.
+pub fn print() {
+    use std::io::IsTerminal;
+    let use_color = std::io::stdout().is_terminal()
+        && std::env::var_os("NO_COLOR").is_none()
+        && std::env::var_os("TERM")
+            .map(|t| t != "dumb")
+            .unwrap_or(true);
+    print!("{}", render(&gather(), use_color));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +291,85 @@ mod tests {
         let mut s = sample_status();
         s.gemini = HookState::Unknown;
         assert!(render(&s, false).contains("gemini ?"));
+    }
+
+    fn temp_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("vallum-welcome-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn hook_state_classifies_all_four_cases() {
+        let dir = temp_dir("hookstate");
+        let agent_dir = dir.join(".codex");
+        let hooks = agent_dir.join("hooks.json");
+
+        // Agent dir absent → AgentAbsent.
+        assert_eq!(
+            hook_state(&agent_dir, &hooks, crate::install_hook::codex::has_hook),
+            HookState::AgentAbsent
+        );
+
+        // Agent dir present, hooks file missing → NotInstalled.
+        std::fs::create_dir_all(&agent_dir).unwrap();
+        assert_eq!(
+            hook_state(&agent_dir, &hooks, crate::install_hook::codex::has_hook),
+            HookState::NotInstalled
+        );
+
+        // Vallum entry present → Installed.
+        std::fs::write(
+            &hooks,
+            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"vallum hook --agent codex"}]}]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            hook_state(&agent_dir, &hooks, crate::install_hook::codex::has_hook),
+            HookState::Installed
+        );
+
+        // Malformed JSON → Unknown.
+        std::fs::write(&hooks, "{not json").unwrap();
+        assert_eq!(
+            hook_state(&agent_dir, &hooks, crate::install_hook::codex::has_hook),
+            HookState::Unknown
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[allow(clippy::field_reassign_with_default)] // building config variants is clearer this way
+    fn guardrail_state_from_config_result() {
+        // Defaults: guardrail on, all built-ins active, no user rules.
+        let on = guardrail_state(Ok(crate::config::AppConfig::default()));
+        assert_eq!(
+            on,
+            GuardrailState::On {
+                active_rules: crate::policy::builtin_names().len()
+            }
+        );
+
+        // guardrail = false → Off.
+        let mut cfg = crate::config::AppConfig::default();
+        cfg.security.guardrail = false;
+        assert_eq!(guardrail_state(Ok(cfg)), GuardrailState::Off);
+
+        // Disabled built-in reduces the count.
+        let mut cfg = crate::config::AppConfig::default();
+        cfg.policy.disabled = vec!["rm_rf_root".to_string()];
+        assert_eq!(
+            guardrail_state(Ok(cfg)),
+            GuardrailState::On {
+                active_rules: crate::policy::builtin_names().len() - 1
+            }
+        );
+
+        // Broken config → Unknown.
+        assert_eq!(
+            guardrail_state(Err("boom".to_string())),
+            GuardrailState::Unknown
+        );
     }
 }
