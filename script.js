@@ -146,41 +146,45 @@
   var RAW_KEY = 'AKIA2E51X9MT7EXAMPLE';
   var REDACTED = redactText ? redactText.textContent : '';
 
-  if (redactTarget && redactText && !reduceMotion) {
-    redactTarget.classList.add('raw');
-    redactText.textContent = RAW_KEY;
-  }
-
+  /* The card ships with the sealed value in markup; the raw key only ever
+     appears as the opening beat of the animation, so a missed observer can
+     never leave a "leaked" key standing on screen. */
   function playRedaction() {
     if (redactPlayed || !redactTarget || reduceMotion) return;
     redactPlayed = true;
-    setTimeout(function () { redactTarget.classList.add('covering'); }, 700);
+    redactTarget.classList.add('raw');
+    redactText.textContent = RAW_KEY;
+    setTimeout(function () { redactTarget.classList.add('covering'); }, 900);
     setTimeout(function () {
       redactText.textContent = REDACTED;
       redactTarget.classList.remove('raw');
-    }, 1250);
-    setTimeout(function () { redactTarget.classList.add('uncover'); }, 1400);
+    }, 1450);
+    setTimeout(function () { redactTarget.classList.add('uncover'); }, 1600);
   }
 
-  /* ---------- scroll reveal (IntersectionObserver, no scroll listeners) ---------- */
+  /* ---------- scroll reveal (IntersectionObserver, no scroll listeners) ----------
+     Sections are visible by default; the observer only ADDS an entrance
+     animation. If a callback lands late or never (fast momentum scroll,
+     headless render), the content stands un-animated instead of blank. */
   if (!reduceMotion && 'IntersectionObserver' in window) {
     var revealObserver = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('in');
-          if (entry.target.classList.contains('metrics')) runCountUps(entry.target);
-          if (entry.target.id === 'threats') playRedaction();
-          revealObserver.unobserve(entry.target);
+        if (!entry.isIntersecting) return;
+        var el = entry.target;
+        /* Animate only a genuine entrance from below; when the observer
+           fires late the section is already on screen — re-hiding it to
+           replay the entrance would flash the content out. */
+        if (entry.boundingClientRect.top > window.innerHeight * 0.45) {
+          el.classList.add('in');
         }
+        if (el.classList.contains('metrics')) runCountUps(el);
+        if (el.id === 'threats') playRedaction();
+        revealObserver.unobserve(el);
       });
     }, { threshold: 0.15 });
 
     document.querySelectorAll('.reveal').forEach(function (el) {
       revealObserver.observe(el);
-    });
-  } else {
-    document.querySelectorAll('.reveal').forEach(function (el) {
-      el.classList.add('in');
     });
   }
 
@@ -197,6 +201,12 @@
     var cmdText = cmdEl ? cmdEl.textContent : '';
     var tokEl = demo.querySelector('.tok-n');
     var tokTarget = tokEl ? parseInt(tokEl.textContent.replace(/\D/g, ''), 10) : 0;
+    /* a phone scroller gives the hero ~2 seconds; the choreography must
+       land its payoff inside that window, so small screens play it fast */
+    var quick = window.matchMedia('(max-width: 768px)').matches;
+    var T = quick
+      ? { first: 350, pre: 140, perChar: 28, raw: 130, gap: 180, wall: 380, clean: 110 }
+      : { first: 900, pre: 250, perChar: 55, raw: 240, gap: 250, wall: 550, clean: 190 };
 
     function countTokens() {
       if (!tokEl) return;
@@ -220,38 +230,37 @@
       if (cmdEl) { cmdEl.textContent = ''; cmdEl.classList.remove('typing'); }
       if (tokEl) tokEl.textContent = '0';
 
-      var t = initial ? 900 : 250; /* first run waits for the frames to rise */
+      var t = initial ? T.first : 250; /* first run waits for the frames to rise */
 
       if (cmdEl) {
         schedule(function () {
           rawLines[0].classList.add('on');
           cmdEl.classList.add('typing');
         }, t);
-        var perChar = 55;
         for (var i = 0; i < cmdText.length; i++) {
           (function (i) {
             schedule(function () {
               cmdEl.textContent = cmdText.slice(0, i + 1);
               if (i === cmdText.length - 1) cmdEl.classList.remove('typing');
-            }, t + 250 + i * perChar);
+            }, t + T.pre + i * T.perChar);
           })(i);
         }
-        t += 250 + cmdText.length * perChar + 300;
+        t += T.pre + cmdText.length * T.perChar + T.gap;
       }
 
       rawLines.slice(1).forEach(function (line, i) {
-        schedule(function () { line.classList.add('on'); }, t + i * 240);
+        schedule(function () { line.classList.add('on'); }, t + i * T.raw);
       });
-      t += (rawLines.length - 1) * 240 + 250;
+      t += (rawLines.length - 1) * T.raw + T.gap;
 
       schedule(function () { demo.classList.add('wall-up'); }, t);
-      t += 550;
+      t += T.wall;
 
       cleanLines.forEach(function (line, i) {
         schedule(function () {
           line.classList.add('on');
           if (line.querySelector('.tok-n')) countTokens();
-        }, t + i * 190);
+        }, t + i * T.clean);
       });
     }
 
@@ -281,22 +290,48 @@
   }
 
   /* ---------- copy buttons ---------- */
-  function flash(el, selector) {
+  function flash(el, selector, message) {
     var target = selector ? el.querySelector(selector) : el;
     if (!target) return;
     var original = target.textContent;
-    target.textContent = 'Copied';
+    target.textContent = message;
     setTimeout(function () { target.textContent = original; }, 1400);
+  }
+
+  /* clipboard API with a legacy textarea fallback; the button always
+     answers, even when it has to say the copy failed */
+  function copyText(text, onDone, onFail) {
+    function legacy() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (ok) { onDone(); } else { onFail(); }
+      } catch (e) {
+        onFail();
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onDone, legacy);
+    } else {
+      legacy();
+    }
   }
 
   document.querySelectorAll('[data-copy]').forEach(function (el) {
     el.addEventListener('click', function () {
-      var text = el.getAttribute('data-copy');
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () {
-          flash(el, el.classList.contains('install-chip') ? '.chip-copy' : null);
-        });
-      }
+      var sel = el.classList.contains('install-chip') ? '.chip-copy' : null;
+      copyText(el.getAttribute('data-copy'), function () {
+        flash(el, sel, 'Copied');
+      }, function () {
+        flash(el, sel, 'Copy failed');
+      });
     });
   });
 

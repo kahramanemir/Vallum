@@ -32,7 +32,7 @@
   --line-strong: #383021;
   --text: #ece7dc;
   --text2: #b5aea0;
-  --text3: #837c6f;
+  --text3: #8b8376; /* ≥4.8:1 on every panel bg — AA for small text */
   --accent: #c9a24d;
   --accent-bright: #ddb968;
   --accent-dim: rgba(201, 162, 77, 0.16);
@@ -103,6 +103,21 @@ a:focus-visible, button:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 2px;
 }
+
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: 1rem;
+  z-index: 30;
+  background: var(--bg2);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-ctl);
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.skip-link:focus { top: 0.75rem; }
 
 code { font-family: var(--mono); }
 
@@ -617,7 +632,7 @@ section {
   margin-top: 1.6rem;
   color: var(--text3);
   font-size: 0.9rem;
-  max-width: 68ch;
+  max-width: 62ch;
 }
 
 /* ---------- optimizer marquee ---------- */
@@ -835,11 +850,30 @@ section {
   display: none;
   padding: 1.4rem 1.5rem;
 }
+.tab-panel.active { display: block; }
 /* command and button share a row; the button never overlaps the code */
-.tab-panel.active {
+.panel-row {
   display: flex;
   align-items: center;
   gap: 1.1rem;
+}
+.panel-row + .panel-row { margin-top: 0.65rem; }
+/* the honest beat: verify-before-you-pipe note inside the shell tab */
+.panel-verify {
+  margin-top: 1.1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+  color: var(--text2);
+  font-size: 0.86rem;
+  max-width: 62ch;
+}
+.panel-verify code {
+  font-size: 0.78rem;
+  color: var(--text2);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
 }
 
 .install-code {
@@ -893,7 +927,7 @@ section {
   margin-top: 1.6rem;
   color: var(--text3);
   font-size: 0.88rem;
-  max-width: 70ch;
+  max-width: 62ch;
 }
 .install-note code {
   font-size: 0.8rem;
@@ -989,15 +1023,14 @@ section {
    content stays visible with JavaScript disabled or in headless renderers. */
 
 @media (prefers-reduced-motion: no-preference) {
-  html.js .reveal {
-    opacity: 0;
-    transform: translateY(22px);
-    transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1),
-                transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
-  }
+  /* Entrances enhance an already-visible default: nothing rests at opacity 0,
+     so a skipped observer callback (fast momentum scroll, headless render)
+     can never blank a section — at worst it skips the animation. */
   html.js .reveal.in {
-    opacity: 1;
-    transform: none;
+    animation: reveal-rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes reveal-rise {
+    from { opacity: 0; transform: translateY(22px); }
   }
 
   /* page-load choreography: the inscription carves in, content rises */
@@ -1062,35 +1095,27 @@ section {
     50% { opacity: 0; }
   }
 
-  /* pipeline gates light up in sequence */
-  html.js .gate {
-    opacity: 0;
-    transform: translateY(10px);
-    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-                transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-                border-color 0.2s ease, color 0.2s ease;
+  /* pipeline gates light up in sequence — visible by default, animated
+     only while the section itself is playing its entrance */
+  html.js .pipeline.in .gate {
+    animation: reveal-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  html.js .pipeline.in .gate { opacity: 1; transform: none; }
-  html.js .pipeline.in .gate:nth-child(1) { transition-delay: 0.10s; }
-  html.js .pipeline.in .gate:nth-child(2) { transition-delay: 0.20s; }
-  html.js .pipeline.in .gate:nth-child(3) { transition-delay: 0.30s; }
-  html.js .pipeline.in .gate:nth-child(4) { transition-delay: 0.40s; }
-  html.js .pipeline.in .gate:nth-child(5) { transition-delay: 0.50s; }
-  html.js .pipeline.in .gate:nth-child(6) { transition-delay: 0.60s; }
+  html.js .pipeline.in .gate:nth-child(1) { animation-delay: 0.10s; }
+  html.js .pipeline.in .gate:nth-child(2) { animation-delay: 0.20s; }
+  html.js .pipeline.in .gate:nth-child(3) { animation-delay: 0.30s; }
+  html.js .pipeline.in .gate:nth-child(4) { animation-delay: 0.40s; }
+  html.js .pipeline.in .gate:nth-child(5) { animation-delay: 0.50s; }
+  html.js .pipeline.in .gate:nth-child(6) { animation-delay: 0.60s; }
 
-  /* guardrail verdicts stamp in like seals */
-  html.js .verdict-tag {
-    opacity: 0;
-    transform: scale(1.45);
-  }
+  /* guardrail verdicts stamp in like seals — same principle */
   html.js .guardrail.in .verdict-tag {
-    animation: stamp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: stamp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   html.js .guardrail.in .verdict:nth-child(1) .verdict-tag { animation-delay: 0.35s; }
   html.js .guardrail.in .verdict:nth-child(2) .verdict-tag { animation-delay: 0.65s; }
   html.js .guardrail.in .verdict:nth-child(3) .verdict-tag { animation-delay: 0.95s; }
   @keyframes stamp {
-    to { opacity: 1; transform: scale(1); }
+    from { opacity: 0; transform: scale(1.45); }
   }
 }
 
@@ -1116,9 +1141,11 @@ section {
 
 @media (max-width: 768px) {
   section { padding: 4.5rem 1.25rem 0; }
-  .nav { padding: 0 1.25rem; gap: 1.2rem; }
-  .nav-links { display: none; }
-  .nav-gh { margin-left: auto; }
+  .nav-inner { padding: 0 1.25rem; gap: 1.2rem; }
+  /* keep the one anchor that matters in the thumb's reach of a decision:
+     Install stays, the wayfinding links collapse */
+  .nav-links { gap: 1.1rem; }
+  .nav-links a:not(.nav-install) { display: none; }
   .threat-grid { grid-template-columns: 1fr; }
   .threat-main { grid-row: auto; }
   .wall {
