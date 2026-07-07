@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.1]
 
 ### Changed
 - `vallum doctor`'s `hook (codex)` line now reminds, on a successful install,
@@ -169,7 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
-[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.6.0...HEAD
+[0.6.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.6.1
 [0.6.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.6.0
 [0.5.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.1
 [0.5.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.0
