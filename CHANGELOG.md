@@ -5,6 +5,22 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `vallum doctor`'s `hook (codex)` line now reminds, on a successful install,
+  that Codex requires a one-time hook trust (and codex-cli ≥ 0.141) — Codex
+  silently skips untrusted hooks, and that trust state is invisible to Vallum.
+
+### Documentation
+- README + SECURITY.md: documented two live-verified Codex CLI findings
+  (2026-07-08, codex-cli 0.142.5): an installed-but-untrusted hook is skipped
+  without warning (fail-open until the one-time trust step), and hook-trust
+  handling in `codex exec` was only fixed in codex-cli 0.141.0
+  (openai/codex#26434) — on 0.139 the hook never fired at all. Enforcement
+  (Ask-rule deny, benign pass-through, `agent=codex` audit lines) verified
+  live end-to-end on 0.142.5.
+
 ## [0.6.0]
 
 ### Added
@@ -153,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.6.0...HEAD
 [0.6.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.6.0
 [0.5.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.1
 [0.5.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.0

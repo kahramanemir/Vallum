@@ -208,10 +208,24 @@ Limitations, stated plainly:
   verified live 2026-07-06). A command that Codex doesn't route through the
   hook never reaches Vallum at all — there is no verdict, logged or
   otherwise, for it.
+- **Codex CLI silently skips the hook until you trust it — and needs a
+  recent CLI.** Installing the hook is not enforcement on Codex: Codex
+  requires a one-time review of each hook definition ("Hooks need review →
+  Trust all and continue" in the Codex TUI; `--dangerously-bypass-hook-trust`
+  for automation), and until that happens the hook is *skipped without any
+  warning* while gated commands run unguarded. Version matters too: hook
+  trust handling in `codex exec` was fixed in codex-cli 0.141.0
+  (openai/codex#26434), and on 0.139 the installed hook never fired at all in
+  our tests. Verified live end-to-end on codex-cli 0.142.5 (2026-07-08): an
+  Ask-rule command was blocked with Vallum's deny message, a benign command
+  passed untouched, and both verdicts appeared in `policy.log` with
+  `agent=codex`. `vallum doctor` reminds you of the trust step on its
+  `hook (codex)` line — it cannot see Codex's trust state.
 - **Verify enforcement after installing:** run a known-Ask command like
   `git push --force` in the agent and expect a prompt (Claude Code, Cursor) or
-  a deny with instructions (Gemini CLI, Codex CLI). `vallum doctor` reports
-  per-agent install status.
+  a deny with instructions (Gemini CLI, Codex CLI). On Codex, complete the
+  hook-trust step first or the test will silently pass through. `vallum
+  doctor` reports per-agent install status.
 - **These hook protocols are young.** Every field name above was confirmed
   live against each agent's current documentation on 2026-07-06 (see
   `docs/superpowers/research/2026-07-06-agent-hook-protocols.md`), and that

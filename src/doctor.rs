@@ -168,13 +168,16 @@ pub fn check_hook(settings_path: &Path) -> Check {
 /// Report hook status for one non-Claude agent. An absent agent config dir
 /// means the agent itself is not on this machine — Ok/skip, not a warning.
 /// Malformed JSON in an existing hooks file is a hard Fail (the hook may
-/// silently never fire).
+/// silently never fire). `installed_note` qualifies a successful install with
+/// an agent-side caveat Vallum cannot verify from here (e.g. Codex's hook
+/// trust state).
 pub fn check_agent_hook(
     label: &str,
     agent_dir: &Path,
     hooks_path: &Path,
     agent_flag: &str,
     has_hook: fn(&serde_json::Value) -> bool,
+    installed_note: Option<&str>,
 ) -> Check {
     if !agent_dir.exists() {
         return Check::new(label, Status::Ok, "agent not detected — skipped");
@@ -182,11 +185,11 @@ pub fn check_agent_hook(
     match crate::install_hook::read_settings(hooks_path) {
         Ok(settings) => {
             if has_hook(&settings) {
-                Check::new(
-                    label,
-                    Status::Ok,
-                    format!("installed in {}", hooks_path.display()),
-                )
+                let detail = match installed_note {
+                    Some(note) => format!("installed in {} — {note}", hooks_path.display()),
+                    None => format!("installed in {}", hooks_path.display()),
+                };
+                Check::new(label, Status::Ok, detail)
             } else {
                 Check::new(
                     label,
@@ -319,6 +322,7 @@ pub fn run() -> i32 {
             &home.join(".cursor").join("hooks.json"),
             "cursor",
             crate::install_hook::cursor::has_hook,
+            None,
         ),
         check_agent_hook(
             "hook (gemini)",
@@ -326,6 +330,7 @@ pub fn run() -> i32 {
             &home.join(".gemini").join("settings.json"),
             "gemini",
             crate::install_hook::gemini::has_hook,
+            None,
         ),
         check_agent_hook(
             "hook (codex)",
@@ -333,6 +338,7 @@ pub fn run() -> i32 {
             &home.join(".codex").join("hooks.json"),
             "codex",
             crate::install_hook::codex::has_hook,
+            Some("requires one-time trust in Codex; until trusted, Codex silently skips it (needs codex >= 0.141)"),
         ),
         check_binary_on_path(&path_var, exe),
         check_log_dir(&resolve_log_dir(&config)),
@@ -495,6 +501,7 @@ mod tests {
             &dir.join("no-such-agent-dir/hooks.json"),
             "cursor",
             vallum_cursor_has_hook,
+            None,
         );
         assert_eq!(c.status, Status::Ok);
         assert!(c.detail.contains("not detected"));
@@ -515,6 +522,7 @@ mod tests {
             &hooks,
             "cursor",
             vallum_cursor_has_hook,
+            None,
         );
         assert_eq!(c.status, Status::Warn);
         assert!(c.detail.contains("vallum install-hook --agent cursor"));
@@ -531,6 +539,7 @@ mod tests {
             &hooks,
             "cursor",
             vallum_cursor_has_hook,
+            None,
         );
         assert_eq!(c.status, Status::Ok);
 
@@ -542,8 +551,48 @@ mod tests {
             &hooks,
             "cursor",
             vallum_cursor_has_hook,
+            None,
         );
         assert_eq!(c.status, Status::Fail);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn agent_hook_installed_note_is_appended_only_when_installed() {
+        let dir = temp_dir("agenthooknote");
+        let agent_dir = dir.join(".codex");
+        std::fs::create_dir_all(&agent_dir).unwrap();
+        let hooks = agent_dir.join("hooks.json");
+
+        // Not installed → Warn, note absent (it only qualifies an install).
+        let c = check_agent_hook(
+            "hook (codex)",
+            &agent_dir,
+            &hooks,
+            "codex",
+            crate::install_hook::codex::has_hook,
+            Some("requires one-time trust in Codex"),
+        );
+        assert_eq!(c.status, Status::Warn);
+        assert!(!c.detail.contains("one-time trust"));
+
+        // Installed → Ok, note appended after the path.
+        std::fs::write(
+            &hooks,
+            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"vallum hook --agent codex"}]}]}}"#,
+        )
+        .unwrap();
+        let c = check_agent_hook(
+            "hook (codex)",
+            &agent_dir,
+            &hooks,
+            "codex",
+            crate::install_hook::codex::has_hook,
+            Some("requires one-time trust in Codex"),
+        );
+        assert_eq!(c.status, Status::Ok);
+        assert!(c.detail.contains("installed in"));
+        assert!(c.detail.contains("requires one-time trust in Codex"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
