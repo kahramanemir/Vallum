@@ -1,0 +1,216 @@
+//! Pre-exec guardrail hooks: shared Allow/Ask/Deny decision core plus
+//! per-agent stdin/stdout protocol codecs.
+
+pub mod claude;
+pub mod codex;
+pub mod cursor;
+pub mod gemini;
+
+use crate::config::AppConfig;
+use crate::policy::{Policy, PolicyAction};
+use std::io::Read;
+
+/// First-word skip list. Commands whose head matches one of these are passed
+/// through unchanged because Vallum's executor captures stdout and would break
+/// the interactive TTY they need.
+pub(crate) const TUI_SKIP: &[&str] = &[
+    "vim", "vi", "nano", "less", "more", "top", "htop", "tmux", "screen",
+];
+
+/// Agent-neutral policy verdict for one command line.
+#[derive(Debug, PartialEq)]
+pub enum Verdict {
+    /// Not our concern — let the agent's normal flow proceed (emit nothing).
+    PassThrough,
+    /// Vallum has no objection.
+    Allow,
+    /// Policy wants explicit user confirmation.
+    Ask { reason: String, rule_name: String },
+    /// Policy refuses the command.
+    Deny { reason: String, rule_name: String },
+}
+
+/// Shared pass-through gates (empty command, TUI skip list, `vallum` head)
+/// plus policy evaluation. Every codec funnels through here.
+pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
+    let trimmed = command.trim_start();
+    if trimmed.is_empty() {
+        return Verdict::PassThrough;
+    }
+    let head = trimmed.split_whitespace().next().unwrap_or("");
+    if TUI_SKIP.contains(&head) || head == "vallum" {
+        return Verdict::PassThrough;
+    }
+    if let Some(p) = policy {
+        let v = p.evaluate(command);
+        match v.action {
+            PolicyAction::Deny => {
+                return Verdict::Deny {
+                    reason: v.reason,
+                    rule_name: v.rule_name,
+                }
+            }
+            PolicyAction::Ask => {
+                return Verdict::Ask {
+                    reason: v.reason,
+                    rule_name: v.rule_name,
+                }
+            }
+            PolicyAction::Allow => {}
+        }
+    }
+    Verdict::Allow
+}
+
+/// Read all of stdin. None on read error — codecs exit 0 silently.
+pub(crate) fn read_stdin() -> Option<String> {
+    let mut buf = String::new();
+    std::io::stdin().lock().read_to_string(&mut buf).ok()?;
+    Some(buf)
+}
+
+/// Load config and compile the policy under the hook's fail-loud contract:
+/// a broken config warns on stderr and keeps gating with built-in defaults
+/// (never fail-open, never crash the agent turn). A missing file is a silent
+/// default.
+pub(crate) fn load_config_and_policy() -> (AppConfig, Option<Policy>) {
+    let config = match AppConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "vallum hook: config error — user rules ignored, using built-in policy defaults \
+                 (run 'vallum doctor'): {e}"
+            );
+            AppConfig::default()
+        }
+    };
+    let policy = if config.security.guardrail {
+        match Policy::compile(&config.policy) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("vallum hook: policy failed to compile, using built-in defaults: {e}");
+                // Built-ins are compile-tested; the hook's never-panic contract
+                // wins over expect() for this unreachable branch.
+                Policy::compile(&crate::config::PolicyConfig::default()).ok()
+            }
+        }
+    } else {
+        None
+    };
+    (config, policy)
+}
+
+/// Audit an Ask/Deny policy verdict from a hook codec (one line in
+/// policy.log, redacted, best-effort).
+pub(crate) fn audit_verdict(
+    action: PolicyAction,
+    reason: String,
+    rule_name: String,
+    command: &str,
+    agent: &str,
+    cfg: &AppConfig,
+) {
+    let verdict = crate::policy::PolicyVerdict {
+        action,
+        reason,
+        rule_name,
+    };
+    crate::policy::audit::log_verdict(&verdict, command, agent, cfg);
+}
+
+/// Shared stdin→stdout driver for verdict-only codecs (Cursor, Gemini,
+/// Codex): read stdin, load policy fail-loud, print the codec's response
+/// if any. Exit code is always 0 — a hook must never break the agent turn.
+pub(crate) fn run_codec(respond: fn(&str, Option<&Policy>, &AppConfig) -> Option<String>) -> i32 {
+    let Some(raw) = read_stdin() else {
+        return 0;
+    };
+    let (config, policy) = load_config_and_policy();
+    if let Some(out) = respond(&raw, policy.as_ref(), &config) {
+        println!("{out}");
+    }
+    0
+}
+
+/// POSIX-safe single-quote shell escaping.
+pub(crate) fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// Fail-closed Ask denial text for agents with no native "ask" (Gemini CLI,
+/// Codex CLI): actionable — tells the user how to run or unblock the command.
+///
+/// The suggested command wraps the original in `bash -c` the same way the
+/// Claude codec does, so a piped/compound command (e.g. `curl x | sh`) is
+/// still gated as one unit instead of splitting across the user's own shell
+/// and running the second half ungated.
+pub(crate) fn fail_closed_ask_message(reason: &str, rule_name: &str, command: &str) -> String {
+    let escape_hatch = if rule_name.starts_with("user:") {
+        "or remove the matching [[policy.rules]] entry from your Vallum config \
+         (see `vallum config show`)"
+            .to_string()
+    } else {
+        format!("or disable the rule (`[policy] disabled = [\"{rule_name}\"]`)")
+    };
+    format!(
+        "Vallum guardrail: {reason}. If you intend this, run it yourself \
+         (`vallum run -- bash -c {}`) {escape_hatch}.",
+        shell_escape(command)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::PolicyConfig;
+
+    fn guardrail() -> Policy {
+        Policy::compile(&PolicyConfig::default()).unwrap()
+    }
+
+    #[test]
+    fn decide_gates_empty_tui_and_vallum_head() {
+        assert_eq!(decide("", Some(&guardrail())), Verdict::PassThrough);
+        assert_eq!(decide("   ", Some(&guardrail())), Verdict::PassThrough);
+        assert_eq!(
+            decide("vim /etc/passwd", Some(&guardrail())),
+            Verdict::PassThrough
+        );
+        assert_eq!(
+            decide("vallum run ls", Some(&guardrail())),
+            Verdict::PassThrough
+        );
+    }
+
+    #[test]
+    fn decide_maps_policy_verdicts() {
+        assert_eq!(decide("git status", Some(&guardrail())), Verdict::Allow);
+        match decide("rm -rf /", Some(&guardrail())) {
+            Verdict::Ask { reason, rule_name } => {
+                assert!(reason.contains("root or home"));
+                assert_eq!(rule_name, "rm_rf_root");
+            }
+            other => panic!("expected Ask, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decide_without_policy_allows() {
+        assert_eq!(decide("rm -rf /", None), Verdict::Allow);
+    }
+
+    #[test]
+    fn ask_message_names_rule_command_and_escape_hatch() {
+        let m = fail_closed_ask_message("force push", "git_push_force", "git push --force");
+        assert!(m.contains("Vallum guardrail: force push"));
+        assert!(m.contains("vallum run -- bash -c 'git push --force'"));
+        assert!(m.contains("[policy] disabled = [\"git_push_force\"]"));
+    }
+
+    #[test]
+    fn ask_message_user_rule_advises_config_edit() {
+        let m = fail_closed_ask_message("denied in test", "user:SECRETDROP", "echo SECRETDROP");
+        assert!(!m.contains("[policy] disabled"));
+        assert!(m.contains("[[policy.rules]]"));
+    }
+}

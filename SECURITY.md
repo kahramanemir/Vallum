@@ -146,6 +146,36 @@ cover `rm -rf` on a root/home path, `curl … | sh`, remote-fetch-and-exec,
 `chmod 777`, reading private keys / credential files / `/etc/shadow`, and
 `git push --force`. Users can add `ask`/`deny` rules under `[policy]`.
 
+**Enforcement points.** The same Allow/Ask/Deny decision core is reached from
+five call sites: direct `vallum run`, and four native pre-exec hooks — Claude
+Code `PreToolUse`, Cursor `beforeShellExecution`, Gemini CLI `BeforeTool`, and
+Codex CLI `PreToolUse`. Only the Claude Code hook rewrites the command through
+`vallum run` (full capture/scrub/optimize/wrap pipeline); the Cursor, Gemini
+CLI, and Codex CLI hooks gate the command (Allow/Ask/Deny) but do not rewrite
+it or run it through the output pipeline. Two principles hold across all four
+hooks:
+
+- **P1 — Allow never overrides the agent.** On Cursor, Gemini CLI, and Codex
+  CLI, an Allow verdict emits *no decision at all*, so whatever native
+  approval flow the agent itself has still runs; Vallum's hook only ever adds
+  friction on top, never removes it.
+- **P2 — Ask fails closed where there is no native ask.** Claude Code and
+  Cursor expose a native "ask the user" decision; Gemini CLI and Codex CLI do
+  not. On those two, an `Ask` verdict is enforced as a **Deny**, with a reason
+  that names the escape hatches — run it yourself with
+  `vallum run -- bash -c '<cmd>'` (the same `bash -c` wrapping the Claude hook
+  applies, so a piped/compound command like `curl … | sh` stays gated as one
+  unit instead of splitting across your own shell), or turn the rule off: for
+  a built-in, `[policy] disabled = ["<rule>"]`; for a user-defined rule
+  (named `user:<pattern>`, which `[policy] disabled` cannot touch), edit or
+  remove the matching `[[policy.rules]]` entry in your config instead.
+  Emitting no decision instead would silently become *allow* under an
+  agent's auto-approve mode, which is unacceptable for a security control.
+
+Every Ask/Deny verdict, on any of the five call sites, is still recorded
+(redacted) to `policy.log`, and the line now names which surface produced it:
+`agent=claude|cursor|gemini|codex|direct`.
+
 **Strength: best-effort.** This raises the cost of an *accidental* destructive
 command and gives the model (or you) a confirmation checkpoint — it is **not a
 sandbox**.
@@ -162,6 +192,26 @@ sandbox**.
   dangerous commands.
 - **Path-aware matching is deferred:** the guardrail cannot tell
   `rm -rf ./build` from `rm -rf /` beyond the literal patterns encoded today.
+- **Codex CLI does not intercept every shell call.** Per Codex's own hooks
+  documentation: "This doesn't intercept all shell calls yet, only the simple
+  ones. The newer `unified_exec` mechanism allows richer streaming
+  stdin/stdout handling of shell, but interception is incomplete. Similarly,
+  this doesn't intercept `WebSearch` or other non-shell, non-MCP tool calls."
+  A command Codex never routes through the hook reaches the shell with no
+  Vallum verdict at all — logged or otherwise. See the README's
+  [Multi-agent guardrail](README.md#multi-agent-guardrail) section for the
+  source link.
+- **Hook mode never evaluates TUI-headed commands.** Commands whose first
+  word is `vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, or
+  `screen` are passed straight through in all four agent hooks *before*
+  policy evaluation runs — e.g. `less /etc/shadow` never reaches the
+  guardrail at all, even though the built-in `read_sensitive_creds` rule
+  explicitly targets `less`/`more`, so a user (or an agent) can dodge that
+  rule by picking a skipped pager. The skip exists because rewriting these
+  commands through Vallum's output-capturing executor would break the
+  interactive TTY they require. The agent's own permission flow still applies
+  on top of this gap (see P1 above), and it is hook-mode-only: a direct
+  `vallum run -- less /etc/shadow` is still evaluated normally.
 - Setting `security.guardrail = false` disables the layer entirely (Vallum then
   behaves exactly as it did before it existed).
 
@@ -193,8 +243,11 @@ unaffected). Code signing / notarization is deferred.
 - **It cannot make the model obey.** Treating wrapped output as untrusted is
   prompt-side discipline; keep your agent instructed accordingly.
 - **It covers only what flows through it.** The Claude Code hook rewrites
-  Bash tool calls; file reads, web fetches, and other tools bypass Vallum
-  entirely.
+  Bash tool calls through the full output pipeline; the Cursor, Gemini CLI,
+  and Codex CLI hooks gate commands but never see or rewrite their output.
+  On every agent, file reads, web fetches, and other non-shell tools bypass
+  Vallum entirely — and on Codex CLI specifically, even some shell calls do
+  (see the guardrail's known gaps above).
 - **TUI commands bypass the pipeline.** The hook skips
   `vim`/`vi`/`nano`/`less`/`more`/`top`/`htop`/`tmux`/`screen` because
   capturing them would break their TTY requirements.

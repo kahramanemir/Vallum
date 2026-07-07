@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Multi-agent guardrail hooks.** `vallum hook --agent claude|cursor|gemini|codex`
+  extends the pre-exec Allow/Ask/Deny guardrail to Cursor
+  (`beforeShellExecution`, native ask), Gemini CLI (`BeforeTool`), and Codex
+  CLI (`PreToolUse`). On agents without a native ask, Ask fails closed as a
+  deny with instructions. `vallum install-hook --agent <x>` /
+  `uninstall-hook --agent <x>` perform idempotent JSON merges into each
+  agent's config; `vallum doctor` reports per-agent hook status; `policy.log`
+  lines now record `agent=`. Bare `vallum hook` still means Claude Code, and
+  Claude hook output is byte-identical to v0.5.1.
+
 ## [0.5.1]
 
 ### Fixed
@@ -140,6 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.5.1...HEAD
 [0.5.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.1
 [0.5.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.0
 [0.4.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.4.0

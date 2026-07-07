@@ -118,12 +118,22 @@ fn main() {
                 match verdict.action {
                     vallum::policy::PolicyAction::Allow => {}
                     vallum::policy::PolicyAction::Deny => {
-                        vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+                        vallum::policy::audit::log_verdict(
+                            &verdict,
+                            &command_line,
+                            "direct",
+                            &config,
+                        );
                         emit_block(*json, &verdict, cmd, args);
                     }
                     vallum::policy::PolicyAction::Ask => {
                         // Record the Ask once, whether it proceeds or blocks.
-                        vallum::policy::audit::log_verdict(&verdict, &command_line, &config);
+                        vallum::policy::audit::log_verdict(
+                            &verdict,
+                            &command_line,
+                            "direct",
+                            &config,
+                        );
                         let assume_yes = config.security.assume_yes
                             || std::env::var("VALLUM_ASSUME_YES")
                                 .map(|v| v == "1")
@@ -278,10 +288,17 @@ fn main() {
                 }
             }
         }
-        Commands::Hook => {
-            std::process::exit(hook::run());
+        Commands::Hook { agent } => {
+            let code = match agent {
+                vallum::cli::AgentArg::Claude => hook::claude::run(),
+                vallum::cli::AgentArg::Codex => hook::codex::run(),
+                vallum::cli::AgentArg::Cursor => hook::cursor::run(),
+                vallum::cli::AgentArg::Gemini => hook::gemini::run(),
+            };
+            std::process::exit(code);
         }
         Commands::InstallHook {
+            agent,
             user,
             project,
             force,
@@ -293,7 +310,14 @@ fn main() {
                     std::process::exit(125);
                 }
             };
-            match install_hook::install(level, *force) {
+            if *project && !matches!(agent, vallum::cli::AgentArg::Claude) {
+                eprintln!(
+                    "install-hook: --project is Claude Code-only; {:?} installs are user-level in v1",
+                    agent
+                );
+                std::process::exit(125);
+            }
+            match install_hook::install_agent(agent_from_arg(*agent), level, *force) {
                 Ok(msg) => println!("{msg}"),
                 Err(e) => {
                     eprintln!("install-hook: {e}");
@@ -301,7 +325,11 @@ fn main() {
                 }
             }
         }
-        Commands::UninstallHook { user, project } => {
+        Commands::UninstallHook {
+            agent,
+            user,
+            project,
+        } => {
             let level = match resolve_level(*user, *project) {
                 Ok(l) => l,
                 Err(msg) => {
@@ -309,7 +337,14 @@ fn main() {
                     std::process::exit(125);
                 }
             };
-            match install_hook::uninstall(level) {
+            if *project && !matches!(agent, vallum::cli::AgentArg::Claude) {
+                eprintln!(
+                    "uninstall-hook: --project is Claude Code-only; {:?} installs are user-level in v1",
+                    agent
+                );
+                std::process::exit(125);
+            }
+            match install_hook::uninstall_agent(agent_from_arg(*agent), level) {
                 Ok(msg) => println!("{msg}"),
                 Err(e) => {
                     eprintln!("uninstall-hook: {e}");
@@ -357,6 +392,17 @@ fn resolve_level(user: bool, project: bool) -> Result<Level, String> {
         (true, true) => Err("--user and --project are mutually exclusive".to_string()),
         (false, true) => Ok(Level::Project),
         _ => Ok(Level::User), // default
+    }
+}
+
+fn agent_from_arg(a: vallum::cli::AgentArg) -> vallum::install_hook::Agent {
+    use vallum::cli::AgentArg;
+    use vallum::install_hook::Agent;
+    match a {
+        AgentArg::Claude => Agent::Claude,
+        AgentArg::Cursor => Agent::Cursor,
+        AgentArg::Gemini => Agent::Gemini,
+        AgentArg::Codex => Agent::Codex,
     }
 }
 
