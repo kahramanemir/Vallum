@@ -201,6 +201,18 @@ sandbox**.
   Vallum verdict at all — logged or otherwise. See the README's
   [Multi-agent guardrail](README.md#multi-agent-guardrail) section for the
   source link.
+- **Codex CLI skips untrusted hooks silently (fail-open until trusted).**
+  Codex only runs a hook after its exact definition has been reviewed and
+  trusted once (Codex TUI review flow, or `--dangerously-bypass-hook-trust`
+  for automation); an installed-but-untrusted hook is skipped with no warning
+  and gated commands execute unguarded. This trust state lives inside Codex
+  and is invisible to Vallum — `vallum install-hook --agent codex` succeeding
+  and `vallum doctor` reporting "installed" do **not** imply enforcement.
+  Hook-trust handling in `codex exec` was fixed in codex-cli 0.141.0
+  (openai/codex#26434); on 0.139 the hook never fired at all in our tests.
+  Enforcement verified live on codex-cli 0.142.5 (2026-07-08). After
+  installing (or upgrading Codex), verify with a known-Ask command and expect
+  a deny.
 - **Hook mode never evaluates TUI-headed commands.** Commands whose first
   word is `vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, or
   `screen` are passed straight through in all four agent hooks *before*
