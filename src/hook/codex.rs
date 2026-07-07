@@ -146,7 +146,7 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(reason.contains("Vallum guardrail:"));
-        assert!(reason.contains("vallum run -- rm -rf /"));
+        assert!(reason.contains("vallum run -- bash -c 'rm -rf /'"));
     }
 
     #[test]

@@ -80,7 +80,9 @@ guaranteed.
 ## Guardrail / policy
 
 Vallum evaluates every command *before it executes* and returns one of three
-verdicts:
+verdicts — with one narrow exception in hook mode (TUI-headed commands like
+`less`/`vim` are skipped, not evaluated; see
+[SECURITY.md](SECURITY.md#dangerous-command-execution-guardrail)):
 
 - **Allow** — runs normally (the default for anything no rule matches).
 - **Ask** — pauses for explicit confirmation before running.
@@ -182,8 +184,17 @@ Limitations, stated plainly:
 - **Ask degrades to deny on Gemini CLI and Codex CLI.** Neither exposes a
   native "ask the user" decision, and emitting no decision would silently
   become *allow* under auto-approve modes. Vallum fails closed instead: the
-  deny reason tells you how to run the command yourself (`vallum run -- <cmd>`)
-  or disable the rule (`[policy] disabled = ["<rule>"]`).
+  deny reason tells you how to run the command yourself
+  (`vallum run -- bash -c '<cmd>'` — the same `bash -c` wrapping the Claude
+  hook uses, so a piped/compound command stays gated as one unit) or turn the
+  rule off — `[policy] disabled = ["<rule>"]` for a built-in, or edit the
+  matching `[[policy.rules]]` entry in your config for a user-defined one.
+- **Hook mode skips TUI-headed commands before policy evaluation.** `vim`,
+  `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, and `screen` commands
+  pass straight through unevaluated on all four agents (e.g.
+  `less /etc/shadow` bypasses the `read_sensitive_creds` rule) — see
+  [SECURITY.md's guardrail known gaps](SECURITY.md#dangerous-command-execution-guardrail)
+  for why and what still applies. Direct `vallum run` is unaffected.
 - **Codex CLI does not intercept every shell call.** Codex's own hooks
   documentation says it plainly: *"This doesn't intercept all shell calls
   yet, only the simple ones. The newer `unified_exec` mechanism allows richer

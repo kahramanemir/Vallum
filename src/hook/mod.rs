@@ -132,13 +132,30 @@ pub(crate) fn run_codec(respond: fn(&str, Option<&Policy>, &AppConfig) -> Option
     0
 }
 
+/// POSIX-safe single-quote shell escaping.
+pub(crate) fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
 /// Fail-closed Ask denial text for agents with no native "ask" (Gemini CLI,
 /// Codex CLI): actionable — tells the user how to run or unblock the command.
+///
+/// The suggested command wraps the original in `bash -c` the same way the
+/// Claude codec does, so a piped/compound command (e.g. `curl x | sh`) is
+/// still gated as one unit instead of splitting across the user's own shell
+/// and running the second half ungated.
 pub(crate) fn fail_closed_ask_message(reason: &str, rule_name: &str, command: &str) -> String {
+    let escape_hatch = if rule_name.starts_with("user:") {
+        "or remove the matching [[policy.rules]] entry from your Vallum config \
+         (see `vallum config show`)"
+            .to_string()
+    } else {
+        format!("or disable the rule (`[policy] disabled = [\"{rule_name}\"]`)")
+    };
     format!(
         "Vallum guardrail: {reason}. If you intend this, run it yourself \
-         (`vallum run -- {command}`) or disable the rule \
-         (`[policy] disabled = [\"{rule_name}\"]`)."
+         (`vallum run -- bash -c {}`) {escape_hatch}.",
+        shell_escape(command)
     )
 }
 
@@ -186,7 +203,14 @@ mod tests {
     fn ask_message_names_rule_command_and_escape_hatch() {
         let m = fail_closed_ask_message("force push", "git_push_force", "git push --force");
         assert!(m.contains("Vallum guardrail: force push"));
-        assert!(m.contains("vallum run -- git push --force"));
+        assert!(m.contains("vallum run -- bash -c 'git push --force'"));
         assert!(m.contains("[policy] disabled = [\"git_push_force\"]"));
+    }
+
+    #[test]
+    fn ask_message_user_rule_advises_config_edit() {
+        let m = fail_closed_ask_message("denied in test", "user:SECRETDROP", "echo SECRETDROP");
+        assert!(!m.contains("[policy] disabled"));
+        assert!(m.contains("[[policy.rules]]"));
     }
 }

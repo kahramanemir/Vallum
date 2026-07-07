@@ -77,7 +77,7 @@ pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>)
     // `bash -c` wrapper could block even Allowed commands.
     let wrapped = format!(
         "vallum run --policy-approved -- bash -c {}",
-        shell_escape(command)
+        super::shell_escape(command)
     );
     match super::decide(command, policy) {
         Verdict::PassThrough => HookDecision::PassThrough,
@@ -89,11 +89,6 @@ pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>)
         },
         Verdict::Deny { reason, rule_name } => HookDecision::Deny { reason, rule_name },
     }
-}
-
-/// POSIX-safe single-quote shell escaping.
-fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 /// Entry point invoked from main: read stdin JSON, decide, write stdout JSON,

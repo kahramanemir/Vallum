@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(v["decision"], "deny");
         let reason = v["reason"].as_str().unwrap();
         assert!(reason.contains("Vallum guardrail:"));
-        assert!(reason.contains("vallum run -- rm -rf /"));
+        assert!(reason.contains("vallum run -- bash -c 'rm -rf /'"));
         assert!(reason.contains("[policy] disabled = [\"rm_rf_root\"]"));
     }
 
