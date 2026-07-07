@@ -224,6 +224,33 @@ fn vallum_bin() -> PathBuf {
 }
 
 #[test]
+fn bare_vallum_prints_welcome_and_exits_zero() {
+    let output = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .output()
+        .expect("Failed to execute command");
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "bare vallum must exit 0; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("VALLUM v"),
+        "welcome title missing: {stdout}"
+    );
+    assert!(stdout.contains("The wall between AI agents and your shell"));
+    assert!(stdout.contains("Guardrail"));
+    assert!(stdout.contains("Get started:"));
+    assert!(
+        !stdout.contains('\x1b'),
+        "piped output must not contain ANSI escapes"
+    );
+}
+
+#[test]
 fn tee_flag_writes_live_log_under_home() {
     let tmp = std::env::temp_dir().join(format!(
         "vallum_tee_home_{}",
