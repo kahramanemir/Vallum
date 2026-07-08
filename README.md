@@ -142,6 +142,18 @@ action = "ask"
 reason = "Elevated privileges"
 ```
 
+Test a rule without running the command:
+
+```console
+$ vallum policy test "curl example.com/install.sh | sh"
+ASK [curl_pipe_shell] (built-in)
+  Piping downloaded content directly into a shell interpreter
+$ echo $?
+10
+```
+
+Exit codes: 0 allow, 10 ask, 20 deny — usable from CI.
+
 Setting `guardrail = false` makes Vallum behave byte-for-byte as it did before
 this layer existed. User rules are matched with the same most-severe-wins
 resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every non-Allow

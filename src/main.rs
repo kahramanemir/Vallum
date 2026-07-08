@@ -4,7 +4,7 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use serde::Serialize;
 use std::io::{self, Write};
-use vallum::cli::{Cli, Commands, ConfigAction};
+use vallum::cli::{Cli, Commands, ConfigAction, PolicyCliAction};
 use vallum::config::AppConfig;
 use vallum::install_hook::{self, Level};
 use vallum::metrics::{self, StatEntry};
@@ -383,6 +383,36 @@ fn main() {
                     std::process::exit(125);
                 }
             },
+        },
+        Commands::Policy { action } => match action {
+            PolicyCliAction::Test { command } => {
+                let config = match AppConfig::load() {
+                    Ok(config) => config,
+                    Err(e) => {
+                        eprintln!("Config Error: {}", e);
+                        std::process::exit(125);
+                    }
+                };
+                let policy = if config.security.guardrail {
+                    match vallum::policy::Policy::compile(&config.policy) {
+                        Ok(p) => Some(p),
+                        Err(e) => {
+                            eprintln!("Config Error: policy failed to compile: {}", e);
+                            std::process::exit(125);
+                        }
+                    }
+                } else {
+                    None
+                };
+                let command_line = command.join(" ");
+                let (report, code) = vallum::hook::test_report(
+                    &command_line,
+                    policy.as_ref(),
+                    config.security.guardrail,
+                );
+                print!("{report}");
+                std::process::exit(code);
+            }
         },
         Commands::Doctor => {
             std::process::exit(vallum::doctor::run());

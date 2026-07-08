@@ -92,3 +92,73 @@ fn policy_approved_bypasses_regate_on_wrapped_command() {
     );
     assert!(String::from_utf8_lossy(&out.stdout).contains("BLOCKME"));
 }
+
+#[test]
+fn policy_test_reports_ask_with_exit_10() {
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .args(["policy", "test", "rm -rf /"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(10));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("ASK [rm_rf_root] (built-in)"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn policy_test_reports_allow_with_exit_0() {
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .args(["policy", "test", "git status"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&out.stdout).starts_with("ALLOW"));
+}
+
+#[test]
+fn policy_test_user_deny_rule_exit_20_and_broken_config_125() {
+    let dir = std::env::temp_dir().join(format!("vallum_poltest_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("config.toml");
+    std::fs::write(
+        &cfg,
+        "[[policy.rules]]\npattern = 'echo BLOCKME'\naction = \"deny\"\nreason = \"blocked in test\"\n",
+    )
+    .unwrap();
+
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .args(["policy", "test", "echo BLOCKME"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(20));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("DENY ["), "{stdout}");
+    assert!(stdout.contains("(user rule)"), "{stdout}");
+    assert!(stdout.contains("blocked in test"), "{stdout}");
+
+    let broken = dir.join("broken.toml");
+    std::fs::write(&broken, "[[policy.rules]\n").unwrap();
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &broken)
+        .args(["policy", "test", "ls"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(125));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn policy_test_tui_command_matching_rule_asks() {
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", "/nonexistent/vallum/config.toml")
+        .args(["policy", "test", "less /etc/shadow"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(10));
+    assert!(String::from_utf8_lossy(&out.stdout).contains("read_sensitive_creds"));
+}

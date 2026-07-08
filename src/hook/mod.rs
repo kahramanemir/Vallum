@@ -169,6 +169,57 @@ pub(crate) fn fail_closed_ask_message(reason: &str, rule_name: &str, command: &s
     )
 }
 
+/// Source label for a rule name in `policy test` output. User rules are
+/// `user:`-prefixed (the same convention `fail_closed_ask_message` keys on).
+fn rule_source(rule_name: &str) -> &'static str {
+    if rule_name.starts_with("user:") {
+        "user rule"
+    } else {
+        "built-in"
+    }
+}
+
+/// Render the `vallum policy test` report for one command line, plus the
+/// process exit code: 0 allow/pass-through, 10 ask, 20 deny. Goes through
+/// `decide()` so the answer matches hook behavior exactly (vallum-head and
+/// TUI handling included).
+pub fn test_report(command: &str, policy: Option<&Policy>, guardrail_on: bool) -> (String, i32) {
+    let suffix = if guardrail_on {
+        ""
+    } else {
+        " (guardrail off — security.guardrail = false)"
+    };
+    let trimmed = command.trim_start();
+    let head = trimmed.split_whitespace().next().unwrap_or("");
+    match decide(command, policy) {
+        Verdict::PassThrough => {
+            let label = if trimmed.is_empty() {
+                "PASS-THROUGH (empty command)"
+            } else if head == "vallum" {
+                "PASS-THROUGH (vallum wrapper command)"
+            } else {
+                "PASS-THROUGH (TUI command, no policy objection)"
+            };
+            (format!("{label}{suffix}\n"), 0)
+        }
+        Verdict::Allow => (format!("ALLOW{suffix}\n"), 0),
+        Verdict::Ask { reason, rule_name } => (
+            format!(
+                "ASK [{rule_name}] ({})\n  {reason}\n",
+                rule_source(&rule_name)
+            ),
+            10,
+        ),
+        Verdict::Deny { reason, rule_name } => (
+            format!(
+                "DENY [{rule_name}] ({})\n  {reason}\n",
+                rule_source(&rule_name)
+            ),
+            20,
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,5 +309,48 @@ mod tests {
         );
         // Guardrail off: byte-identical to v0.7.0 — TUI passes through.
         assert_eq!(decide("less /etc/shadow", None), Verdict::PassThrough);
+    }
+
+    #[test]
+    fn test_report_covers_all_verdicts() {
+        let g = guardrail();
+        let (s, c) = test_report("git status", Some(&g), true);
+        assert_eq!((s.as_str(), c), ("ALLOW\n", 0));
+
+        let (s, c) = test_report("rm -rf /", Some(&g), true);
+        assert!(s.starts_with("ASK [rm_rf_root] (built-in)\n  "));
+        assert_eq!(c, 10);
+
+        use crate::config::PolicyRuleConfig;
+        let deny = Policy::compile(&PolicyConfig {
+            rules: vec![PolicyRuleConfig {
+                pattern: "BLOCKME".into(),
+                action: "deny".into(),
+                reason: "blocked in test".into(),
+            }],
+            disabled: vec![],
+        })
+        .unwrap();
+        let (s, c) = test_report("echo BLOCKME", Some(&deny), true);
+        assert!(s.starts_with("DENY [user:BLOCKME] (user rule)\n  blocked in test"));
+        assert_eq!(c, 20);
+
+        let (s, c) = test_report("vallum run ls", Some(&g), true);
+        assert_eq!(
+            (s.as_str(), c),
+            ("PASS-THROUGH (vallum wrapper command)\n", 0)
+        );
+
+        let (s, c) = test_report("vim notes.txt", Some(&g), true);
+        assert_eq!(
+            (s.as_str(), c),
+            ("PASS-THROUGH (TUI command, no policy objection)\n", 0)
+        );
+
+        let (s, c) = test_report("rm -rf /", None, false);
+        assert_eq!(
+            (s.as_str(), c),
+            ("ALLOW (guardrail off — security.guardrail = false)\n", 0)
+        );
     }
 }
