@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bare `vallum` now exits 0** (welcome screen on stdout). It previously
   exited 2 with the help text on stderr; scripts that invoked bare
   `vallum` expecting a usage error must call a real subcommand instead.
+  The same shift applies to a hand-edited agent hook entry that mistakenly
+  invokes bare `vallum` (missing the `hook` subcommand): it used to fail
+  closed (exit 2 blocked every command); it now no-ops silently and commands
+  run ungated. `vallum install-hook` never writes that shape, and `vallum
+  doctor` reports it as not installed.
 - `--help` restyled: tagline is now "The wall between AI agents and your
   shell" (was "AI CLI Proxy"), headers are colored, commands are listed
   task-first, and a "Quick start" block closes the help text.
