@@ -320,3 +320,23 @@ fn redacts_secret_in_arguments_json() {
         "expected redacted form: {stdout}"
     );
 }
+
+#[test]
+fn help_shows_tagline_and_quick_start() {
+    let output = Command::new(vallum_bin())
+        .arg("--help")
+        .output()
+        .expect("Failed to execute command");
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("The wall between AI agents and your shell"),
+        "tagline missing: {stdout}"
+    );
+    assert!(stdout.contains("Quick start:"), "quick start block missing");
+    assert!(
+        !stdout.contains("AI CLI Proxy"),
+        "stale tagline must be gone"
+    );
+}
