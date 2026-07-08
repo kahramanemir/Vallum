@@ -5,6 +5,28 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Welcome screen.** Bare `vallum` now prints a branded status banner —
+  guardrail state (on/off + active rule count), per-agent hook install
+  status (with the Codex one-time-trust reminder), and a three-command
+  quick start — instead of clap's default help. Color only on an
+  interactive stdout (`NO_COLOR` and `TERM=dumb` respected).
+
+### Changed
+- **Bare `vallum` now exits 0** (welcome screen on stdout). It previously
+  exited 2 with the help text on stderr; scripts that invoked bare
+  `vallum` expecting a usage error must call a real subcommand instead.
+  The same shift applies to a hand-edited agent hook entry that mistakenly
+  invokes bare `vallum` (missing the `hook` subcommand): it used to fail
+  closed (exit 2 blocked every command); it now no-ops silently and commands
+  run ungated. `vallum install-hook` never writes that shape, and `vallum
+  doctor` reports it as not installed.
+- `--help` restyled: tagline is now "The wall between AI agents and your
+  shell" (was "AI CLI Proxy"), headers are colored, commands are listed
+  task-first, and a "Quick start" block closes the help text.
+
 ## [0.6.1]
 
 ### Changed
@@ -169,6 +191,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.6.1...HEAD
 [0.6.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.6.1
 [0.6.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.6.0
 [0.5.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.5.1

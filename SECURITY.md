@@ -213,6 +213,15 @@ sandbox**.
   Enforcement verified live on codex-cli 0.142.5 (2026-07-08). After
   installing (or upgrading Codex), verify with a known-Ask command and expect
   a deny.
+- **A hook entry that invokes bare `vallum` no-ops silently.** Bare
+  `vallum` (no subcommand) prints a welcome screen and exits 0, so a
+  hand-edited hook entry missing the `hook` subcommand does not fail
+  closed — the agent treats the output as informational and runs the
+  command ungated. (Before the welcome screen existed it exited 2, which
+  blocked every command — a loud misconfiguration.) `vallum install-hook`
+  never writes this shape, and `vallum doctor` reports it as "not
+  installed". After hand-editing any hook config, verify with a known-Ask
+  command and expect a prompt or deny.
 - **Hook mode never evaluates TUI-headed commands.** Commands whose first
   word is `vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, or
   `screen` are passed straight through in all four agent hooks *before*

@@ -1,7 +1,21 @@
 //! Command-line argument parsing (`clap`) for the `vallum` subcommands.
 
+use clap::builder::styling::{Ansi256Color, Color, Style, Styles};
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
+
+/// Help styling: bronze headers to match the welcome screen; clap handles
+/// TTY/NO_COLOR detection itself.
+fn help_styles() -> Styles {
+    let bronze = Style::new()
+        .bold()
+        .fg_color(Some(Color::Ansi256(Ansi256Color(178))));
+    Styles::styled()
+        .header(bronze)
+        .usage(bronze)
+        .literal(Style::new().bold())
+        .placeholder(Style::new().fg_color(Some(Color::Ansi256(Ansi256Color(245)))))
+}
 
 /// Agents Vallum can speak a pre-exec hook protocol for.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -17,10 +31,23 @@ pub enum AgentArg {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "vallum", version = env!("CARGO_PKG_VERSION"), about = "AI CLI Proxy")]
+#[command(
+    name = "vallum",
+    version = env!("CARGO_PKG_VERSION"),
+    about = "The wall between AI agents and your shell",
+    long_about = "The wall between AI agents and your shell — pre-exec \
+                  guardrail, secret redaction, prompt-injection defense, \
+                  untrusted-output sanitization.",
+    styles = help_styles(),
+    after_help = "\
+Quick start:
+  vallum install-hook --agent claude    hook your agent
+  vallum run -- <cmd>                   gate a single command
+  vallum doctor                         full health check"
+)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -55,18 +82,6 @@ parsed as vallum's.")]
         #[arg(trailing_var_arg = true)]
         args: Vec<String>,
     },
-    /// Show cumulative token savings report
-    Stats {
-        /// Delete all collected stats (prompts for confirmation)
-        #[arg(long)]
-        reset: bool,
-    },
-    /// Run as an agent pre-exec guardrail hook (reads JSON from stdin)
-    Hook {
-        /// Which agent's hook protocol to speak
-        #[arg(long, value_enum, default_value_t = AgentArg::Claude)]
-        agent: AgentArg,
-    },
     /// Install the Vallum pre-exec hook into an agent's config
     InstallHook {
         /// Which agent to install for
@@ -92,13 +107,25 @@ parsed as vallum's.")]
         #[arg(long)]
         project: bool,
     },
+    /// Run install/health self-checks (config, hook, PATH, log dir)
+    Doctor,
     /// Inspect or scaffold the Vallum config file
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Run install/health self-checks (config, hook, PATH, log dir)
-    Doctor,
+    /// Show cumulative token savings report
+    Stats {
+        /// Delete all collected stats (prompts for confirmation)
+        #[arg(long)]
+        reset: bool,
+    },
+    /// Run as an agent pre-exec guardrail hook (reads JSON from stdin)
+    Hook {
+        /// Which agent's hook protocol to speak
+        #[arg(long, value_enum, default_value_t = AgentArg::Claude)]
+        agent: AgentArg,
+    },
     /// Print a shell completion script to stdout
     Completions {
         /// Target shell

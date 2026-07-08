@@ -8,7 +8,9 @@ use vallum::cli::{Cli, Commands, ConfigAction};
 use vallum::config::AppConfig;
 use vallum::install_hook::{self, Level};
 use vallum::metrics::{self, StatEntry};
-use vallum::{ansi, audit, executor, hook, optimizer, scrubber, stats, truncator, whitespace};
+use vallum::{
+    ansi, audit, executor, hook, optimizer, scrubber, stats, truncator, welcome, whitespace,
+};
 
 #[derive(Serialize)]
 struct RunOutput<'a> {
@@ -76,7 +78,12 @@ fn emit_block(
 fn main() {
     let cli = Cli::parse();
 
-    match &cli.command {
+    let Some(command) = &cli.command else {
+        welcome::print();
+        return;
+    };
+
+    match command {
         Commands::Run {
             json,
             strict,
