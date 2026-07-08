@@ -53,9 +53,11 @@ pub enum HookDecision {
     PassThrough,
     /// Rewrite to run through vallum, permission "allow".
     Allow { command: String },
-    /// Rewrite + ask the user (permission "ask").
+    /// Ask the user (permission "ask"); `command` is the rewrite to apply on
+    /// approval, or `None` for TUI-headed commands, which must run unwrapped
+    /// to keep their interactive TTY.
     Ask {
-        command: String,
+        command: Option<String>,
         reason: String,
         rule_name: String,
     },
@@ -82,11 +84,19 @@ pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>)
     match super::decide(command, policy) {
         Verdict::PassThrough => HookDecision::PassThrough,
         Verdict::Allow => HookDecision::Allow { command: wrapped },
-        Verdict::Ask { reason, rule_name } => HookDecision::Ask {
-            command: wrapped,
-            reason,
-            rule_name,
-        },
+        Verdict::Ask { reason, rule_name } => {
+            let head = command.split_whitespace().next().unwrap_or("");
+            let rewrite = if super::TUI_SKIP.contains(&head) {
+                None
+            } else {
+                Some(wrapped)
+            };
+            HookDecision::Ask {
+                command: rewrite,
+                reason,
+                rule_name,
+            }
+        }
         Verdict::Deny { reason, rule_name } => HookDecision::Deny { reason, rule_name },
     }
 }
@@ -131,7 +141,7 @@ pub fn run() -> i32 {
                 hook_event_name: "PreToolUse",
                 permission_decision: "ask",
                 reason: Some(reason),
-                updated_input: Some(UpdatedInput { command }),
+                updated_input: command.map(|c| UpdatedInput { command: c }),
             }
         }
         HookDecision::Deny { reason, rule_name } => {
@@ -193,7 +203,7 @@ mod tests {
             } => {
                 assert_eq!(
                     command,
-                    "vallum run --policy-approved -- bash -c 'rm -rf /'"
+                    Some("vallum run --policy-approved -- bash -c 'rm -rf /'".to_string())
                 );
                 assert!(reason.contains("root or home"));
             }
@@ -255,5 +265,19 @@ mod tests {
             rewrite_decision("Bash", "", None),
             HookDecision::PassThrough
         ));
+    }
+
+    #[test]
+    fn tui_ask_has_no_rewrite() {
+        let d = rewrite_decision("Bash", "less /etc/shadow", Some(&guardrail()));
+        match d {
+            HookDecision::Ask {
+                command, reason, ..
+            } => {
+                assert_eq!(command, None, "TUI ask must not rewrite (TTY)");
+                assert!(reason.contains("shadow") || !reason.is_empty());
+            }
+            other => panic!("expected Ask, got {other:?}"),
+        }
     }
 }
