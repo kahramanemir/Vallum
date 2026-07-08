@@ -169,13 +169,13 @@ mod tests {
     use super::*;
     use std::fs;
 
-    fn temp_dir() -> PathBuf {
+    fn temp_dir(tag: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
         let p = std::env::temp_dir().join(format!(
-            "vallum_install_hook_mod_{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            "vallum_install_hook_mod_{tag}_{}_{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&p).unwrap();
         p
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn read_settings_refuses_malformed_json() {
-        let dir = temp_dir();
+        let dir = temp_dir("readsettings");
         let path = dir.join("settings.json");
         fs::write(&path, "{not valid json").unwrap();
         let err = read_settings(&path).unwrap_err();
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn atomic_write_creates_backup() {
-        let dir = temp_dir();
+        let dir = temp_dir("atomicwrite");
         let path = dir.join("settings.json");
         fs::write(&path, r#"{"theme":"old"}"#).unwrap();
         let backup = write_atomic_with_backup(&path, r#"{"theme":"new"}"#).unwrap();
