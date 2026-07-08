@@ -26,28 +26,28 @@ pub fn has_hook(settings: &Value) -> bool {
         .unwrap_or(false)
 }
 
-pub fn add(settings: &mut Value, force: bool) -> bool {
+pub fn add(settings: &mut Value, force: bool) -> Result<bool, String> {
     if has_hook(settings) {
         if !force {
-            return false;
+            return Ok(false);
         }
         remove(settings);
     }
     let root = settings
         .as_object_mut()
-        .expect("settings root must be an object");
+        .ok_or_else(|| "settings root is not a JSON object".to_string())?;
     root.entry("version").or_insert(json!(1));
     let hooks = root.entry("hooks").or_insert_with(|| json!({}));
     let arr = hooks
         .as_object_mut()
-        .expect("hooks must be an object")
+        .ok_or_else(|| "the \"hooks\" key is not a JSON object".to_string())?
         .entry("beforeShellExecution")
         .or_insert_with(|| json!([]));
     let arr = arr
         .as_array_mut()
-        .expect("beforeShellExecution must be an array");
+        .ok_or_else(|| "hooks.beforeShellExecution is not a JSON array".to_string())?;
     arr.push(json!({ "command": "vallum hook --agent cursor" }));
-    true
+    Ok(true)
 }
 
 pub fn remove(settings: &mut Value) -> bool {
@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn add_into_empty_sets_version_and_entry() {
         let mut settings = json!({});
-        assert!(add(&mut settings, false));
+        assert!(add(&mut settings, false).unwrap());
         assert_eq!(settings["version"], 1);
         let arr = settings["hooks"]["beforeShellExecution"]
             .as_array()
@@ -92,9 +92,9 @@ mod tests {
     #[test]
     fn add_is_idempotent_and_force_replaces() {
         let mut settings = json!({});
-        assert!(add(&mut settings, false));
-        assert!(!add(&mut settings, false));
-        assert!(add(&mut settings, true));
+        assert!(add(&mut settings, false).unwrap());
+        assert!(!add(&mut settings, false).unwrap());
+        assert!(add(&mut settings, true).unwrap());
         let arr = settings["hooks"]["beforeShellExecution"]
             .as_array()
             .unwrap();
@@ -111,7 +111,7 @@ mod tests {
                 "afterFileEdit": [ { "command": "fmt-on-save" } ]
             }
         });
-        assert!(add(&mut settings, false));
+        assert!(add(&mut settings, false).unwrap());
         let arr = settings["hooks"]["beforeShellExecution"]
             .as_array()
             .unwrap();
@@ -140,5 +140,12 @@ mod tests {
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["command"], "other-tool check");
         assert!(!remove(&mut settings));
+    }
+
+    #[test]
+    fn add_errors_on_malformed_hooks_key() {
+        let mut v = serde_json::json!({ "hooks": "not an object" });
+        let err = add(&mut v, false).unwrap_err();
+        assert!(err.contains("hooks"), "{err}");
     }
 }

@@ -76,14 +76,15 @@ pub(crate) fn write_atomic_with_backup(
 pub(crate) fn merge_install(
     path: &Path,
     force: bool,
-    add: impl Fn(&mut Value, bool) -> bool,
+    add: impl Fn(&mut Value, bool) -> Result<bool, String>,
     label: &str,
 ) -> Result<String, String> {
     let mut settings = read_settings(path)?;
     if !settings.is_object() {
         return Err(format!("{} root is not a JSON object", path.display()));
     }
-    if !add(&mut settings, force) {
+    let added = add(&mut settings, force).map_err(|e| format!("{}: {e}", path.display()))?;
+    if !added {
         return Ok(format!(
             "Vallum {label} hook already present in {}; pass --force to replace.",
             path.display()
