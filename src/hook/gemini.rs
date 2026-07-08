@@ -163,4 +163,16 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn guardrail_off_emits_no_decision() {
+        assert_eq!(
+            respond(
+                r#"{"tool_name":"run_shell_command","tool_input":{"command":"rm -rf /"}}"#,
+                None,
+                &cfg_no_log()
+            ),
+            None
+        );
+    }
 }

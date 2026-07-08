@@ -222,17 +222,16 @@ sandbox**.
   never writes this shape, and `vallum doctor` reports it as "not
   installed". After hand-editing any hook config, verify with a known-Ask
   command and expect a prompt or deny.
-- **Hook mode never evaluates TUI-headed commands.** Commands whose first
-  word is `vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, or
-  `screen` are passed straight through in all four agent hooks *before*
-  policy evaluation runs — e.g. `less /etc/shadow` never reaches the
-  guardrail at all, even though the built-in `read_sensitive_creds` rule
-  explicitly targets `less`/`more`, so a user (or an agent) can dodge that
-  rule by picking a skipped pager. The skip exists because rewriting these
-  commands through Vallum's output-capturing executor would break the
-  interactive TTY they require. The agent's own permission flow still applies
-  on top of this gap (see P1 above), and it is hook-mode-only: a direct
-  `vallum run -- less /etc/shadow` is still evaluated normally.
+- **TUI-headed commands are evaluated but never rewritten.** Commands whose
+  first word is `vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`,
+  or `screen` go through the same policy evaluation as everything else —
+  `less /etc/shadow` asks (Claude Code, Cursor) or is denied with
+  instructions (Gemini CLI, Codex CLI). What the TUI list changes is the
+  *rewrite*: a clean Allow passes the command through untouched, and an
+  approved Ask on Claude Code runs the original command directly — in both
+  cases the interactive TTY is preserved and the command's *output* does not
+  go through Vallum's sanitization pipeline (it never did for any
+  passed-through command). Direct `vallum run` is unaffected.
 - Setting `security.guardrail = false` disables the layer entirely (Vallum then
   behaves exactly as it did before it existed).
 
@@ -269,9 +268,9 @@ unaffected). Code signing / notarization is deferred.
   On every agent, file reads, web fetches, and other non-shell tools bypass
   Vallum entirely — and on Codex CLI specifically, even some shell calls do
   (see the guardrail's known gaps above).
-- **TUI commands bypass the pipeline.** The hook skips
-  `vim`/`vi`/`nano`/`less`/`more`/`top`/`htop`/`tmux`/`screen` because
-  capturing them would break their TTY requirements.
+- **TUI commands bypass the output pipeline.** The hook does not rewrite
+  `vim`/`vi`/`nano`/`less`/`more`/`top`/`htop`/`tmux`/`screen` (to preserve
+  their TTY interaction), but they are still policy-gated beforehand.
 - **An enabled raw log is unredacted by definition** (its header cmd/args
   are still scrubbed). Leave `raw_enabled = false` unless actively debugging.
 - **Best-effort layers have gaps** — see the per-threat lists above. Treat

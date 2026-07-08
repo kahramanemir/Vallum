@@ -106,15 +106,14 @@ mod tests {
     use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn temp_dir() -> PathBuf {
+    fn temp_dir(tag: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
         let p = std::env::temp_dir().join(format!(
-            "vallum_install_hook_{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            "vallum_install_hook_claude_{tag}_{}_{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&p).unwrap();
         p
@@ -122,7 +121,7 @@ mod tests {
 
     #[test]
     fn install_into_missing_file_creates_it() {
-        let dir = temp_dir();
+        let dir = temp_dir("missing_file");
         let path = dir.join("settings.json");
         let mut settings = read_settings(&path).unwrap();
         assert!(add_vallum(&mut settings, false).unwrap());
@@ -135,7 +134,7 @@ mod tests {
 
     #[test]
     fn install_preserves_other_hooks_and_top_level_fields() {
-        let dir = temp_dir();
+        let dir = temp_dir("preserves_fields");
         let path = dir.join("settings.json");
         let existing = json!({
             "theme": "dark",

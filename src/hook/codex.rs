@@ -180,4 +180,16 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn guardrail_off_emits_no_decision() {
+        assert_eq!(
+            respond(
+                r#"{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}"#,
+                None,
+                &cfg_no_log()
+            ),
+            None
+        );
+    }
 }

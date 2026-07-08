@@ -340,3 +340,34 @@ fn help_shows_tagline_and_quick_start() {
         "stale tagline must be gone"
     );
 }
+
+#[test]
+fn help_lists_commands_task_first() {
+    let output = Command::new(vallum_bin())
+        .arg("--help")
+        .output()
+        .expect("Failed to execute command");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let pos = |needle: &str| {
+        stdout
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} missing from --help"))
+    };
+    let order = [
+        "\n  run",
+        "\n  install-hook",
+        "\n  uninstall-hook",
+        "\n  doctor",
+        "\n  config",
+        "\n  policy",
+        "\n  stats",
+    ];
+    for w in order.windows(2) {
+        assert!(
+            pos(w[0]) < pos(w[1]),
+            "expected {} before {} in --help",
+            w[0].trim(),
+            w[1].trim()
+        );
+    }
+}

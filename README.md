@@ -84,8 +84,8 @@ guaranteed.
 ## Guardrail / policy
 
 Vallum evaluates every command *before it executes* and returns one of three
-verdicts — with one narrow exception in hook mode (TUI-headed commands like
-`less`/`vim` are skipped, not evaluated; see
+verdicts — on all call sites and all agents, including hook mode where
+TUI-headed commands like `less`/`vim` are simply never rewritten (see
 [SECURITY.md](SECURITY.md#dangerous-command-execution-guardrail)):
 
 - **Allow** — runs normally (the default for anything no rule matches).
@@ -205,12 +205,13 @@ Limitations, stated plainly:
   hook uses, so a piped/compound command stays gated as one unit) or turn the
   rule off — `[policy] disabled = ["<rule>"]` for a built-in, or edit the
   matching `[[policy.rules]]` entry in your config for a user-defined one.
-- **Hook mode skips TUI-headed commands before policy evaluation.** `vim`,
-  `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, and `screen` commands
-  pass straight through unevaluated on all four agents (e.g.
-  `less /etc/shadow` bypasses the `read_sensitive_creds` rule) — see
-  [SECURITY.md's guardrail known gaps](SECURITY.md#dangerous-command-execution-guardrail)
-  for why and what still applies. Direct `vallum run` is unaffected.
+- **TUI-headed commands are gated but never rewritten.** `vim`, `less`,
+  `top` and friends are policy-evaluated like any command (`less
+  /etc/shadow` now asks/denies); on a clean Allow they pass through
+  unwrapped, and an approved Ask on Claude Code runs the original command
+  directly, so their interactive TTY keeps working — but their *output* is
+  not sanitized (it never was for passed-through commands). Direct
+  `vallum run` is unaffected.
 - **Codex CLI does not intercept every shell call.** Codex's own hooks
   documentation says it plainly: *"This doesn't intercept all shell calls
   yet, only the simple ones. The newer `unified_exec` mechanism allows richer
