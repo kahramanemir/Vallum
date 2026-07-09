@@ -30,22 +30,27 @@ light. No light mode.
 Panels/terminals 10px; buttons/chips/tabs 8px. Nothing else.
 
 ## Layout
-Max width 1160px. Section rhythm ~7-8rem desktop. Layout families in use:
-asymmetric split (hero, guardrail), 3-cell bento (threats), full-width band
-(pipeline wall, marquee), plain stat row (metrics), centered manifesto
-(motto), tabbed panel (install).
+Max width 1320px with full-bleed scenes. No card grids. The only
+bordered surfaces on the page: terminal windows and the install plinth.
+Everything else is hairline rules, whitespace, typography, and the
+patrol rail (fixed left spine, scroll-drawn, Roman-numeral waypoints).
+Section flow: hero gate, pinned demonstration sweep, three typographic
+indictments, pinned six-gate mutation scrub, marquee band, verdict
+ledger, carved metrics, motto, install plinth.
 
 ## Motion
-- One orchestrated page-load: inscription settles, headline/sub/CTAs rise
-  staggered, terminal demo types and the wall sweep reveals the sanitized pane.
-- Scroll: sections fade-rise once (IntersectionObserver); metrics count up;
-  verdict tags stamp in sequence.
-- Hover: bronze spotlight follows cursor on threat cards and gates; sheen on
-  the install chip.
-- Marquee: single slow optimizer marquee after the pipeline. Max one on page.
-- Everything collapses to static under `prefers-reduced-motion: reduce`.
-- No scroll listeners; IntersectionObserver + CSS only. Animate transform and
-  opacity only.
+GSAP 3.12.5 + ScrollTrigger, vendored in /vendor (no CDN). html.gsap
+gates every scene: without it (reduced motion, no JS, load failure) the
+page is a complete static document — markup always ships the end state.
+Pinned scrub scenes (>=900px only): demonstration sweep, six gates.
+Scrubbed: patrol fill, hero inscription parallax. Enter-once: seals,
+count-ups, evidence stamps, motto tracking. prefers-reduced-motion
+collapses everything to static.
+
+The nav is `position: fixed` (out of document flow), so the 100svh hero
+fills the entire first viewport underneath it. Breakpoint arming for all
+scroll-driven behavior uses `gsap.matchMedia` throughout: the two pinned
+scenes arm/disarm at 900px, the patrol rail arms/disarms at 1100px.
 
 ## Voice
 Short declaratives. Latin only where it lands (wordmark, motto

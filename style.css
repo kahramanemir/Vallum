@@ -182,7 +182,6 @@ h3 {
 section {
   max-width: var(--wrap);
   margin: 0 auto;
-  padding: 6.5rem 2rem 0;
   scroll-margin-top: 68px;
 }
 
@@ -413,7 +412,6 @@ html.gsap .descend-line { animation: descend-pulse 2.4s ease-in-out infinite; }
 .t-marker { color: var(--text3); }
 .t-redact { color: var(--accent-bright); }
 .t-neutral { color: var(--green); }
-.t-stat { color: var(--accent); margin-top: 0.35rem; }
 
 /* ---------- scene I: the demonstration (pinned sweep) ---------- */
 
@@ -890,7 +888,6 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
 /* ---------- responsive ---------- */
 
 @media (max-width: 768px) {
-  section { padding: 4.5rem 1.25rem 0; }
   .nav-inner { padding: 0 1.25rem; gap: 1.2rem; }
   /* keep the one anchor that matters in the thumb's reach of a decision:
      Install stays, the wayfinding links collapse */
