@@ -394,6 +394,7 @@ html.gsap .descend-line { animation: descend-pulse 2.4s ease-in-out infinite; }
   font-size: 0.8rem;
   line-height: 1.7;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 /* lines are block-level spans; collapse the literal newlines between them */
 .term-body code { display: block; white-space: normal; }
@@ -499,7 +500,7 @@ html.gsap .sweep { display: block; }
   border-left: 2px solid var(--accent-dim);
   padding: 0.4rem 0 0.4rem 1.4rem;
   font-family: var(--mono); font-size: 0.85rem; line-height: 1.75;
-  overflow-x: auto; white-space: pre;
+  overflow-x: auto; overflow-y: hidden; white-space: pre;
 }
 .ind-figure { margin-top: 2rem; }
 .big-num {
@@ -546,6 +547,7 @@ html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
 .feed-body {
   font-family: var(--mono); font-size: 0.88rem; line-height: 1.9;
   overflow-x: auto;
+  overflow-y: hidden;
   border-left: 2px solid var(--accent-dim); padding-left: 1.4rem;
 }
 /* lines are block-level spans; collapse the literal newlines between them */
@@ -759,7 +761,7 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
 .plinth-cmd { display: none; align-items: center; gap: 1rem; }
 .plinth-cmd.active { display: flex; }
 .plinth-cmd pre {
-  flex: 1; text-align: left; overflow-x: auto;
+  flex: 1; text-align: left; overflow-x: auto; overflow-y: hidden;
   font-family: var(--mono); font-size: 0.85rem; line-height: 1.6;
   white-space: pre; color: var(--text);
 }
