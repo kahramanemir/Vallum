@@ -430,15 +430,63 @@ html.gsap .sweep { display: block; }
   html.gsap .sweep { display: none; }
 }
 
-/* ---------- threats bento ---------- */
+/* ---------- threats: three indictments ---------- */
 
-.big-num {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 1.9rem;
-  color: var(--accent);
+.threats { max-width: var(--wrap); margin: 0 auto; padding: 9rem 2rem; }
+.threats .scene-head { padding: 0; } /* parent already provides the gutter */
+.indictment {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 3rem 5rem;
+  align-items: center;
+  padding: 6rem 0;
+  border-top: 1px solid var(--line);
 }
-.figure-note { color: var(--text3); font-size: 0.82rem; }
+.indictment:first-of-type { margin-top: 4rem; }
+.ind-2 .ind-text { order: 2; }
+.ind-2 .evidence { order: 1; }
+.ind-3 { grid-template-columns: 1fr; text-align: center; }
+.ind-3 .ind-body { margin: 0 auto; }
+
+.ind-numeral {
+  position: absolute; top: 2.4rem; right: 0;
+  font-family: var(--display); font-weight: 700;
+  font-size: clamp(5rem, 11vw, 10rem); line-height: 1;
+  color: transparent; -webkit-text-stroke: 1px rgba(201, 162, 77, 0.18);
+  pointer-events: none; user-select: none;
+}
+.ind-2 .ind-numeral { right: auto; left: 0; }
+.ind-3 .ind-numeral { position: static; display: block; margin-bottom: 0.5rem; }
+
+.ind-head {
+  font-family: var(--display); font-weight: 600;
+  font-size: clamp(2.2rem, 4.6vw, 3.6rem); line-height: 1.1;
+  letter-spacing: 0.01em; color: var(--text);
+}
+.ind-body { max-width: 30rem; margin-top: 1.2rem; color: var(--text2); }
+
+/* evidence: mono lines on bare page, bronze left tick only */
+.evidence {
+  border-left: 2px solid var(--accent-dim);
+  padding: 0.4rem 0 0.4rem 1.4rem;
+  font-family: var(--mono); font-size: 0.85rem; line-height: 1.75;
+  overflow-x: auto; white-space: pre;
+}
+.ind-figure { margin-top: 2rem; }
+.big-num {
+  display: block; font-family: var(--mono); font-weight: 600;
+  font-size: clamp(2.6rem, 7vw, 5rem); color: var(--accent-bright);
+}
+.fig-arrow { color: var(--text3); }
+.figure-note { color: var(--text3); font-size: 0.9rem; }
+
+@media (max-width: 899px) {
+  .indictment { grid-template-columns: 1fr; padding: 4rem 0; }
+  .ind-2 .ind-text { order: 1; }
+  .ind-2 .evidence { order: 2; }
+  .ind-numeral { font-size: 4.5rem; top: 1.4rem; }
+}
 
 /* ---------- pipeline / wall ---------- */
 

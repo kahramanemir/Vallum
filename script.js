@@ -156,6 +156,22 @@
     }
   }
 
+  /* ---------- threats: evidence lines stamp in ---------- */
+  if (gsapOK) {
+    document.querySelectorAll('.indictment').forEach(function (ind) {
+      var lines = ind.querySelectorAll('.evidence .tl');
+      var targets = lines.length ? lines : ind.querySelectorAll('.big-num');
+      gsap.from(targets, {
+        opacity: 0, y: 10, duration: 0.45, stagger: 0.12, ease: 'power2.out',
+        scrollTrigger: { trigger: ind, start: 'top 70%' }
+      });
+      gsap.from(ind.querySelector('.ind-head'), {
+        opacity: 0, y: 24, duration: 0.7, ease: 'power3.out',
+        scrollTrigger: { trigger: ind, start: 'top 75%' }
+      });
+    });
+  }
+
   /* ---------- metric count-ups ---------- */
   var metricsDone = false;
   function runCountUps(section) {
