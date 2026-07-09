@@ -167,10 +167,6 @@ h2 { font-size: clamp(2.4rem, 5vw, 4.2rem); }
 
 .scene-head { max-width: var(--wrap); margin: 0 auto; padding: 0 2rem; }
 .section-sub { color: var(--text2); max-width: 34rem; margin-top: 0.9rem; }
-main > section { padding: 9rem 2rem; }
-@media (max-width: 768px) {
-  main > section { padding: 5rem 1.25rem; }
-}
 
 h3 {
   font-family: var(--sans);
@@ -549,10 +545,12 @@ html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
 .gate-feed { margin: 3rem auto 0; max-width: 56rem; }
 .feed-body {
   font-family: var(--mono); font-size: 0.88rem; line-height: 1.9;
-  white-space: pre; overflow-x: auto;
+  overflow-x: auto;
   border-left: 2px solid var(--accent-dim); padding-left: 1.4rem;
 }
-.fl { display: block; transition: opacity 0.4s, transform 0.4s; }
+/* lines are block-level spans; collapse the literal newlines between them */
+.feed-body code { display: block; white-space: normal; }
+.fl { display: block; white-space: pre; transition: opacity 0.4s, transform 0.4s; }
 .ansi { color: var(--text3); transition: opacity 0.4s; }
 .fl-wrap { color: var(--accent); }
 
@@ -588,9 +586,11 @@ html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
 .gates-stage[data-step="6"] .inj-neutral { display: inline; }
 .gates-stage:not([data-step="6"]) .fl-wrap { opacity: 0; }
 
-/* captions: gsap-only, one visible at a time */
+/* captions: gsap-only, one visible at a time, pinned-scene widths only */
 .gate-captions { display: none; }
-html.gsap .gate-captions { display: block; margin-top: 2rem; min-height: 1.6em; position: relative; }
+@media (min-width: 900px) {
+  html.gsap .gate-captions { display: block; margin-top: 2rem; min-height: 1.6em; position: relative; }
+}
 .gate-caption {
   position: absolute; inset: 0; text-align: center;
   color: var(--text2); opacity: 0; transition: opacity 0.3s;
@@ -894,6 +894,8 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
   .nav-links { gap: 1.1rem; }
   .nav-links a:not(.nav-install) { display: none; }
   .footer-inner { padding: 3rem 1.25rem 2.5rem; }
+  .scene-demo, .scene-gates { padding: 5rem 0; }
+  .threats, .guardrail, .metrics, .motto, .install { padding: 5rem 1.25rem; }
   .motto { padding-top: 5.5rem; }
   .optimizer-marquee { margin-top: 3rem; }
 }
