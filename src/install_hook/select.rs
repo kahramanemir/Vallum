@@ -139,6 +139,43 @@ impl SelectState {
     }
 }
 
+/// Decode one keypress from `input`. Raw mode sets VMIN=0/VTIME=1, so a
+/// read may return 0 bytes (timeout): as the first byte that is `Ok(None)`
+/// (poll again); after an ESC it is what distinguishes a bare ESC press
+/// from the start of an arrow-key CSI sequence.
+pub fn read_key(input: &mut impl std::io::Read) -> std::io::Result<Option<Key>> {
+    let mut b = [0u8; 1];
+    if input.read(&mut b)? == 0 {
+        return Ok(None);
+    }
+    Ok(Some(match b[0] {
+        0x03 => Key::Cancel, // Ctrl-C arrives as a byte because ISIG is off
+        b'\r' | b'\n' => Key::Confirm,
+        b' ' => Key::Toggle,
+        b'a' => Key::ToggleAll,
+        b'q' => Key::Cancel,
+        b'j' => Key::Down,
+        b'k' => Key::Up,
+        0x1b => {
+            if input.read(&mut b)? == 0 {
+                return Ok(Some(Key::Cancel)); // bare ESC
+            }
+            if b[0] != b'[' {
+                return Ok(Some(Key::Other));
+            }
+            if input.read(&mut b)? == 0 {
+                return Ok(Some(Key::Other));
+            }
+            match b[0] {
+                b'A' => Key::Up,
+                b'B' => Key::Down,
+                _ => Key::Other,
+            }
+        }
+        _ => Key::Other,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +312,42 @@ mod tests {
         let out = s.render(false);
         assert!(out.contains("  ❯ [ ] Cursor       (hook installed ✓)\n"));
         assert!(out.contains("    [ ] Claude Code  (hook installed ✓)\n"));
+    }
+
+    fn key(bytes: &[u8]) -> Option<Key> {
+        let mut input = bytes;
+        read_key(&mut input).unwrap()
+    }
+
+    #[test]
+    fn decodes_plain_keys() {
+        assert_eq!(key(b" "), Some(Key::Toggle));
+        assert_eq!(key(b"\r"), Some(Key::Confirm));
+        assert_eq!(key(b"\n"), Some(Key::Confirm));
+        assert_eq!(key(b"a"), Some(Key::ToggleAll));
+        assert_eq!(key(b"q"), Some(Key::Cancel));
+        assert_eq!(key(b"j"), Some(Key::Down));
+        assert_eq!(key(b"k"), Some(Key::Up));
+        assert_eq!(key(&[0x03]), Some(Key::Cancel), "Ctrl-C byte with ISIG off");
+        assert_eq!(key(b"z"), Some(Key::Other));
+    }
+
+    #[test]
+    fn decodes_arrow_sequences() {
+        assert_eq!(key(b"\x1b[A"), Some(Key::Up));
+        assert_eq!(key(b"\x1b[B"), Some(Key::Down));
+        assert_eq!(key(b"\x1b[C"), Some(Key::Other), "right arrow ignored");
+    }
+
+    #[test]
+    fn bare_esc_cancels_and_esc_junk_is_ignored() {
+        assert_eq!(key(b"\x1b"), Some(Key::Cancel), "bare ESC (timeout after)");
+        assert_eq!(key(b"\x1bx"), Some(Key::Other));
+        assert_eq!(key(b"\x1b["), Some(Key::Other), "truncated CSI");
+    }
+
+    #[test]
+    fn zero_byte_read_is_none() {
+        assert_eq!(key(b""), None, "VTIME timeout surfaces as None");
     }
 }
