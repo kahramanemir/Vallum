@@ -550,12 +550,12 @@ html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
 }
 /* lines are block-level spans; collapse the literal newlines between them */
 .feed-body code { display: block; white-space: normal; }
-.fl { display: block; white-space: pre; transition: opacity 0.4s, transform 0.4s; }
+.fl { display: block; white-space: pre; transition: opacity 0.4s; }
 .ansi { color: var(--text3); transition: opacity 0.4s; }
 .fl-wrap { color: var(--accent); }
 
 /* one-line mutation states. Default markup ships data-step="6" (end state). */
-.gates-stage:not([data-step="0"]) .ansi { opacity: 0; }
+.gates-stage:not([data-step="0"]) .ansi { opacity: 0; font-size: 0; }
 .gates-stage[data-step="2"] .fl-noise,
 .gates-stage[data-step="3"] .fl-noise,
 .gates-stage[data-step="4"] .fl-noise,
@@ -720,6 +720,7 @@ html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
   font-family: var(--display); font-weight: 600;
   font-size: clamp(1.6rem, 4vw, 3rem);
   letter-spacing: 0.12em; color: var(--text);
+  text-wrap: balance;
   transition: letter-spacing 1.1s ease, opacity 1.1s ease;
 }
 .motto-hl { color: var(--accent-bright); }
@@ -751,7 +752,7 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
   font-family: var(--mono); font-size: 0.85rem; color: var(--text3);
   padding: 0.4rem 0.9rem; border-bottom: 1px solid transparent;
 }
-.method + .method::before { content: '·'; margin-right: 1.1rem; color: var(--line-strong); }
+.method + .method::before { content: '·' / ''; margin-right: 1.1rem; color: var(--line-strong); }
 .method.active { color: var(--accent-bright); border-bottom-color: var(--accent); }
 .method:hover { color: var(--text); }
 

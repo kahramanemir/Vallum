@@ -4,7 +4,6 @@
   document.documentElement.classList.add('js');
 
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var canHover = window.matchMedia('(hover: hover)').matches;
 
   /* gsap gate: scenes only exist when motion is allowed AND gsap loaded.
      Without html.gsap the stylesheet must render a complete static page. */
@@ -151,7 +150,9 @@
       });
       /* below 900px: no pin; show the static stacked layout */
       mmDemo.add('(max-width: 899px)', function () {
-        document.querySelector('.scene-demo .term-layers').removeAttribute('style');
+        layers.removeAttribute('style');
+        layers.classList.remove('sweeping');
+        if (tokN) tokN.textContent = '3,210';
       });
     }
   }
@@ -238,7 +239,7 @@
   if (gsapOK) {
     gsap.from('.seal', {
       scale: 2.2, opacity: 0, rotation: 8, duration: 0.5,
-      ease: 'back.out(2.2)', stagger: 0.3,
+      ease: 'back.out(2.2)', stagger: 0.3, immediateRender: false,
       scrollTrigger: { trigger: '.ledger', start: 'top 72%' }
     });
   }
@@ -278,7 +279,10 @@
         var trig = el.closest('.pin-spacer') || el;
         ScrollTrigger.create({
           trigger: trig, start: 'top 55%', end: 'bottom 45%',
-          onToggle: function (st) { wp.classList.toggle('active', st.isActive); }
+          onToggle: function (st) {
+            wp.classList.toggle('active', st.isActive);
+            if (st.isActive) { wp.setAttribute('aria-current', 'true'); } else { wp.removeAttribute('aria-current'); }
+          }
         });
       });
       return function () {
