@@ -705,27 +705,6 @@ html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
 .ledger-caption { margin-top: 1.4rem; color: var(--text3); font-size: 0.9rem; }
 @media (max-width: 899px) { .guardrail { grid-template-columns: 1fr; gap: 2.5rem; } }
 
-/* ---------- metrics ---------- */
-
-.metrics { max-width: var(--wrap); margin: 0 auto; padding: 9rem 2rem 5rem; }
-.carved-row {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem;
-  margin-top: 3.5rem; padding: 3rem 0;
-  border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong);
-}
-.carve { text-align: center; }
-.carve-num {
-  display: block; font-family: var(--mono); font-weight: 600;
-  font-size: clamp(2.2rem, 4.5vw, 4rem); color: var(--accent-bright);
-  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.55), 0 -1px 0 rgba(236, 231, 220, 0.08);
-}
-.carve-label {
-  display: block; margin-top: 0.7rem; font-size: 0.82rem;
-  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3);
-}
-.metrics-note { margin-top: 2.2rem; color: var(--text3); max-width: 44rem; }
-@media (max-width: 899px) { .carved-row { grid-template-columns: repeat(2, 1fr); } }
-
 /* ---------- motto ---------- */
 
 .motto { text-align: center; padding: 8rem 2rem; }
@@ -909,7 +888,7 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
   .nav-links a:not(.nav-install) { display: none; }
   .footer-inner { padding: 3rem 1.25rem 2.5rem; }
   .scene-demo, .scene-gates { padding: 5rem 0; }
-  .threats, .guardrail, .metrics, .motto, .install { padding: 5rem 1.25rem; }
+  .threats, .guardrail, .motto, .install { padding: 5rem 1.25rem; }
   .motto { padding-top: 5.5rem; }
   .optimizer-marquee { margin-top: 3rem; }
 }

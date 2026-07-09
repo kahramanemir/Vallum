@@ -211,33 +211,6 @@
     });
   }
 
-  /* ---------- metric count-ups ---------- */
-  var metricsDone = false;
-  function runCountUps(section) {
-    if (metricsDone || reduceMotion) return;
-    metricsDone = true;
-    section.querySelectorAll('[data-count]').forEach(function (el) {
-      var raw = el.getAttribute('data-count');
-      var target = parseFloat(raw);
-      var suffix = el.getAttribute('data-suffix') || '';
-      var decimals = (raw.split('.')[1] || '').length;
-      var duration = 1500;
-      var start = null;
-      function frame(now) {
-        if (start === null) start = now;
-        var p = Math.min((now - start) / duration, 1);
-        var eased = 1 - Math.pow(1 - p, 4);
-        el.textContent = (target * eased).toFixed(decimals) + suffix;
-        if (p < 1) {
-          requestAnimationFrame(frame);
-        } else {
-          el.textContent = raw + suffix; /* land exactly on the real value */
-        }
-      }
-      requestAnimationFrame(frame);
-    });
-  }
-
   /* ---------- guardrail seals stamp in ---------- */
   if (gsapOK) {
     /* hidden at scale 1 until the trigger: invisible pre-stamp without the
@@ -252,14 +225,7 @@
       });
   }
 
-  /* ---------- metrics count up + motto reveal ---------- */
-  var metricsSection = document.querySelector('.metrics');
-  if (metricsSection && gsapOK) {
-    ScrollTrigger.create({
-      trigger: metricsSection, start: 'top 70%', once: true,
-      onEnter: function () { runCountUps(metricsSection); }
-    });
-  }
+  /* ---------- motto reveal ---------- */
   var mottoLatin = document.querySelector('.motto-latin');
   if (mottoLatin && gsapOK) {
     ScrollTrigger.create({
@@ -276,7 +242,7 @@
         scaleY: 1, ease: 'none',
         scrollTrigger: { trigger: document.body, start: 'top top', end: 'bottom bottom', scrub: 0.5 }
       });
-      var wpIds = ['hero', 'demo', 'threats', 'pipeline', 'guardrail', 'metrics', 'install'];
+      var wpIds = ['hero', 'demo', 'threats', 'pipeline', 'guardrail', 'install'];
       var wps = document.querySelectorAll('.patrol .waypoint');
       wpIds.forEach(function (id, i) {
         var el = document.getElementById(id);
