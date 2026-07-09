@@ -1,11 +1,20 @@
 (function () {
   'use strict';
 
-  /* signals CSS that JS is live; all animation gating is scoped to html.js */
   document.documentElement.classList.add('js');
 
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var canHover = window.matchMedia('(hover: hover)').matches;
+
+  /* gsap gate: scenes only exist when motion is allowed AND gsap loaded.
+     Without html.gsap the stylesheet must render a complete static page. */
+  var gsapOK = !reduceMotion &&
+    typeof window.gsap !== 'undefined' &&
+    typeof window.ScrollTrigger !== 'undefined';
+  if (gsapOK) {
+    gsap.registerPlugin(ScrollTrigger);
+    document.documentElement.classList.add('gsap');
+  }
 
   /* ---------- rising embers over the hero (canvas) ---------- */
   var emberCanvas = document.querySelector('.embers');
