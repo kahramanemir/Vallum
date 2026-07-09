@@ -114,9 +114,12 @@
       .from('.hero-actions', { y: 18, opacity: 0, duration: 0.6 }, '-=0.45')
       .from('.descend', { opacity: 0, duration: 0.8 }, '-=0.2');
 
-    /* inscription parallax: sinks slightly as you leave the gate */
+    /* inscription parallax: sinks slightly as you leave the gate.
+       yPercent only — opacity belongs to the load timeline above; sharing
+       the channel let the scrub capture a mid-fade start value and pin the
+       inscription invisible after the first scroll */
     gsap.to('.inscription', {
-      yPercent: 18, opacity: 0.5, ease: 'none',
+      yPercent: 18, ease: 'none',
       scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true }
     });
   }
