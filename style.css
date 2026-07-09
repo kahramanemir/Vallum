@@ -25,6 +25,7 @@
 }
 
 :root {
+  color-scheme: dark; /* UA-drawn scrollbars and controls render their dark variant */
   --bg0: #0c0b09;
   --bg1: #14110c;
   --bg2: #1a160f;
@@ -58,6 +59,16 @@
 *::-webkit-scrollbar { height: 6px; width: 8px; }
 *::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* code boxes swipe/wheel-scroll horizontally; their commands are fully
+   carried by the Copy buttons, so the bars are pure noise on the dark set */
+.term-body, .evidence, .feed-body, .plinth-cmd pre {
+  scrollbar-width: none;
+}
+.term-body::-webkit-scrollbar,
+.evidence::-webkit-scrollbar,
+.feed-body::-webkit-scrollbar,
+.plinth-cmd pre::-webkit-scrollbar { display: none; }
 
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {

