@@ -371,3 +371,46 @@ fn help_lists_commands_task_first() {
         );
     }
 }
+
+#[test]
+fn bare_install_hook_non_tty_defaults_to_claude() {
+    let tmp = make_temp_fixture_dir("bare_install_hook_home");
+    let output = Command::new(vallum_bin())
+        .arg("install-hook")
+        .env("HOME", &tmp)
+        .output()
+        .expect("run vallum install-hook");
+    assert!(output.status.success(), "exited {:?}", output.status.code());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Claude Code"), "got: {stdout}");
+    let settings = fs::read_to_string(tmp.join(".claude").join("settings.json"))
+        .expect("settings.json written");
+    assert!(settings.contains("vallum hook"));
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn install_hook_explicit_agent_never_prompts() {
+    let tmp = make_temp_fixture_dir("install_hook_codex_home");
+    let output = Command::new(vallum_bin())
+        .args(["install-hook", "--agent", "codex"])
+        .env("HOME", &tmp)
+        .output()
+        .expect("run vallum install-hook --agent codex");
+    assert!(output.status.success(), "exited {:?}", output.status.code());
+    let hooks =
+        fs::read_to_string(tmp.join(".codex").join("hooks.json")).expect("hooks.json written");
+    assert!(hooks.contains("vallum hook"));
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn install_hook_project_non_claude_still_errors() {
+    let output = Command::new(vallum_bin())
+        .args(["install-hook", "--project", "--agent", "codex"])
+        .output()
+        .expect("run vallum install-hook");
+    assert_eq!(output.status.code(), Some(125));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Claude Code-only"), "got: {stderr}");
+}

@@ -84,9 +84,9 @@ parsed as vallum's.")]
     },
     /// Install the Vallum pre-exec hook into an agent's config
     InstallHook {
-        /// Which agent to install for
-        #[arg(long, value_enum, default_value_t = AgentArg::Claude)]
-        agent: AgentArg,
+        /// Which agent to install for (omit to pick interactively)
+        #[arg(long, value_enum)]
+        agent: Option<AgentArg>,
         /// Install at user level (default)
         #[arg(long)]
         user: bool,
