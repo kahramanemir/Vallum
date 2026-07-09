@@ -168,11 +168,12 @@ impl SelectState {
     }
 }
 
-/// Decode one keypress from `input`. Raw mode sets VMIN=0/VTIME=1, so a
-/// read may legitimately return 0 bytes after a 0.1 s timeout. On the
-/// first byte that surfaces as `Ok(None)` (the caller polls again); after
-/// an ESC byte it is how a bare ESC press is told apart from the start of
-/// an arrow-key CSI sequence.
+/// Decode one keypress from `input`. Because raw mode sets VMIN=0/VTIME=1,
+/// a read can return 0 bytes after a 0.1 s timeout with no key pressed. On
+/// the very first byte, that timeout surfaces as `Ok(None)` so the caller
+/// polls again; after an ESC byte, the same timeout means no more bytes
+/// followed, which is how a bare ESC press is distinguished from the start
+/// of an arrow-key CSI (`ESC [ A`/`ESC [ B`) sequence.
 pub fn read_key(input: &mut impl std::io::Read) -> std::io::Result<Option<Key>> {
     let mut b = [0u8; 1];
     if input.read(&mut b)? == 0 {
