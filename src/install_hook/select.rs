@@ -2,7 +2,7 @@
 //! Pure selection state machine + rendering live here, separated from the
 //! termios/ANSI layer so they are unit-testable without a TTY.
 
-use super::Agent;
+use super::{agent_label, Agent, AgentStatus};
 
 /// One selectable row.
 #[derive(Debug, Clone)]
@@ -11,6 +11,35 @@ pub struct Row {
     pub label: &'static str,
     pub hooked: bool,
     pub checked: bool,
+}
+
+impl Row {
+    /// Install picker rows: every agent; detected-but-unhooked start checked.
+    pub fn install_rows(statuses: &[(Agent, AgentStatus)]) -> Vec<Row> {
+        statuses
+            .iter()
+            .map(|&(agent, s)| Row {
+                agent,
+                label: agent_label(agent),
+                hooked: s.hooked,
+                checked: s.detected && !s.hooked,
+            })
+            .collect()
+    }
+
+    /// Uninstall picker rows: only hooked agents, none preselected.
+    pub fn uninstall_rows(statuses: &[(Agent, AgentStatus)]) -> Vec<Row> {
+        statuses
+            .iter()
+            .filter(|(_, s)| s.hooked)
+            .map(|&(agent, s)| Row {
+                agent,
+                label: agent_label(agent),
+                hooked: s.hooked,
+                checked: false,
+            })
+            .collect()
+    }
 }
 
 /// A decoded keypress the picker reacts to.
@@ -349,5 +378,38 @@ mod tests {
     #[test]
     fn zero_byte_read_is_none() {
         assert_eq!(key(b""), None, "VTIME timeout surfaces as None");
+    }
+
+    fn st(detected: bool, hooked: bool) -> crate::install_hook::AgentStatus {
+        crate::install_hook::AgentStatus { detected, hooked }
+    }
+
+    #[test]
+    fn install_rows_preselect_detected_unhooked() {
+        let rows = Row::install_rows(&[
+            (Agent::Claude, st(true, true)),   // hooked → unchecked
+            (Agent::Codex, st(true, false)),   // detected, unhooked → checked
+            (Agent::Cursor, st(false, false)), // absent → unchecked
+            (Agent::Gemini, st(true, false)),  // detected, unhooked → checked
+        ]);
+        assert_eq!(rows.len(), 4, "install lists every agent");
+        let checked: Vec<Agent> = rows.iter().filter(|r| r.checked).map(|r| r.agent).collect();
+        assert_eq!(checked, vec![Agent::Codex, Agent::Gemini]);
+        assert!(rows[0].hooked, "hooked marker carried through");
+        assert_eq!(rows[0].label, "Claude Code");
+    }
+
+    #[test]
+    fn uninstall_rows_list_only_hooked_none_checked() {
+        let rows = Row::uninstall_rows(&[
+            (Agent::Claude, st(true, true)),
+            (Agent::Codex, st(true, false)),
+            (Agent::Cursor, st(true, true)),
+            (Agent::Gemini, st(false, false)),
+        ]);
+        let agents: Vec<Agent> = rows.iter().map(|r| r.agent).collect();
+        assert_eq!(agents, vec![Agent::Claude, Agent::Cursor]);
+        assert!(rows.iter().all(|r| !r.checked));
+        assert!(rows.iter().all(|r| r.hooked));
     }
 }
