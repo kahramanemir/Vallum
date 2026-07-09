@@ -46,7 +46,7 @@
   --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --display: 'Cinzel', 'Times New Roman', serif;
-  --wrap: 1160px;
+  --wrap: 1320px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -129,19 +129,17 @@ h1, h2 {
   color: var(--text);
 }
 
-h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); }
+h2 { font-size: clamp(2.4rem, 5vw, 4.2rem); }
+
+.scene-head { max-width: var(--wrap); margin: 0 auto; padding: 0 2rem; }
+.section-sub { color: var(--text2); max-width: 34rem; margin-top: 0.9rem; }
+main > section { padding: 9rem 0; }
 
 h3 {
   font-family: var(--sans);
   font-weight: 600;
   font-size: 1.05rem;
   letter-spacing: -0.01em;
-}
-
-.section-sub {
-  color: var(--text2);
-  max-width: 58ch;
-  margin-top: 0.9rem;
 }
 
 section {
@@ -283,25 +281,7 @@ section {
   pointer-events: none;
 }
 
-.hero-copy, .hero-demo { position: relative; z-index: 1; }
-
-/* ambient torchlight behind the demo, cursor-tilted panel */
-.hero-demo::before {
-  content: '';
-  position: absolute;
-  inset: -12% -8%;
-  z-index: -1;
-  background: radial-gradient(60% 55% at 50% 45%, rgba(201, 162, 77, 0.10), transparent 70%);
-  pointer-events: none;
-}
-.demo-tilt {
-  display: flex;
-  flex-direction: column;
-  transform-style: preserve-3d;
-  transition: transform 0.18s ease-out;
-  will-change: transform;
-}
-.hero-demo { perspective: 1100px; }
+.hero-copy { position: relative; z-index: 1; }
 
 .hero h1 {
   font-size: clamp(1.9rem, 2.9vw, 2.3rem);
@@ -366,12 +346,6 @@ section {
 
 /* ---------- hero terminal demo ---------- */
 
-.hero-demo {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .term {
   background: var(--bg1);
   border: 1px solid var(--line);
@@ -392,8 +366,6 @@ section {
   font-size: 0.72rem;
   color: var(--text3);
 }
-.term-clean .term-title { color: var(--accent); }
-
 .term-body {
   padding: 0.85rem 1rem;
   font-size: 0.8rem;
@@ -415,145 +387,8 @@ section {
 .t-neutral { color: var(--green); }
 .t-stat { color: var(--accent); margin-top: 0.35rem; }
 
-/* the boundary between the two terminals: the wall itself */
-.boundary {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 44px;
-  z-index: 1;
-  cursor: pointer;
-}
-.boundary:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-ctl);
-}
-/* mirrored rampart wings growing outward from the label */
-.boundary::before,
-.boundary::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  height: 8px;
-  width: calc(50% - 92px);
-  transform: translateY(-50%);
-  opacity: 0.55;
-}
-.boundary::before {
-  right: calc(50% + 76px);
-  /* anchored at the label side so both wings mirror perfectly */
-  background: repeating-linear-gradient(270deg,
-    var(--accent) 0 14px,
-    transparent 14px 24px);
-}
-.boundary::after {
-  left: calc(50% + 76px);
-  background: repeating-linear-gradient(90deg,
-    var(--accent) 0 14px,
-    transparent 14px 24px);
-}
-.boundary-label {
-  position: relative;
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 0.82rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--accent);
-  padding: 0.15rem 1.1rem;
-}
-
 /* ---------- threats bento ---------- */
 
-.threat-grid {
-  display: grid;
-  grid-template-columns: 3fr 2fr;
-  grid-template-rows: auto auto;
-  gap: 1rem;
-  margin-top: 2.6rem;
-}
-
-.threat-card {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--bg1);
-  padding: 1.7rem 1.7rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  transition: border-color 0.3s ease;
-  box-shadow: var(--shadow-panel);
-}
-.threat-card:hover { border-color: var(--line-strong); }
-/* bronze torchlight follows the cursor */
-.threat-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.35s ease;
-  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%),
-    rgba(201, 162, 77, 0.09), transparent 65%);
-}
-.threat-card:hover::after { opacity: 1; }
-.threat-card p { color: var(--text2); font-size: 0.95rem; }
-
-.threat-main {
-  grid-row: 1 / 3;
-  background: linear-gradient(160deg, var(--bg2), var(--bg1) 70%);
-}
-
-.mini-code {
-  margin-top: auto;
-  background: var(--bg0);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-ctl);
-  padding: 0.9rem 1rem;
-  font-size: 0.78rem;
-  line-height: 1.7;
-  overflow-x: auto;
-}
-.mini-code code { display: block; white-space: normal; }
-
-.threat-figure {
-  margin-top: auto;
-  display: flex;
-  align-items: baseline;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-}
-
-/* live redaction micro-story: a leaked key is swept and sealed */
-.redact-target {
-  position: relative;
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 1.02rem;
-  min-width: 20ch;
-}
-.redact-text { color: var(--accent-bright); white-space: nowrap; }
-.redact-target.raw .redact-text { color: #d8b58a; }
-.redact-cover {
-  position: absolute;
-  inset: -2px -5px;
-  background: var(--accent);
-  border-radius: 3px;
-  transform: scaleX(0);
-  transform-origin: left;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .redact-cover { transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
-  .redact-target.covering .redact-cover { transform: scaleX(1); }
-  .redact-target.uncover .redact-cover {
-    transform-origin: right;
-    transform: scaleX(0);
-  }
-}
 .big-num {
   font-family: var(--mono);
   font-weight: 600;
@@ -563,70 +398,6 @@ section {
 .figure-note { color: var(--text3); font-size: 0.82rem; }
 
 /* ---------- pipeline / wall ---------- */
-
-.wall {
-  position: relative;
-  margin-top: 2.6rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--bg1);
-  padding: 2.4rem 2rem 2rem;
-  display: flex;
-  align-items: center;
-  gap: 1.4rem;
-  box-shadow: var(--shadow-panel);
-}
-/* crenellated top edge of the wall */
-.wall::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 24px;
-  right: 24px;
-  height: 7px;
-  background: repeating-linear-gradient(90deg,
-    var(--accent) 0 16px,
-    transparent 16px 28px);
-  opacity: 0.45;
-}
-
-/* mirrored end labels, equal width, hugging the gates from both sides */
-.wall-ends { flex-shrink: 0; width: 96px; }
-.wall-end-label {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--text3);
-  display: block;
-}
-.wall-in .wall-end-label { text-align: right; }
-.wall-out .wall-end-label { color: var(--accent); text-align: left; }
-
-.gates {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  gap: 0.5rem;
-  list-style: none;
-  flex-wrap: wrap;
-}
-.gate {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 110px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--text2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-ctl);
-  padding: 0.75rem 0.5rem;
-  background: var(--bg0);
-  transition: border-color 0.2s ease, color 0.2s ease;
-}
-.gate:hover { border-color: var(--accent); color: var(--text); }
 
 .pipeline-note {
   margin-top: 1.6rem;
@@ -704,76 +475,9 @@ section {
   max-width: 50ch;
 }
 
-.verdict-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--bg1);
-  overflow: hidden;
-  box-shadow: var(--shadow-panel);
-}
-.verdict {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.05rem 1.3rem;
-}
-.verdict + .verdict { border-top: 1px solid var(--line); }
-.verdict-cmd {
-  font-size: 0.85rem;
-  color: var(--text2);
-  overflow-x: auto;
-  white-space: nowrap;
-}
-.verdict-tag {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.28rem 0.7rem;
-  border-radius: var(--radius-ctl);
-  flex-shrink: 0;
-}
-.v-allow { color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); }
-.v-ask   { color: var(--accent-bright); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); }
-.v-deny  { color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 45%, transparent); }
-
-.guard-caption {
-  margin-top: 0.9rem;
-  color: var(--text3);
-  font-size: 0.85rem;
-}
-
 /* ---------- metrics ---------- */
 
 .metrics { text-align: left; }
-
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 2rem;
-  margin-top: 2.6rem;
-  padding-top: 2.4rem;
-  border-top: 1px solid var(--line);
-}
-
-.stat-num {
-  display: block;
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: clamp(2.3rem, 4.2vw, 3.4rem);
-  color: var(--accent);
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-.stat-label {
-  display: block;
-  margin-top: 0.55rem;
-  color: var(--text3);
-  font-size: 0.88rem;
-}
 
 .metrics-note {
   margin-top: 2.2rem;
@@ -817,76 +521,6 @@ section {
 
 /* ---------- install ---------- */
 
-.install-box {
-  margin-top: 2.6rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--bg1);
-  overflow: hidden;
-  box-shadow: var(--shadow-panel);
-}
-
-.tabs {
-  display: flex;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg2);
-}
-.tab {
-  font-family: var(--sans);
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: var(--text3);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 0.85rem 1.35rem;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
-}
-.tab:hover { color: var(--text2); }
-.tab.active { color: var(--accent-bright); border-bottom-color: var(--accent); }
-
-.tab-panel {
-  display: none;
-  padding: 1.4rem 1.5rem;
-}
-.tab-panel.active { display: block; }
-/* command and button share a row; the button never overlaps the code */
-.panel-row {
-  display: flex;
-  align-items: center;
-  gap: 1.1rem;
-}
-.panel-row + .panel-row { margin-top: 0.65rem; }
-/* the honest beat: verify-before-you-pipe note inside the shell tab */
-.panel-verify {
-  margin-top: 1.1rem;
-  padding-top: 1.1rem;
-  border-top: 1px solid var(--line);
-  color: var(--text2);
-  font-size: 0.86rem;
-  max-width: 62ch;
-}
-.panel-verify code {
-  font-size: 0.78rem;
-  color: var(--text2);
-  background: var(--bg2);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0.05rem 0.3rem;
-}
-
-.install-code {
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-}
-.install-code code {
-  font-size: 0.85rem;
-  color: var(--text);
-  white-space: pre;
-}
-
 .copy-btn {
   flex-shrink: 0;
   font-family: var(--sans);
@@ -901,18 +535,6 @@ section {
 }
 .copy-btn:hover { color: var(--accent-bright); border-color: var(--accent); }
 
-.hook-callout {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  margin-top: 1.6rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: linear-gradient(120deg, var(--bg2), var(--bg1) 60%);
-  padding: 1.6rem 1.8rem;
-  box-shadow: var(--shadow-panel);
-}
 .hook-text p { color: var(--text2); font-size: 0.93rem; margin-top: 0.4rem; max-width: 46ch; }
 .hook-code {
   flex-shrink: 0;
@@ -1023,16 +645,6 @@ section {
    content stays visible with JavaScript disabled or in headless renderers. */
 
 @media (prefers-reduced-motion: no-preference) {
-  /* Entrances enhance an already-visible default: nothing rests at opacity 0,
-     so a skipped observer callback (fast momentum scroll, headless render)
-     can never blank a section — at worst it skips the animation. */
-  html.js .reveal.in {
-    animation: reveal-rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  @keyframes reveal-rise {
-    from { opacity: 0; transform: translateY(22px); }
-  }
-
   /* page-load choreography: the inscription carves in, content rises */
   html.js .inscription {
     animation: carve 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -1041,9 +653,7 @@ section {
     from { opacity: 0; letter-spacing: 0.3em; }
     to   { opacity: 1; letter-spacing: 0.18em; }
   }
-  html.js .hero-copy > *,
-  html.js .hero-demo .term,
-  html.js .hero-demo .boundary {
+  html.js .hero-copy > * {
     opacity: 0;
     transform: translateY(18px);
     animation: rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -1051,71 +661,8 @@ section {
   html.js .hero-copy h1 { animation-delay: 0.30s; }
   html.js .hero-copy .hero-sub { animation-delay: 0.44s; }
   html.js .hero-copy .hero-actions { animation-delay: 0.58s; }
-  html.js .hero-demo .term-raw { animation-delay: 0.50s; }
-  html.js .hero-demo .boundary { animation-delay: 0.62s; }
-  html.js .hero-demo .term-clean { animation-delay: 0.74s; }
   @keyframes rise {
     to { opacity: 1; transform: none; }
-  }
-
-  /* hero demo line-by-line entrance, driven by JS */
-  .hero-demo.anim .tl {
-    opacity: 0;
-    transform: translateY(4px);
-    transition: opacity 0.3s ease, transform 0.3s ease;
-  }
-  .hero-demo.anim .tl.on {
-    opacity: 1;
-    transform: none;
-  }
-  .hero-demo.anim .boundary::before,
-  .hero-demo.anim .boundary::after {
-    transform: translateY(-50%) scaleX(0);
-    transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .hero-demo.anim .boundary::before { transform-origin: right; }
-  .hero-demo.anim .boundary::after { transform-origin: left; }
-  .hero-demo.anim.wall-up .boundary::before,
-  .hero-demo.anim.wall-up .boundary::after {
-    transform: translateY(-50%) scaleX(1);
-  }
-
-  /* typing caret on the demo command */
-  .type-cmd.typing::after {
-    content: '';
-    display: inline-block;
-    width: 7px;
-    height: 0.95em;
-    margin-left: 2px;
-    vertical-align: text-bottom;
-    background: var(--accent);
-    animation: caret 0.9s steps(1) infinite;
-  }
-  @keyframes caret {
-    50% { opacity: 0; }
-  }
-
-  /* pipeline gates light up in sequence — visible by default, animated
-     only while the section itself is playing its entrance */
-  html.js .pipeline.in .gate {
-    animation: reveal-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  html.js .pipeline.in .gate:nth-child(1) { animation-delay: 0.10s; }
-  html.js .pipeline.in .gate:nth-child(2) { animation-delay: 0.20s; }
-  html.js .pipeline.in .gate:nth-child(3) { animation-delay: 0.30s; }
-  html.js .pipeline.in .gate:nth-child(4) { animation-delay: 0.40s; }
-  html.js .pipeline.in .gate:nth-child(5) { animation-delay: 0.50s; }
-  html.js .pipeline.in .gate:nth-child(6) { animation-delay: 0.60s; }
-
-  /* guardrail verdicts stamp in like seals — same principle */
-  html.js .guardrail.in .verdict-tag {
-    animation: stamp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  html.js .guardrail.in .verdict:nth-child(1) .verdict-tag { animation-delay: 0.35s; }
-  html.js .guardrail.in .verdict:nth-child(2) .verdict-tag { animation-delay: 0.65s; }
-  html.js .guardrail.in .verdict:nth-child(3) .verdict-tag { animation-delay: 0.95s; }
-  @keyframes stamp {
-    from { opacity: 0; transform: scale(1.45); }
   }
 }
 
@@ -1133,10 +680,7 @@ section {
     grid-template-columns: 1fr;
     gap: 2.5rem;
   }
-  .guard-visual { order: 2; }
   .guard-copy { order: 1; }
-  .stat-row { grid-template-columns: repeat(2, 1fr); }
-  .hook-callout { flex-direction: column; align-items: flex-start; }
 }
 
 @media (max-width: 768px) {
@@ -1146,17 +690,6 @@ section {
      Install stays, the wayfinding links collapse */
   .nav-links { gap: 1.1rem; }
   .nav-links a:not(.nav-install) { display: none; }
-  .threat-grid { grid-template-columns: 1fr; }
-  .threat-main { grid-row: auto; }
-  .wall {
-    flex-direction: column;
-    align-items: stretch;
-    text-align: center;
-  }
-  .wall-ends { width: auto; }
-  .wall-in .wall-end-label, .wall-out .wall-end-label { text-align: center; }
-  .gates { flex-direction: column; }
-  .gate { min-width: 0; }
   .footer-inner { padding: 3rem 1.25rem 2.5rem; }
   .motto { padding-top: 5.5rem; }
   .optimizer-marquee { margin-top: 3rem; }
