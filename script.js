@@ -122,6 +122,40 @@
     });
   }
 
+  /* ---------- Scene I: the demonstration ---------- */
+  if (gsapOK) {
+    var layers = document.querySelector('.scene-demo .term-layers');
+    var tokN = document.querySelector('.scene-demo .tok-n');
+    if (layers) {
+      var sweepState = { v: 0 };
+      var mmDemo = gsap.matchMedia();
+      mmDemo.add('(min-width: 900px)', function () {
+        gsap.to(sweepState, {
+          v: 100, ease: 'none',
+          scrollTrigger: {
+            trigger: '.scene-demo', start: 'top top', end: '+=1400',
+            pin: true, scrub: 0.4,
+            onUpdate: function (st) {
+              layers.classList.toggle('sweeping', st.progress > 0.01 && st.progress < 0.99);
+              if (tokN) {
+                var t = Math.round(3210 - (3210 - 612) * st.progress);
+                tokN.textContent = t.toLocaleString('en-US');
+              }
+            }
+          },
+          /* tween-level onUpdate: sweepState.v is interpolated per tick */
+          onUpdate: function () {
+            layers.style.setProperty('--sweep', String(sweepState.v));
+          }
+        });
+      });
+      /* below 900px: no pin; show the static stacked layout */
+      mmDemo.add('(max-width: 899px)', function () {
+        document.querySelector('.scene-demo .term-layers').removeAttribute('style');
+      });
+    }
+  }
+
   /* ---------- metric count-ups ---------- */
   var metricsDone = false;
   function runCountUps(section) {

@@ -381,6 +381,55 @@ html.gsap .descend-line { animation: descend-pulse 2.4s ease-in-out infinite; }
 .t-neutral { color: var(--green); }
 .t-stat { color: var(--accent); margin-top: 0.35rem; }
 
+/* ---------- scene I: the demonstration (pinned sweep) ---------- */
+
+.scene-demo { padding: 9rem 0; }
+.demo-stage { max-width: 62rem; margin: 3.5rem auto 0; padding: 0 2rem; }
+.term-stage { box-shadow: var(--shadow-panel); }
+.term-layers { position: relative; }
+.tok-live { margin-left: auto; font-family: var(--mono); font-size: 0.78rem; color: var(--text3); }
+.tok-live .tok-n { color: var(--accent-bright); }
+
+/* static: raw block, crenellated divider, clean block — all readable */
+.layer-divider {
+  display: flex; align-items: center; justify-content: center;
+  height: 2.2rem; position: relative;
+  background:
+    repeating-linear-gradient(90deg, var(--accent-dim) 0 18px, transparent 18px 30px)
+    center / 100% 6px no-repeat;
+}
+.layer-divider span {
+  font-family: var(--display); font-size: 0.72rem; letter-spacing: 0.35em;
+  color: var(--accent); background: var(--bg2); padding: 0 1rem; text-transform: uppercase;
+}
+
+/* gsap mode: clean layer overlays raw, revealed by the sweep */
+html.gsap .term-layers { --sweep: 0; }
+html.gsap .layer-divider { display: none; }
+html.gsap .layer-clean {
+  position: absolute; inset: 0;
+  background: var(--bg2);
+  clip-path: inset(0 calc(100% - var(--sweep) * 1%) 0 0);
+}
+html.gsap .sweep {
+  position: absolute; top: 0; bottom: 0; left: calc(var(--sweep) * 1%);
+  width: 14px; margin-left: -7px;
+  background:
+    repeating-linear-gradient(180deg, var(--accent) 0 14px, transparent 14px 24px)
+    center / 4px 100% no-repeat;
+  filter: drop-shadow(0 0 12px rgba(201, 162, 77, 0.5));
+  opacity: 0;
+}
+html.gsap .term-layers.sweeping .sweep { opacity: 1; }
+.sweep { display: none; }
+html.gsap .sweep { display: block; }
+
+@media (max-width: 899px) {
+  html.gsap .layer-clean { position: static; clip-path: none; background: none; }
+  html.gsap .layer-divider { display: flex; }
+  html.gsap .sweep { display: none; }
+}
+
 /* ---------- threats bento ---------- */
 
 .big-num {
