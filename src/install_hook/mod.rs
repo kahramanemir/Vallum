@@ -6,6 +6,8 @@ pub mod claude;
 pub mod codex;
 pub mod cursor;
 pub mod gemini;
+#[cfg(unix)]
+pub mod select;
 
 pub use claude::{has_vallum_hook, settings_path};
 
