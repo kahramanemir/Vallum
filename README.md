@@ -152,11 +152,11 @@ $ echo $?
 10
 ```
 
-Exit codes: 0 allow, 10 ask, 20 deny — usable from CI.
+Exit codes: 0 allow, 10 ask, 20 deny, 125 config error — usable from CI.
 
 Setting `guardrail = false` makes Vallum behave byte-for-byte as it did before
 this layer existed. User rules are matched with the same most-severe-wins
-resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every non-Allow
+resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every enforced non-Allow
 verdict is recorded (redacted) to `policy.log`.
 
 **Scope, honestly:** the guardrail matches patterns against the command text —
