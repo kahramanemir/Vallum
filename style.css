@@ -25,6 +25,7 @@
 }
 
 :root {
+  color-scheme: dark; /* UA-drawn scrollbars and controls render their dark variant */
   --bg0: #0c0b09;
   --bg1: #14110c;
   --bg2: #1a160f;
@@ -46,7 +47,7 @@
   --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --display: 'Cinzel', 'Times New Roman', serif;
-  --wrap: 1160px;
+  --wrap: 1320px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -58,6 +59,16 @@
 *::-webkit-scrollbar { height: 6px; width: 8px; }
 *::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* code boxes swipe/wheel-scroll horizontally; their commands are fully
+   carried by the Copy buttons, so the bars are pure noise on the dark set */
+.term-body, .evidence, .feed-body, .plinth-cmd pre {
+  scrollbar-width: none;
+}
+.term-body::-webkit-scrollbar,
+.evidence::-webkit-scrollbar,
+.feed-body::-webkit-scrollbar,
+.plinth-cmd pre::-webkit-scrollbar { display: none; }
 
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
@@ -119,6 +130,40 @@ a:focus-visible, button:focus-visible {
 }
 .skip-link:focus { top: 0.75rem; }
 
+/* ---------- patrol rail ---------- */
+
+.patrol {
+  position: fixed; z-index: 20;
+  left: 1.6rem; top: 50%; transform: translateY(-50%);
+  height: min(60vh, 34rem);
+  display: flex; flex-direction: column; justify-content: space-between;
+  align-items: center;
+}
+.patrol-track {
+  position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 2px; transform: translateX(-50%);
+  background:
+    repeating-linear-gradient(180deg, var(--line-strong) 0 10px, transparent 10px 16px);
+}
+.patrol-fill {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background: var(--accent);
+  transform-origin: top; transform: scaleY(0);
+  box-shadow: 0 0 8px rgba(201, 162, 77, 0.5);
+}
+html:not(.gsap) .patrol-fill { display: none; }
+.waypoint {
+  position: relative; z-index: 1;
+  font-family: var(--display); font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.1em; text-decoration: none;
+  color: var(--text3); background: var(--bg0);
+  padding: 0.3rem 0.1rem;
+  transition: color 0.3s;
+}
+.waypoint.active { color: var(--accent-bright); }
+.waypoint:hover { color: var(--text); }
+@media (max-width: 1099px) { .patrol { display: none; } }
+
 code { font-family: var(--mono); }
 
 h1, h2 {
@@ -129,7 +174,10 @@ h1, h2 {
   color: var(--text);
 }
 
-h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); }
+h2 { font-size: clamp(2.4rem, 5vw, 4.2rem); }
+
+.scene-head { max-width: var(--wrap); margin: 0 auto; padding: 0 2rem; }
+.section-sub { color: var(--text2); max-width: 34rem; margin-top: 0.9rem; }
 
 h3 {
   font-family: var(--sans);
@@ -138,16 +186,9 @@ h3 {
   letter-spacing: -0.01em;
 }
 
-.section-sub {
-  color: var(--text2);
-  max-width: 58ch;
-  margin-top: 0.9rem;
-}
-
 section {
   max-width: var(--wrap);
   margin: 0 auto;
-  padding: 6.5rem 2rem 0;
   scroll-margin-top: 68px;
 }
 
@@ -178,7 +219,8 @@ section {
 /* ---------- nav ---------- */
 
 .nav {
-  position: sticky;
+  position: fixed;
+  left: 0;
   top: 0;
   z-index: 10;
   width: 100%;
@@ -245,34 +287,31 @@ section {
 
 .hero {
   position: relative;
+  min-height: 100svh;
   display: grid;
-  grid-template-columns: minmax(0, 10fr) minmax(0, 11fr);
-  gap: 3.5rem;
-  align-items: center;
-  padding-top: 5.5rem;
-  min-height: min(74dvh, 700px);
+  place-content: center;
+  text-align: center;
+  padding: 8rem 2rem 6rem;
+  overflow: hidden;
 }
+.hero-copy { position: relative; z-index: 2; max-width: 54rem; }
+.hero h1 { font-size: clamp(2.6rem, 6vw, 5rem); line-height: 1.12; }
+.hero-sub { margin: 1.4rem auto 2.2rem; max-width: 36rem; color: var(--text2); font-size: 1.1rem; }
+.hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
 
 /* the carved inscription behind the hero */
 .inscription {
-  position: absolute;
-  top: -0.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: clamp(4.5rem, 12vw, 10.5rem);
-  letter-spacing: 0.18em;
-  text-indent: 0.18em; /* balance the trailing tracking */
-  white-space: nowrap;
+  position: absolute; inset: 0; z-index: 0;
+  display: grid; place-content: center;
+  font-family: var(--display); font-weight: 700;
+  font-size: clamp(6rem, 22vw, 22rem);
+  letter-spacing: 0.08em;
   color: transparent;
-  -webkit-text-stroke: 1px rgba(201, 162, 77, 0.17);
-  pointer-events: none;
-  user-select: none;
-  z-index: 0;
+  -webkit-text-stroke: 1px rgba(201, 162, 77, 0.22);
+  user-select: none; pointer-events: none;
 }
 @supports not (-webkit-text-stroke: 1px black) {
-  .inscription { color: rgba(201, 162, 77, 0.07); }
+  .inscription { color: rgba(201, 162, 77, 0.09); }
 }
 
 /* rising bronze embers over the wall at night */
@@ -283,43 +322,18 @@ section {
   pointer-events: none;
 }
 
-.hero-copy, .hero-demo { position: relative; z-index: 1; }
-
-/* ambient torchlight behind the demo, cursor-tilted panel */
-.hero-demo::before {
-  content: '';
-  position: absolute;
-  inset: -12% -8%;
-  z-index: -1;
-  background: radial-gradient(60% 55% at 50% 45%, rgba(201, 162, 77, 0.10), transparent 70%);
-  pointer-events: none;
+.descend {
+  position: absolute; left: 50%; bottom: 2.2rem; transform: translateX(-50%);
+  width: 2rem; height: 3.4rem; z-index: 2;
 }
-.demo-tilt {
-  display: flex;
-  flex-direction: column;
-  transform-style: preserve-3d;
-  transition: transform 0.18s ease-out;
-  will-change: transform;
+.descend-line {
+  display: block; width: 1px; height: 100%; margin: 0 auto;
+  background: linear-gradient(to bottom, transparent, var(--accent));
 }
-.hero-demo { perspective: 1100px; }
-
-.hero h1 {
-  font-size: clamp(1.9rem, 2.9vw, 2.3rem);
-}
-
-.hero-sub {
-  margin-top: 1.3rem;
-  color: var(--text2);
-  font-size: 1.06rem;
-  max-width: 42ch;
-}
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.9rem;
-  margin-top: 2.1rem;
+html.gsap .descend-line { animation: descend-pulse 2.4s ease-in-out infinite; }
+@keyframes descend-pulse {
+  0%, 100% { transform: scaleY(0.65); transform-origin: top; opacity: 0.5; }
+  50% { transform: scaleY(1); opacity: 1; }
 }
 
 .install-chip {
@@ -366,12 +380,6 @@ section {
 
 /* ---------- hero terminal demo ---------- */
 
-.hero-demo {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .term {
   background: var(--bg1);
   border: 1px solid var(--line);
@@ -392,13 +400,12 @@ section {
   font-size: 0.72rem;
   color: var(--text3);
 }
-.term-clean .term-title { color: var(--accent); }
-
 .term-body {
   padding: 0.85rem 1rem;
   font-size: 0.8rem;
   line-height: 1.7;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 /* lines are block-level spans; collapse the literal newlines between them */
 .term-body code { display: block; white-space: normal; }
@@ -413,226 +420,208 @@ section {
 .t-marker { color: var(--text3); }
 .t-redact { color: var(--accent-bright); }
 .t-neutral { color: var(--green); }
-.t-stat { color: var(--accent); margin-top: 0.35rem; }
 
-/* the boundary between the two terminals: the wall itself */
-.boundary {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 44px;
-  z-index: 1;
-  cursor: pointer;
+/* ---------- scene I: the demonstration (pinned sweep) ---------- */
+
+.scene-demo { padding: 9rem 0; }
+.demo-stage { max-width: 62rem; margin: 3.5rem auto 0; padding: 0 2rem; }
+.term-stage { box-shadow: var(--shadow-panel); }
+.term-layers { position: relative; }
+.tok-live { margin-left: auto; font-family: var(--mono); font-size: 0.78rem; color: var(--text3); }
+.tok-live .tok-n { color: var(--accent-bright); }
+
+/* static: raw block, crenellated divider, clean block — all readable */
+.layer-divider {
+  display: flex; align-items: center; justify-content: center;
+  height: 2.2rem; position: relative;
+  background:
+    repeating-linear-gradient(90deg, var(--accent-dim) 0 18px, transparent 18px 30px)
+    center / 100% 6px no-repeat;
 }
-.boundary:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-ctl);
-}
-/* mirrored rampart wings growing outward from the label */
-.boundary::before,
-.boundary::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  height: 8px;
-  width: calc(50% - 92px);
-  transform: translateY(-50%);
-  opacity: 0.55;
-}
-.boundary::before {
-  right: calc(50% + 76px);
-  /* anchored at the label side so both wings mirror perfectly */
-  background: repeating-linear-gradient(270deg,
-    var(--accent) 0 14px,
-    transparent 14px 24px);
-}
-.boundary::after {
-  left: calc(50% + 76px);
-  background: repeating-linear-gradient(90deg,
-    var(--accent) 0 14px,
-    transparent 14px 24px);
-}
-.boundary-label {
-  position: relative;
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 0.82rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--accent);
-  padding: 0.15rem 1.1rem;
+.layer-divider span {
+  font-family: var(--display); font-size: 0.72rem; letter-spacing: 0.35em;
+  color: var(--accent); background: var(--bg2); padding: 0 1rem; text-transform: uppercase;
 }
 
-/* ---------- threats bento ---------- */
-
-.threat-grid {
-  display: grid;
-  grid-template-columns: 3fr 2fr;
-  grid-template-rows: auto auto;
-  gap: 1rem;
-  margin-top: 2.6rem;
+/* gsap mode: clean layer overlays raw, revealed by the sweep */
+html.gsap .term-layers { --sweep: 0; }
+html.gsap .layer-divider { display: none; }
+html.gsap .layer-clean {
+  position: absolute; inset: 0;
+  background: var(--bg2);
+  clip-path: inset(0 calc(100% - var(--sweep) * 1%) 0 0);
 }
-
-.threat-card {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--bg1);
-  padding: 1.7rem 1.7rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  transition: border-color 0.3s ease;
-  box-shadow: var(--shadow-panel);
-}
-.threat-card:hover { border-color: var(--line-strong); }
-/* bronze torchlight follows the cursor */
-.threat-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+html.gsap .sweep {
+  position: absolute; top: 0; bottom: 0; left: calc(var(--sweep) * 1%);
+  width: 14px; margin-left: -7px;
+  background:
+    repeating-linear-gradient(180deg, var(--accent) 0 14px, transparent 14px 24px)
+    center / 4px 100% no-repeat;
+  filter: drop-shadow(0 0 12px rgba(201, 162, 77, 0.5));
   opacity: 0;
-  transition: opacity 0.35s ease;
-  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%),
-    rgba(201, 162, 77, 0.09), transparent 65%);
 }
-.threat-card:hover::after { opacity: 1; }
-.threat-card p { color: var(--text2); font-size: 0.95rem; }
+html.gsap .term-layers.sweeping .sweep { opacity: 1; }
+.sweep { display: none; }
+html.gsap .sweep { display: block; }
 
-.threat-main {
-  grid-row: 1 / 3;
-  background: linear-gradient(160deg, var(--bg2), var(--bg1) 70%);
-}
-
-.mini-code {
-  margin-top: auto;
-  background: var(--bg0);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-ctl);
-  padding: 0.9rem 1rem;
-  font-size: 0.78rem;
-  line-height: 1.7;
-  overflow-x: auto;
-}
-.mini-code code { display: block; white-space: normal; }
-
-.threat-figure {
-  margin-top: auto;
-  display: flex;
-  align-items: baseline;
-  gap: 0.8rem;
-  flex-wrap: wrap;
+@media (max-width: 899px) {
+  html.gsap .layer-clean { position: static; clip-path: none; background: none; }
+  html.gsap .layer-divider { display: flex; }
+  html.gsap .sweep { display: none; }
 }
 
-/* live redaction micro-story: a leaked key is swept and sealed */
-.redact-target {
+/* ---------- threats: three indictments ---------- */
+
+.threats { max-width: var(--wrap); margin: 0 auto; padding: 9rem 2rem; }
+.threats .scene-head { padding: 0; } /* parent already provides the gutter */
+.indictment {
   position: relative;
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 1.02rem;
-  min-width: 20ch;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 3rem 5rem;
+  align-items: center;
+  padding: 6rem 0;
+  border-top: 1px solid var(--line);
 }
-.redact-text { color: var(--accent-bright); white-space: nowrap; }
-.redact-target.raw .redact-text { color: #d8b58a; }
-.redact-cover {
-  position: absolute;
-  inset: -2px -5px;
-  background: var(--accent);
-  border-radius: 3px;
-  transform: scaleX(0);
-  transform-origin: left;
+.indictment:first-of-type { margin-top: 4rem; }
+.ind-2 .ind-text { order: 2; }
+.ind-2 .evidence { order: 1; }
+.ind-3 { grid-template-columns: 1fr; text-align: center; }
+.ind-3 .ind-body { margin: 0 auto; }
+
+.ind-numeral {
+  position: absolute; top: 2.4rem; right: 0;
+  font-family: var(--display); font-weight: 700;
+  font-size: clamp(5rem, 11vw, 10rem); line-height: 1;
+  color: transparent; -webkit-text-stroke: 1px rgba(201, 162, 77, 0.18);
+  pointer-events: none; user-select: none;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .redact-cover { transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
-  .redact-target.covering .redact-cover { transform: scaleX(1); }
-  .redact-target.uncover .redact-cover {
-    transform-origin: right;
-    transform: scaleX(0);
-  }
+.ind-2 .ind-numeral { right: auto; left: 0; }
+.ind-3 .ind-numeral { position: static; display: block; margin-bottom: 0.5rem; }
+
+.ind-head {
+  font-family: var(--display); font-weight: 600;
+  font-size: clamp(2.2rem, 4.6vw, 3.6rem); line-height: 1.1;
+  letter-spacing: 0.01em; color: var(--text);
 }
+.ind-body { max-width: 30rem; margin-top: 1.2rem; color: var(--text2); }
+
+/* evidence: mono lines on bare page, bronze left tick only */
+.evidence {
+  border-left: 2px solid var(--accent-dim);
+  padding: 0.4rem 0 0.4rem 1.4rem;
+  font-family: var(--mono); font-size: 0.85rem; line-height: 1.75;
+  overflow-x: auto; overflow-y: hidden; white-space: pre;
+}
+.ind-figure { margin-top: 2rem; }
 .big-num {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 1.9rem;
-  color: var(--accent);
+  display: block; font-family: var(--mono); font-weight: 600;
+  font-size: clamp(2.6rem, 7vw, 5rem); color: var(--accent-bright);
 }
-.figure-note { color: var(--text3); font-size: 0.82rem; }
+.fig-arrow { color: var(--text3); }
+.figure-note { color: var(--text3); font-size: 0.9rem; }
 
-/* ---------- pipeline / wall ---------- */
-
-.wall {
-  position: relative;
-  margin-top: 2.6rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--bg1);
-  padding: 2.4rem 2rem 2rem;
-  display: flex;
-  align-items: center;
-  gap: 1.4rem;
-  box-shadow: var(--shadow-panel);
-}
-/* crenellated top edge of the wall */
-.wall::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 24px;
-  right: 24px;
-  height: 7px;
-  background: repeating-linear-gradient(90deg,
-    var(--accent) 0 16px,
-    transparent 16px 28px);
-  opacity: 0.45;
+@media (max-width: 899px) {
+  .indictment { grid-template-columns: 1fr; padding: 4rem 0; }
+  .ind-2 .ind-text { order: 1; }
+  .ind-2 .evidence { order: 2; }
+  .ind-numeral { font-size: 4.5rem; top: 1.4rem; }
 }
 
-/* mirrored end labels, equal width, hugging the gates from both sides */
-.wall-ends { flex-shrink: 0; width: 96px; }
-.wall-end-label {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--text3);
-  display: block;
-}
-.wall-in .wall-end-label { text-align: right; }
-.wall-out .wall-end-label { color: var(--accent); text-align: left; }
+/* ---------- pipeline / wall: Scene II, the six gates ---------- */
 
-.gates {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  gap: 0.5rem;
-  list-style: none;
-  flex-wrap: wrap;
-}
-.gate {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 110px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--text2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-ctl);
-  padding: 0.75rem 0.5rem;
-  background: var(--bg0);
-  transition: border-color 0.2s ease, color 0.2s ease;
-}
-.gate:hover { border-color: var(--accent); color: var(--text); }
+.scene-gates { padding: 9rem 0; }
+.gates-stage { max-width: var(--wrap); margin: 3.5rem auto 0; padding: 0 2rem; }
 
-.pipeline-note {
-  margin-top: 1.6rem;
-  color: var(--text3);
-  font-size: 0.9rem;
-  max-width: 62ch;
+.gate-rail {
+  list-style: none; counter-reset: gate;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 1rem;
+  border-top: 1px solid var(--line-strong); padding-top: 1.2rem;
+}
+.gate-station { position: relative; }
+.gate-station::before {
+  counter-increment: gate; content: counter(gate, upper-roman);
+  display: block; font-family: var(--display); font-size: 0.8rem;
+  letter-spacing: 0.25em; color: var(--text3); margin-bottom: 0.35rem;
+}
+.station-name {
+  display: block; font-family: var(--display); font-size: 0.95rem;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--text2);
+}
+.station-note { display: block; margin-top: 0.4rem; font-size: 0.8rem; color: var(--text3); }
+
+/* in gsap mode stations show names only; notes are the static fallback detail */
+html.gsap .station-note { display: none; }
+html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
+
+.gate-feed { margin: 3rem auto 0; max-width: 56rem; }
+.feed-body {
+  font-family: var(--mono); font-size: 0.88rem; line-height: 1.9;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-left: 2px solid var(--accent-dim); padding-left: 1.4rem;
+}
+/* lines are block-level spans; collapse the literal newlines between them */
+.feed-body code { display: block; white-space: normal; }
+.fl { display: block; white-space: pre; transition: opacity 0.4s; }
+.ansi { color: var(--text3); transition: opacity 0.4s; }
+.fl-wrap { color: var(--accent); }
+
+/* one-line mutation states. Default markup ships data-step="6" (end state). */
+.gates-stage:not([data-step="0"]) .ansi { opacity: 0; font-size: 0; }
+.gates-stage[data-step="2"] .fl-noise,
+.gates-stage[data-step="3"] .fl-noise,
+.gates-stage[data-step="4"] .fl-noise,
+.gates-stage[data-step="5"] .fl-noise,
+.gates-stage[data-step="6"] .fl-noise { display: none; }
+.gates-stage[data-step="0"] .fl-note-trunc,
+.gates-stage[data-step="1"] .fl-note-trunc { display: none; }
+.gates-stage[data-step="3"] .fl-warn,
+.gates-stage[data-step="4"] .fl-warn,
+.gates-stage[data-step="5"] .fl-warn,
+.gates-stage[data-step="6"] .fl-warn { display: none; }
+.gates-stage[data-step="0"] .fl-note-opt,
+.gates-stage[data-step="1"] .fl-note-opt,
+.gates-stage[data-step="2"] .fl-note-opt { display: none; }
+.fl-note-trunc, .fl-note-opt { color: var(--text3); font-style: italic; }
+
+.sec-raw, .inj-raw { transition: opacity 0.3s; }
+.sec-redacted, .inj-neutral { display: none; }
+.gates-stage[data-step="4"] .sec-raw,
+.gates-stage[data-step="5"] .sec-raw,
+.gates-stage[data-step="6"] .sec-raw { display: none; }
+.gates-stage[data-step="4"] .sec-redacted,
+.gates-stage[data-step="5"] .sec-redacted,
+.gates-stage[data-step="6"] .sec-redacted { display: inline; }
+.gates-stage[data-step="5"] .inj-raw,
+.gates-stage[data-step="6"] .inj-raw { display: none; }
+.gates-stage[data-step="5"] .inj-neutral,
+.gates-stage[data-step="6"] .inj-neutral { display: inline; }
+.gates-stage:not([data-step="6"]) .fl-wrap { opacity: 0; }
+
+/* captions: gsap-only, one visible at a time, pinned-scene widths only */
+.gate-captions { display: none; }
+@media (min-width: 900px) {
+  html.gsap .gate-captions { display: block; margin-top: 2rem; min-height: 1.6em; position: relative; }
+}
+.gate-caption {
+  position: absolute; inset: 0; text-align: center;
+  color: var(--text2); opacity: 0; transition: opacity 0.3s;
+  font-size: 0.95rem;
+}
+.gates-stage[data-step="0"] .gate-caption[data-for="0"],
+.gates-stage[data-step="1"] .gate-caption[data-for="1"],
+.gates-stage[data-step="2"] .gate-caption[data-for="2"],
+.gates-stage[data-step="3"] .gate-caption[data-for="3"],
+.gates-stage[data-step="4"] .gate-caption[data-for="4"],
+.gates-stage[data-step="5"] .gate-caption[data-for="5"],
+.gates-stage[data-step="6"] .gate-caption[data-for="6"] { opacity: 1; }
+
+.pipeline-note { max-width: var(--wrap); margin: 3.5rem auto 0; padding: 0 2rem; color: var(--text3); }
+
+@media (max-width: 899px) {
+  .gate-rail { grid-template-columns: 1fr; gap: 1.6rem; border-top: 0; }
+  .gate-station { border-top: 1px solid var(--line); padding-top: 1rem; }
 }
 
 /* ---------- optimizer marquee ---------- */
@@ -692,199 +681,100 @@ section {
 /* ---------- guardrail ---------- */
 
 .guardrail {
-  display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
-  gap: 4rem;
-  align-items: center;
+  max-width: var(--wrap); margin: 0 auto; padding: 9rem 2rem;
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 4rem; align-items: center;
 }
-
-.guard-copy p {
-  color: var(--text2);
-  margin-top: 1.1rem;
-  max-width: 50ch;
+.guard-copy p { max-width: 30rem; margin-top: 1.2rem; color: var(--text2); }
+.ledger-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 2rem;
+  padding: 1.5rem 0.2rem; border-bottom: 1px solid var(--line);
 }
-
-.verdict-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--bg1);
-  overflow: hidden;
-  box-shadow: var(--shadow-panel);
+.ledger-row:first-child { border-top: 1px solid var(--line); }
+.ledger-cmd { font-family: var(--mono); font-size: 0.95rem; color: var(--text); }
+.seal {
+  font-family: var(--display); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  border: 1.5px solid currentColor; border-radius: 999px;
+  padding: 0.45rem 1.1rem 0.4rem 1.35rem;
+  transform: rotate(-4deg);
 }
-.verdict {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.05rem 1.3rem;
-}
-.verdict + .verdict { border-top: 1px solid var(--line); }
-.verdict-cmd {
-  font-size: 0.85rem;
-  color: var(--text2);
-  overflow-x: auto;
-  white-space: nowrap;
-}
-.verdict-tag {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.28rem 0.7rem;
-  border-radius: var(--radius-ctl);
-  flex-shrink: 0;
-}
-.v-allow { color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); }
-.v-ask   { color: var(--accent-bright); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); }
-.v-deny  { color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 45%, transparent); }
-
-.guard-caption {
-  margin-top: 0.9rem;
-  color: var(--text3);
-  font-size: 0.85rem;
-}
+.seal-allow { color: var(--green); }
+.seal-ask { color: var(--accent-bright); }
+.seal-deny { color: var(--red); }
+.ledger-caption { margin-top: 1.4rem; color: var(--text3); font-size: 0.9rem; }
+@media (max-width: 899px) { .guardrail { grid-template-columns: 1fr; gap: 2.5rem; } }
 
 /* ---------- metrics ---------- */
 
-.metrics { text-align: left; }
-
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 2rem;
-  margin-top: 2.6rem;
-  padding-top: 2.4rem;
-  border-top: 1px solid var(--line);
+.metrics { max-width: var(--wrap); margin: 0 auto; padding: 9rem 2rem 5rem; }
+.carved-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem;
+  margin-top: 3.5rem; padding: 3rem 0;
+  border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong);
 }
-
-.stat-num {
-  display: block;
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: clamp(2.3rem, 4.2vw, 3.4rem);
-  color: var(--accent);
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
+.carve { text-align: center; }
+.carve-num {
+  display: block; font-family: var(--mono); font-weight: 600;
+  font-size: clamp(2.2rem, 4.5vw, 4rem); color: var(--accent-bright);
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.55), 0 -1px 0 rgba(236, 231, 220, 0.08);
 }
-.stat-label {
-  display: block;
-  margin-top: 0.55rem;
-  color: var(--text3);
-  font-size: 0.88rem;
+.carve-label {
+  display: block; margin-top: 0.7rem; font-size: 0.82rem;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3);
 }
-
-.metrics-note {
-  margin-top: 2.2rem;
-  color: var(--text2);
-  font-size: 0.92rem;
-  max-width: 62ch;
-}
+.metrics-note { margin-top: 2.2rem; color: var(--text3); max-width: 44rem; }
+@media (max-width: 899px) { .carved-row { grid-template-columns: repeat(2, 1fr); } }
 
 /* ---------- motto ---------- */
 
-.motto {
-  text-align: center;
-  padding-top: 8.5rem;
-}
-.motto::before {
-  content: '';
-  display: block;
-  width: 128px;
-  height: 7px;
-  margin: 0 auto 2.4rem;
-  background: repeating-linear-gradient(90deg,
-    var(--accent) 0 14px,
-    transparent 14px 24px);
-  opacity: 0.45;
-}
+.motto { text-align: center; padding: 8rem 2rem; }
 .motto-latin {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: clamp(1.7rem, 4.4vw, 3.1rem);
-  letter-spacing: 0.07em;
-  line-height: 1.25;
-  color: var(--text);
+  font-family: var(--display); font-weight: 600;
+  font-size: clamp(1.6rem, 4vw, 3rem);
+  letter-spacing: 0.12em; color: var(--text);
   text-wrap: balance;
+  transition: letter-spacing 1.1s ease, opacity 1.1s ease;
 }
-.motto-hl { color: var(--accent); }
-.motto-en {
-  margin-top: 1.1rem;
-  color: var(--text3);
-  font-size: 0.95rem;
-}
+.motto-hl { color: var(--accent-bright); }
+.motto-en { margin-top: 1rem; color: var(--text3); }
+html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
 
 /* ---------- install ---------- */
 
-.install-box {
-  margin-top: 2.6rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+.install { max-width: var(--wrap); margin: 0 auto; padding: 9rem 2rem; text-align: center; }
+.install .section-sub { margin-left: auto; margin-right: auto; }
+
+.plinth {
+  position: relative; max-width: 56rem; margin: 3.5rem auto 0;
   background: var(--bg1);
-  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
   box-shadow: var(--shadow-panel);
+  padding: 1.6rem 1.8rem 1.8rem;
 }
+/* stage light above the plinth */
+.plinth::before {
+  content: ''; position: absolute; left: 15%; right: 15%; top: -90px; height: 90px;
+  background: radial-gradient(60% 100% at 50% 100%, rgba(201, 162, 77, 0.13), transparent 75%);
+  pointer-events: none;
+}
+.method-switch { display: flex; gap: 0.4rem; justify-content: center; margin-bottom: 1.4rem; }
+.method {
+  background: none; border: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 0.85rem; color: var(--text3);
+  padding: 0.4rem 0.9rem; border-bottom: 1px solid transparent;
+}
+.method + .method::before { content: '·' / ''; margin-right: 1.1rem; color: var(--line-strong); }
+.method.active { color: var(--accent-bright); border-bottom-color: var(--accent); }
+.method:hover { color: var(--text); }
 
-.tabs {
-  display: flex;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg2);
-}
-.tab {
-  font-family: var(--sans);
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: var(--text3);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 0.85rem 1.35rem;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
-}
-.tab:hover { color: var(--text2); }
-.tab.active { color: var(--accent-bright); border-bottom-color: var(--accent); }
-
-.tab-panel {
-  display: none;
-  padding: 1.4rem 1.5rem;
-}
-.tab-panel.active { display: block; }
-/* command and button share a row; the button never overlaps the code */
-.panel-row {
-  display: flex;
-  align-items: center;
-  gap: 1.1rem;
-}
-.panel-row + .panel-row { margin-top: 0.65rem; }
-/* the honest beat: verify-before-you-pipe note inside the shell tab */
-.panel-verify {
-  margin-top: 1.1rem;
-  padding-top: 1.1rem;
-  border-top: 1px solid var(--line);
-  color: var(--text2);
-  font-size: 0.86rem;
-  max-width: 62ch;
-}
-.panel-verify code {
-  font-size: 0.78rem;
-  color: var(--text2);
-  background: var(--bg2);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0.05rem 0.3rem;
-}
-
-.install-code {
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-}
-.install-code code {
-  font-size: 0.85rem;
-  color: var(--text);
-  white-space: pre;
+.plinth-cmd { display: none; align-items: center; gap: 1rem; }
+.plinth-cmd.active { display: flex; }
+.plinth-cmd pre {
+  flex: 1; text-align: left; overflow-x: auto; overflow-y: hidden;
+  font-family: var(--mono); font-size: 0.85rem; line-height: 1.6;
+  white-space: pre; color: var(--text);
 }
 
 .copy-btn {
@@ -901,34 +791,17 @@ section {
 }
 .copy-btn:hover { color: var(--accent-bright); border-color: var(--accent); }
 
-.hook-callout {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  margin-top: 1.6rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: linear-gradient(120deg, var(--bg2), var(--bg1) 60%);
-  padding: 1.6rem 1.8rem;
-  box-shadow: var(--shadow-panel);
+.verify-passage { max-width: 44rem; margin: 3rem auto 0; text-align: left; color: var(--text2); }
+.verify-passage .evidence { margin-top: 1.2rem; }
+.hook-passage {
+  max-width: 44rem; margin: 4rem auto 0; text-align: left;
+  display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 2.5rem; align-items: center;
+  border-top: 1px solid var(--line); padding-top: 2.5rem;
 }
-.hook-text p { color: var(--text2); font-size: 0.93rem; margin-top: 0.4rem; max-width: 46ch; }
-.hook-code {
-  flex-shrink: 0;
-  background: var(--bg0);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-ctl);
-  padding: 0.8rem 1.2rem;
-  font-size: 0.88rem;
-}
-
-.install-note {
-  margin-top: 1.6rem;
-  color: var(--text3);
-  font-size: 0.88rem;
-  max-width: 62ch;
-}
+.hook-text p { color: var(--text2); margin-top: 0.6rem; }
+.hook-code { font-family: var(--mono); font-size: 0.95rem; }
+.install-note { max-width: 44rem; margin: 3rem auto 0; color: var(--text3); font-size: 0.9rem; }
 .install-note code {
   font-size: 0.8rem;
   color: var(--text2);
@@ -936,6 +809,14 @@ section {
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0.1rem 0.35rem;
+}
+@media (max-width: 700px) {
+  .hook-passage { grid-template-columns: 1fr; }
+  .plinth-cmd { flex-direction: column; align-items: stretch; }
+  /* the plain-text switch overflows the plinth's own border at narrow
+     widths when kept to one line (flex items won't shrink below their
+     content); wrap it instead of letting labels spill past the card */
+  .method-switch { flex-wrap: wrap; row-gap: 0.5rem; }
 }
 
 /* ---------- footer ---------- */
@@ -1018,146 +899,17 @@ section {
 .footer-links a:hover { color: var(--accent-bright); }
 .footer-license { color: var(--text3); font-size: 0.85rem; }
 
-/* ---------- motion ----------
-   All gating classes below are scoped to html.js (added by script.js) so
-   content stays visible with JavaScript disabled or in headless renderers. */
-
-@media (prefers-reduced-motion: no-preference) {
-  /* Entrances enhance an already-visible default: nothing rests at opacity 0,
-     so a skipped observer callback (fast momentum scroll, headless render)
-     can never blank a section — at worst it skips the animation. */
-  html.js .reveal.in {
-    animation: reveal-rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  @keyframes reveal-rise {
-    from { opacity: 0; transform: translateY(22px); }
-  }
-
-  /* page-load choreography: the inscription carves in, content rises */
-  html.js .inscription {
-    animation: carve 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  @keyframes carve {
-    from { opacity: 0; letter-spacing: 0.3em; }
-    to   { opacity: 1; letter-spacing: 0.18em; }
-  }
-  html.js .hero-copy > *,
-  html.js .hero-demo .term,
-  html.js .hero-demo .boundary {
-    opacity: 0;
-    transform: translateY(18px);
-    animation: rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-  html.js .hero-copy h1 { animation-delay: 0.30s; }
-  html.js .hero-copy .hero-sub { animation-delay: 0.44s; }
-  html.js .hero-copy .hero-actions { animation-delay: 0.58s; }
-  html.js .hero-demo .term-raw { animation-delay: 0.50s; }
-  html.js .hero-demo .boundary { animation-delay: 0.62s; }
-  html.js .hero-demo .term-clean { animation-delay: 0.74s; }
-  @keyframes rise {
-    to { opacity: 1; transform: none; }
-  }
-
-  /* hero demo line-by-line entrance, driven by JS */
-  .hero-demo.anim .tl {
-    opacity: 0;
-    transform: translateY(4px);
-    transition: opacity 0.3s ease, transform 0.3s ease;
-  }
-  .hero-demo.anim .tl.on {
-    opacity: 1;
-    transform: none;
-  }
-  .hero-demo.anim .boundary::before,
-  .hero-demo.anim .boundary::after {
-    transform: translateY(-50%) scaleX(0);
-    transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .hero-demo.anim .boundary::before { transform-origin: right; }
-  .hero-demo.anim .boundary::after { transform-origin: left; }
-  .hero-demo.anim.wall-up .boundary::before,
-  .hero-demo.anim.wall-up .boundary::after {
-    transform: translateY(-50%) scaleX(1);
-  }
-
-  /* typing caret on the demo command */
-  .type-cmd.typing::after {
-    content: '';
-    display: inline-block;
-    width: 7px;
-    height: 0.95em;
-    margin-left: 2px;
-    vertical-align: text-bottom;
-    background: var(--accent);
-    animation: caret 0.9s steps(1) infinite;
-  }
-  @keyframes caret {
-    50% { opacity: 0; }
-  }
-
-  /* pipeline gates light up in sequence — visible by default, animated
-     only while the section itself is playing its entrance */
-  html.js .pipeline.in .gate {
-    animation: reveal-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  html.js .pipeline.in .gate:nth-child(1) { animation-delay: 0.10s; }
-  html.js .pipeline.in .gate:nth-child(2) { animation-delay: 0.20s; }
-  html.js .pipeline.in .gate:nth-child(3) { animation-delay: 0.30s; }
-  html.js .pipeline.in .gate:nth-child(4) { animation-delay: 0.40s; }
-  html.js .pipeline.in .gate:nth-child(5) { animation-delay: 0.50s; }
-  html.js .pipeline.in .gate:nth-child(6) { animation-delay: 0.60s; }
-
-  /* guardrail verdicts stamp in like seals — same principle */
-  html.js .guardrail.in .verdict-tag {
-    animation: stamp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  html.js .guardrail.in .verdict:nth-child(1) .verdict-tag { animation-delay: 0.35s; }
-  html.js .guardrail.in .verdict:nth-child(2) .verdict-tag { animation-delay: 0.65s; }
-  html.js .guardrail.in .verdict:nth-child(3) .verdict-tag { animation-delay: 0.95s; }
-  @keyframes stamp {
-    from { opacity: 0; transform: scale(1.45); }
-  }
-}
-
 /* ---------- responsive ---------- */
 
-@media (max-width: 960px) {
-  .hero {
-    grid-template-columns: 1fr;
-    gap: 3rem;
-    min-height: 0;
-    padding-top: 4.5rem;
-  }
-  .inscription { top: 0.4rem; }
-  .guardrail {
-    grid-template-columns: 1fr;
-    gap: 2.5rem;
-  }
-  .guard-visual { order: 2; }
-  .guard-copy { order: 1; }
-  .stat-row { grid-template-columns: repeat(2, 1fr); }
-  .hook-callout { flex-direction: column; align-items: flex-start; }
-}
-
 @media (max-width: 768px) {
-  section { padding: 4.5rem 1.25rem 0; }
   .nav-inner { padding: 0 1.25rem; gap: 1.2rem; }
   /* keep the one anchor that matters in the thumb's reach of a decision:
      Install stays, the wayfinding links collapse */
   .nav-links { gap: 1.1rem; }
   .nav-links a:not(.nav-install) { display: none; }
-  .threat-grid { grid-template-columns: 1fr; }
-  .threat-main { grid-row: auto; }
-  .wall {
-    flex-direction: column;
-    align-items: stretch;
-    text-align: center;
-  }
-  .wall-ends { width: auto; }
-  .wall-in .wall-end-label, .wall-out .wall-end-label { text-align: center; }
-  .gates { flex-direction: column; }
-  .gate { min-width: 0; }
   .footer-inner { padding: 3rem 1.25rem 2.5rem; }
+  .scene-demo, .scene-gates { padding: 5rem 0; }
+  .threats, .guardrail, .metrics, .motto, .install { padding: 5rem 1.25rem; }
   .motto { padding-top: 5.5rem; }
   .optimizer-marquee { margin-top: 3rem; }
 }
