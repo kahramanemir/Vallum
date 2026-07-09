@@ -156,6 +156,36 @@
     }
   }
 
+  /* ---------- Scene II: six gates ---------- */
+  var gatesStage = document.querySelector('.gates-stage');
+  if (gatesStage && gsapOK) {
+    var stations = document.querySelectorAll('.gate-station');
+    var mmGates = gsap.matchMedia();
+    mmGates.add('(min-width: 900px)', function () {
+      gatesStage.setAttribute('data-step', '0'); /* rewind to raw for the story */
+      ScrollTrigger.create({
+        trigger: '.scene-gates', start: 'top top', end: '+=2600',
+        pin: true, scrub: true,
+        onUpdate: function (st) {
+          var step = Math.min(6, Math.floor(st.progress * 6.999));
+          if (gatesStage.getAttribute('data-step') !== String(step)) {
+            gatesStage.setAttribute('data-step', String(step));
+            stations.forEach(function (s, i) {
+              s.style.opacity = (i + 1 <= step) ? '1' : '';
+            });
+          }
+        }
+      });
+      return function () { gatesStage.setAttribute('data-step', '6'); };
+    });
+    /* below 900px html.gsap still applies; restore static detail */
+    mmGates.add('(max-width: 899px)', function () {
+      gatesStage.setAttribute('data-step', '6');
+      document.querySelectorAll('.station-note').forEach(function (n) { n.style.display = 'block'; });
+      stations.forEach(function (s) { s.style.opacity = '1'; });
+    });
+  }
+
   /* ---------- threats: evidence lines stamp in ---------- */
   if (gsapOK) {
     document.querySelectorAll('.indictment').forEach(function (ind) {

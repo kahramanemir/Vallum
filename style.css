@@ -488,13 +488,95 @@ html.gsap .sweep { display: block; }
   .ind-numeral { font-size: 4.5rem; top: 1.4rem; }
 }
 
-/* ---------- pipeline / wall ---------- */
+/* ---------- pipeline / wall: Scene II, the six gates ---------- */
 
-.pipeline-note {
-  margin-top: 1.6rem;
-  color: var(--text3);
-  font-size: 0.9rem;
-  max-width: 62ch;
+.scene-gates { padding: 9rem 0; }
+.gates-stage { max-width: var(--wrap); margin: 3.5rem auto 0; padding: 0 2rem; }
+
+.gate-rail {
+  list-style: none; counter-reset: gate;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 1rem;
+  border-top: 1px solid var(--line-strong); padding-top: 1.2rem;
+}
+.gate-station { position: relative; }
+.gate-station::before {
+  counter-increment: gate; content: counter(gate, upper-roman);
+  display: block; font-family: var(--display); font-size: 0.8rem;
+  letter-spacing: 0.25em; color: var(--text3); margin-bottom: 0.35rem;
+}
+.station-name {
+  display: block; font-family: var(--display); font-size: 0.95rem;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--text2);
+}
+.station-note { display: block; margin-top: 0.4rem; font-size: 0.8rem; color: var(--text3); }
+
+/* in gsap mode stations show names only; notes are the static fallback detail */
+html.gsap .station-note { display: none; }
+html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
+
+.gate-feed { margin: 3rem auto 0; max-width: 56rem; }
+.feed-body {
+  font-family: var(--mono); font-size: 0.88rem; line-height: 1.9;
+  white-space: pre; overflow-x: auto;
+  border-left: 2px solid var(--accent-dim); padding-left: 1.4rem;
+}
+.fl { display: block; transition: opacity 0.4s, transform 0.4s; }
+.ansi { color: var(--text3); transition: opacity 0.4s; }
+.fl-wrap { color: var(--accent); }
+
+/* one-line mutation states. Default markup ships data-step="6" (end state). */
+.gates-stage:not([data-step="0"]) .ansi { opacity: 0; }
+.gates-stage[data-step="2"] .fl-noise,
+.gates-stage[data-step="3"] .fl-noise,
+.gates-stage[data-step="4"] .fl-noise,
+.gates-stage[data-step="5"] .fl-noise,
+.gates-stage[data-step="6"] .fl-noise { display: none; }
+.gates-stage[data-step="0"] .fl-note-trunc,
+.gates-stage[data-step="1"] .fl-note-trunc { display: none; }
+.gates-stage[data-step="3"] .fl-warn,
+.gates-stage[data-step="4"] .fl-warn,
+.gates-stage[data-step="5"] .fl-warn,
+.gates-stage[data-step="6"] .fl-warn { display: none; }
+.gates-stage[data-step="0"] .fl-note-opt,
+.gates-stage[data-step="1"] .fl-note-opt,
+.gates-stage[data-step="2"] .fl-note-opt { display: none; }
+.fl-note-trunc, .fl-note-opt { color: var(--text3); font-style: italic; }
+
+.sec-raw, .inj-raw { transition: opacity 0.3s; }
+.sec-redacted, .inj-neutral { display: none; }
+.gates-stage[data-step="4"] .sec-raw,
+.gates-stage[data-step="5"] .sec-raw,
+.gates-stage[data-step="6"] .sec-raw { display: none; }
+.gates-stage[data-step="4"] .sec-redacted,
+.gates-stage[data-step="5"] .sec-redacted,
+.gates-stage[data-step="6"] .sec-redacted { display: inline; }
+.gates-stage[data-step="5"] .inj-raw,
+.gates-stage[data-step="6"] .inj-raw { display: none; }
+.gates-stage[data-step="5"] .inj-neutral,
+.gates-stage[data-step="6"] .inj-neutral { display: inline; }
+.gates-stage:not([data-step="6"]) .fl-wrap { opacity: 0; }
+
+/* captions: gsap-only, one visible at a time */
+.gate-captions { display: none; }
+html.gsap .gate-captions { display: block; margin-top: 2rem; min-height: 1.6em; position: relative; }
+.gate-caption {
+  position: absolute; inset: 0; text-align: center;
+  color: var(--text2); opacity: 0; transition: opacity 0.3s;
+  font-size: 0.95rem;
+}
+.gates-stage[data-step="0"] .gate-caption[data-for="0"],
+.gates-stage[data-step="1"] .gate-caption[data-for="1"],
+.gates-stage[data-step="2"] .gate-caption[data-for="2"],
+.gates-stage[data-step="3"] .gate-caption[data-for="3"],
+.gates-stage[data-step="4"] .gate-caption[data-for="4"],
+.gates-stage[data-step="5"] .gate-caption[data-for="5"],
+.gates-stage[data-step="6"] .gate-caption[data-for="6"] { opacity: 1; }
+
+.pipeline-note { max-width: var(--wrap); margin: 3.5rem auto 0; padding: 0 2rem; color: var(--text3); }
+
+@media (max-width: 899px) {
+  .gate-rail { grid-template-columns: 1fr; gap: 1.6rem; border-top: 0; }
+  .gate-station { border-top: 1px solid var(--line); padding-top: 1rem; }
 }
 
 /* ---------- optimizer marquee ---------- */
