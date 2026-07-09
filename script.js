@@ -259,6 +259,24 @@
     });
   }
 
+  /* ---------- patrol rail ---------- */
+  if (gsapOK && window.matchMedia('(min-width: 1100px)').matches) {
+    gsap.to('.patrol-fill', {
+      scaleY: 1, ease: 'none',
+      scrollTrigger: { trigger: document.body, start: 'top top', end: 'bottom bottom', scrub: 0.5 }
+    });
+    var wpIds = ['hero', 'demo', 'threats', 'pipeline', 'guardrail', 'metrics', 'install'];
+    wpIds.forEach(function (id, i) {
+      var el = document.getElementById(id);
+      var wp = document.querySelectorAll('.patrol .waypoint')[i];
+      if (!el || !wp) return;
+      ScrollTrigger.create({
+        trigger: el, start: 'top 55%', end: 'bottom 45%',
+        onToggle: function (st) { wp.classList.toggle('active', st.isActive); }
+      });
+    });
+  }
+
   /* ---------- copy buttons ---------- */
   function flash(el, selector, message) {
     var target = selector ? el.querySelector(selector) : el;
