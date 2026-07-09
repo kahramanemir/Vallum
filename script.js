@@ -304,4 +304,23 @@
       });
     });
   });
+
+  /* ---------- install method switcher ---------- */
+  var methods = document.querySelectorAll('.method');
+  var cmdPanels = document.querySelectorAll('.plinth-cmd');
+  methods.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var name = btn.getAttribute('data-method');
+      methods.forEach(function (m) {
+        var active = m === btn;
+        m.classList.toggle('active', active);
+        m.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      cmdPanels.forEach(function (p) {
+        var show = p.getAttribute('data-method-panel') === name;
+        p.classList.toggle('active', show);
+        if (show) { p.removeAttribute('hidden'); } else { p.setAttribute('hidden', ''); }
+      });
+    });
+  });
 })();

@@ -696,6 +696,41 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
 
 /* ---------- install ---------- */
 
+.install { max-width: var(--wrap); margin: 0 auto; padding: 9rem 2rem; text-align: center; }
+.install .section-sub { margin-left: auto; margin-right: auto; }
+
+.plinth {
+  position: relative; max-width: 56rem; margin: 3.5rem auto 0;
+  background: var(--bg1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+  padding: 1.6rem 1.8rem 1.8rem;
+}
+/* stage light above the plinth */
+.plinth::before {
+  content: ''; position: absolute; left: 15%; right: 15%; top: -90px; height: 90px;
+  background: radial-gradient(60% 100% at 50% 100%, rgba(201, 162, 77, 0.13), transparent 75%);
+  pointer-events: none;
+}
+.method-switch { display: flex; gap: 0.4rem; justify-content: center; margin-bottom: 1.4rem; }
+.method {
+  background: none; border: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 0.85rem; color: var(--text3);
+  padding: 0.4rem 0.9rem; border-bottom: 1px solid transparent;
+}
+.method + .method::before { content: '·'; margin-right: 1.1rem; color: var(--line-strong); }
+.method.active { color: var(--accent-bright); border-bottom-color: var(--accent); }
+.method:hover { color: var(--text); }
+
+.plinth-cmd { display: none; align-items: center; gap: 1rem; }
+.plinth-cmd.active { display: flex; }
+.plinth-cmd pre {
+  flex: 1; text-align: left; overflow-x: auto;
+  font-family: var(--mono); font-size: 0.85rem; line-height: 1.6;
+  white-space: pre; color: var(--text);
+}
+
 .copy-btn {
   flex-shrink: 0;
   font-family: var(--sans);
@@ -710,22 +745,17 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
 }
 .copy-btn:hover { color: var(--accent-bright); border-color: var(--accent); }
 
-.hook-text p { color: var(--text2); font-size: 0.93rem; margin-top: 0.4rem; max-width: 46ch; }
-.hook-code {
-  flex-shrink: 0;
-  background: var(--bg0);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-ctl);
-  padding: 0.8rem 1.2rem;
-  font-size: 0.88rem;
+.verify-passage { max-width: 44rem; margin: 3rem auto 0; text-align: left; color: var(--text2); }
+.verify-passage .evidence { margin-top: 1.2rem; }
+.hook-passage {
+  max-width: 44rem; margin: 4rem auto 0; text-align: left;
+  display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 2.5rem; align-items: center;
+  border-top: 1px solid var(--line); padding-top: 2.5rem;
 }
-
-.install-note {
-  margin-top: 1.6rem;
-  color: var(--text3);
-  font-size: 0.88rem;
-  max-width: 62ch;
-}
+.hook-text p { color: var(--text2); margin-top: 0.6rem; }
+.hook-code { font-family: var(--mono); font-size: 0.95rem; }
+.install-note { max-width: 44rem; margin: 3rem auto 0; color: var(--text3); font-size: 0.9rem; }
 .install-note code {
   font-size: 0.8rem;
   color: var(--text2);
@@ -733,6 +763,14 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0.1rem 0.35rem;
+}
+@media (max-width: 700px) {
+  .hook-passage { grid-template-columns: 1fr; }
+  .plinth-cmd { flex-direction: column; align-items: stretch; }
+  /* the plain-text switch overflows the plinth's own border at narrow
+     widths when kept to one line (flex items won't shrink below their
+     content); wrap it instead of letting labels spill past the card */
+  .method-switch { flex-wrap: wrap; row-gap: 0.5rem; }
 }
 
 /* ---------- footer ---------- */
