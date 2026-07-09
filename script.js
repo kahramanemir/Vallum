@@ -234,6 +234,31 @@
     });
   }
 
+  /* ---------- guardrail seals stamp in ---------- */
+  if (gsapOK) {
+    gsap.from('.seal', {
+      scale: 2.2, opacity: 0, rotation: 8, duration: 0.5,
+      ease: 'back.out(2.2)', stagger: 0.3,
+      scrollTrigger: { trigger: '.ledger', start: 'top 72%' }
+    });
+  }
+
+  /* ---------- metrics count up + motto reveal ---------- */
+  var metricsSection = document.querySelector('.metrics');
+  if (metricsSection && gsapOK) {
+    ScrollTrigger.create({
+      trigger: metricsSection, start: 'top 70%', once: true,
+      onEnter: function () { runCountUps(metricsSection); }
+    });
+  }
+  var mottoLatin = document.querySelector('.motto-latin');
+  if (mottoLatin && gsapOK) {
+    ScrollTrigger.create({
+      trigger: '.motto', start: 'top 75%', once: true,
+      onEnter: function () { mottoLatin.classList.add('in'); }
+    });
+  }
+
   /* ---------- copy buttons ---------- */
   function flash(el, selector, message) {
     var target = selector ? el.querySelector(selector) : el;
