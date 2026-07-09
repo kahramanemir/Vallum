@@ -246,34 +246,31 @@ section {
 
 .hero {
   position: relative;
+  min-height: 100svh;
   display: grid;
-  grid-template-columns: minmax(0, 10fr) minmax(0, 11fr);
-  gap: 3.5rem;
-  align-items: center;
-  padding-top: 5.5rem;
-  min-height: min(74dvh, 700px);
+  place-content: center;
+  text-align: center;
+  padding: 8rem 2rem 6rem;
+  overflow: hidden;
 }
+.hero-copy { position: relative; z-index: 2; max-width: 54rem; }
+.hero h1 { font-size: clamp(2.6rem, 6vw, 5rem); line-height: 1.12; }
+.hero-sub { margin: 1.4rem auto 2.2rem; max-width: 36rem; color: var(--text2); font-size: 1.1rem; }
+.hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
 
 /* the carved inscription behind the hero */
 .inscription {
-  position: absolute;
-  top: -0.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: clamp(4.5rem, 12vw, 10.5rem);
-  letter-spacing: 0.18em;
-  text-indent: 0.18em; /* balance the trailing tracking */
-  white-space: nowrap;
+  position: absolute; inset: 0; z-index: 0;
+  display: grid; place-content: center;
+  font-family: var(--display); font-weight: 700;
+  font-size: clamp(6rem, 22vw, 22rem);
+  letter-spacing: 0.08em;
   color: transparent;
-  -webkit-text-stroke: 1px rgba(201, 162, 77, 0.17);
-  pointer-events: none;
-  user-select: none;
-  z-index: 0;
+  -webkit-text-stroke: 1px rgba(201, 162, 77, 0.22);
+  user-select: none; pointer-events: none;
 }
 @supports not (-webkit-text-stroke: 1px black) {
-  .inscription { color: rgba(201, 162, 77, 0.07); }
+  .inscription { color: rgba(201, 162, 77, 0.09); }
 }
 
 /* rising bronze embers over the wall at night */
@@ -284,25 +281,18 @@ section {
   pointer-events: none;
 }
 
-.hero-copy { position: relative; z-index: 1; }
-
-.hero h1 {
-  font-size: clamp(1.9rem, 2.9vw, 2.3rem);
+.descend {
+  position: absolute; left: 50%; bottom: 2.2rem; transform: translateX(-50%);
+  width: 2rem; height: 3.4rem; z-index: 2;
 }
-
-.hero-sub {
-  margin-top: 1.3rem;
-  color: var(--text2);
-  font-size: 1.06rem;
-  max-width: 42ch;
+.descend-line {
+  display: block; width: 1px; height: 100%; margin: 0 auto;
+  background: linear-gradient(to bottom, transparent, var(--accent));
 }
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.9rem;
-  margin-top: 2.1rem;
+html.gsap .descend-line { animation: descend-pulse 2.4s ease-in-out infinite; }
+@keyframes descend-pulse {
+  0%, 100% { transform: scaleY(0.65); transform-origin: top; opacity: 0.5; }
+  50% { transform: scaleY(1); opacity: 1; }
 }
 
 .install-chip {
@@ -643,42 +633,9 @@ section {
 .footer-links a:hover { color: var(--accent-bright); }
 .footer-license { color: var(--text3); font-size: 0.85rem; }
 
-/* ---------- motion ----------
-   All gating classes below are scoped to html.js (added by script.js) so
-   content stays visible with JavaScript disabled or in headless renderers. */
-
-@media (prefers-reduced-motion: no-preference) {
-  /* page-load choreography: the inscription carves in, content rises */
-  html.js .inscription {
-    animation: carve 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  @keyframes carve {
-    from { opacity: 0; letter-spacing: 0.3em; }
-    to   { opacity: 1; letter-spacing: 0.18em; }
-  }
-  html.js .hero-copy > * {
-    opacity: 0;
-    transform: translateY(18px);
-    animation: rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-  html.js .hero-copy h1 { animation-delay: 0.30s; }
-  html.js .hero-copy .hero-sub { animation-delay: 0.44s; }
-  html.js .hero-copy .hero-actions { animation-delay: 0.58s; }
-  @keyframes rise {
-    to { opacity: 1; transform: none; }
-  }
-}
-
 /* ---------- responsive ---------- */
 
 @media (max-width: 960px) {
-  .hero {
-    grid-template-columns: 1fr;
-    gap: 3rem;
-    min-height: 0;
-    padding-top: 4.5rem;
-  }
-  .inscription { top: 0.4rem; }
   .guardrail {
     grid-template-columns: 1fr;
     gap: 2.5rem;

@@ -105,6 +105,23 @@
     }
   }
 
+  /* ---------- hero load choreography ---------- */
+  if (gsapOK) {
+    var heroTl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+    heroTl
+      .from('.inscription', { opacity: 0, scale: 1.04, duration: 1.4, ease: 'power2.out' })
+      .from('.hero h1', { y: 28, opacity: 0, duration: 0.8 }, '-=0.9')
+      .from('.hero-sub', { y: 22, opacity: 0, duration: 0.7 }, '-=0.55')
+      .from('.hero-actions', { y: 18, opacity: 0, duration: 0.6 }, '-=0.45')
+      .from('.descend', { opacity: 0, duration: 0.8 }, '-=0.2');
+
+    /* inscription parallax: sinks slightly as you leave the gate */
+    gsap.to('.inscription', {
+      yPercent: 18, opacity: 0.5, ease: 'none',
+      scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true }
+    });
+  }
+
   /* ---------- metric count-ups ---------- */
   var metricsDone = false;
   function runCountUps(section) {
