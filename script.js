@@ -181,8 +181,13 @@
     /* below 900px html.gsap still applies; restore static detail */
     mmGates.add('(max-width: 899px)', function () {
       gatesStage.setAttribute('data-step', '6');
-      document.querySelectorAll('.station-note').forEach(function (n) { n.style.display = 'block'; });
+      var notes = document.querySelectorAll('.station-note');
+      notes.forEach(function (n) { n.style.display = 'block'; });
       stations.forEach(function (s) { s.style.opacity = '1'; });
+      return function () {
+        notes.forEach(function (n) { n.style.display = ''; });
+        stations.forEach(function (s) { s.style.opacity = ''; });
+      };
     });
   }
 
