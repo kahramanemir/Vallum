@@ -240,11 +240,16 @@
 
   /* ---------- guardrail seals stamp in ---------- */
   if (gsapOK) {
-    gsap.from('.seal', {
-      scale: 2.2, opacity: 0, rotation: 8, duration: 0.5,
-      ease: 'back.out(2.2)', stagger: 0.3, immediateRender: false,
-      scrollTrigger: { trigger: '.ledger', start: 'top 72%' }
-    });
+    /* hidden at scale 1 until the trigger: invisible pre-stamp without the
+       scaled-up from-state inflating scrollWidth while it waits off-screen */
+    gsap.set('.seal', { autoAlpha: 0 });
+    gsap.fromTo('.seal',
+      { scale: 2.2, rotation: 8, autoAlpha: 0 },
+      {
+        scale: 1, rotation: -4, autoAlpha: 1, duration: 0.5,
+        ease: 'back.out(2.2)', stagger: 0.3, immediateRender: false,
+        scrollTrigger: { trigger: '.ledger', start: 'top 72%' }
+      });
   }
 
   /* ---------- metrics count up + motto reveal ---------- */
