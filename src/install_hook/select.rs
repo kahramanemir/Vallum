@@ -169,9 +169,10 @@ impl SelectState {
 }
 
 /// Decode one keypress from `input`. Raw mode sets VMIN=0/VTIME=1, so a
-/// read may return 0 bytes (timeout): as the first byte that is `Ok(None)`
-/// (poll again); after an ESC it is what distinguishes a bare ESC press
-/// from the start of an arrow-key CSI sequence.
+/// read may legitimately return 0 bytes after a 0.1 s timeout. On the
+/// first byte that surfaces as `Ok(None)` (the caller polls again); after
+/// an ESC byte it is how a bare ESC press is told apart from the start of
+/// an arrow-key CSI sequence.
 pub fn read_key(input: &mut impl std::io::Read) -> std::io::Result<Option<Key>> {
     let mut b = [0u8; 1];
     if input.read(&mut b)? == 0 {
@@ -203,6 +204,97 @@ pub fn read_key(input: &mut impl std::io::Read) -> std::io::Result<Option<Key>> 
         }
         _ => Key::Other,
     }))
+}
+
+use std::io::Write;
+
+/// Match the welcome screen's color policy: interactive stdout, NO_COLOR
+/// unset, TERM != dumb.
+fn color_enabled() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdout().is_terminal()
+        && std::env::var_os("NO_COLOR").is_none()
+        && std::env::var_os("TERM")
+            .map(|t| t != "dumb")
+            .unwrap_or(true)
+}
+
+/// Restores the original termios and re-shows the terminal cursor on drop,
+/// covering confirm, cancel, error, and panic paths alike.
+struct RawMode {
+    original: libc::termios,
+}
+
+impl RawMode {
+    fn enable() -> Result<Self, String> {
+        // SAFETY: FFI on stdin's fd; termios is a plain-old-data out-param.
+        unsafe {
+            let mut t: libc::termios = std::mem::zeroed();
+            if libc::tcgetattr(libc::STDIN_FILENO, &mut t) != 0 {
+                return Err("terminal does not support raw mode (tcgetattr failed)".to_string());
+            }
+            let original = t;
+            t.c_lflag &= !(libc::ICANON | libc::ECHO | libc::ISIG);
+            t.c_cc[libc::VMIN] = 0; // reads may return 0 bytes…
+            t.c_cc[libc::VTIME] = 1; // …after a 0.1 s timeout (ESC telling)
+            if libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &t) != 0 {
+                return Err("terminal does not support raw mode (tcsetattr failed)".to_string());
+            }
+            Ok(RawMode { original })
+        }
+    }
+}
+
+impl Drop for RawMode {
+    fn drop(&mut self) {
+        // SAFETY: restores the termios captured in enable().
+        unsafe {
+            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.original);
+        }
+        print!("\x1b[?25h"); // re-show the cursor
+        let _ = std::io::stdout().flush();
+    }
+}
+
+fn flush() -> Result<(), String> {
+    std::io::stdout()
+        .flush()
+        .map_err(|e| format!("flush stdout: {e}"))
+}
+
+/// Run the picker on the current TTY. `Ok(Some(agents))` = confirmed
+/// (possibly empty) selection; `Ok(None)` = cancelled; `Err` = raw mode
+/// could not be established (caller should suggest --agent).
+pub fn run_picker(mut state: SelectState) -> Result<Option<Vec<Agent>>, String> {
+    let _raw = RawMode::enable()?;
+    let color = color_enabled();
+    let frame = state.render(color);
+    // Row count is fixed, so the frame's line count never changes.
+    let lines = frame.lines().count();
+    print!("\x1b[?25l{frame}"); // hide cursor + first frame
+    flush()?;
+    let stdin = std::io::stdin();
+    let mut stdin = stdin.lock();
+    loop {
+        let Some(key) = read_key(&mut stdin).map_err(|e| format!("read stdin: {e}"))? else {
+            continue; // VTIME timeout — poll again
+        };
+        match state.handle_key(key) {
+            None => {
+                let frame = state.render(color);
+                print!("\x1b[{lines}A\r\x1b[J{frame}"); // repaint in place
+                flush()?;
+            }
+            Some(outcome) => {
+                print!("\x1b[{lines}A\r\x1b[J"); // remove the picker
+                flush()?;
+                return Ok(match outcome {
+                    Outcome::Confirmed => Some(state.selected()),
+                    Outcome::Cancelled => None,
+                });
+            }
+        }
+    }
 }
 
 #[cfg(test)]
