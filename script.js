@@ -270,8 +270,9 @@
       var el = document.getElementById(id);
       var wp = document.querySelectorAll('.patrol .waypoint')[i];
       if (!el || !wp) return;
+      var trig = el.closest('.pin-spacer') || el;
       ScrollTrigger.create({
-        trigger: el, start: 'top 55%', end: 'bottom 45%',
+        trigger: trig, start: 'top 55%', end: 'bottom 45%',
         onToggle: function (st) { wp.classList.toggle('active', st.isActive); }
       });
     });
