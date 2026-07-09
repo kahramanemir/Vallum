@@ -133,7 +133,10 @@ h2 { font-size: clamp(2.4rem, 5vw, 4.2rem); }
 
 .scene-head { max-width: var(--wrap); margin: 0 auto; padding: 0 2rem; }
 .section-sub { color: var(--text2); max-width: 34rem; margin-top: 0.9rem; }
-main > section { padding: 9rem 0; }
+main > section { padding: 9rem 2rem; }
+@media (max-width: 768px) {
+  main > section { padding: 5rem 1.25rem; }
+}
 
 h3 {
   font-family: var(--sans);
@@ -680,7 +683,6 @@ section {
     grid-template-columns: 1fr;
     gap: 2.5rem;
   }
-  .guard-copy { order: 1; }
 }
 
 @media (max-width: 768px) {
