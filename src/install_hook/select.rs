@@ -34,7 +34,6 @@ pub enum Outcome {
 
 /// Selection state: cursor position + per-row checkboxes.
 pub struct SelectState {
-    #[allow(dead_code)]
     title: &'static str,
     rows: Vec<Row>,
     cursor: usize,
@@ -94,6 +93,49 @@ impl SelectState {
             .filter(|r| r.checked)
             .map(|r| r.agent)
             .collect()
+    }
+}
+
+const BRONZE_BOLD: &str = "\x1b[1;38;5;178m";
+const RESET: &str = "\x1b[0m";
+
+impl SelectState {
+    /// Render the full picker frame, every line newline-terminated. Plain
+    /// text when `color` is false — callers gate color on TTY/NO_COLOR/TERM
+    /// exactly like the welcome screen.
+    pub fn render(&self, color: bool) -> String {
+        let mut out = format!(
+            "{} (space = toggle, enter = confirm, esc = cancel):\n\n",
+            self.title
+        );
+        let width = self
+            .rows
+            .iter()
+            .map(|r| r.label.chars().count())
+            .max()
+            .unwrap_or(0);
+        for (i, row) in self.rows.iter().enumerate() {
+            let pointer = if i == self.cursor { "❯" } else { " " };
+            let mark = if row.checked { "x" } else { " " };
+            let line = if row.hooked {
+                format!(
+                    "  {pointer} [{mark}] {:<width$}  (hook installed ✓)",
+                    row.label
+                )
+            } else {
+                format!("  {pointer} [{mark}] {}", row.label)
+            };
+            if color && i == self.cursor {
+                out.push_str(BRONZE_BOLD);
+                out.push_str(&line);
+                out.push_str(RESET);
+            } else {
+                out.push_str(&line);
+            }
+            out.push('\n');
+        }
+        out.push_str(&format!("\n{} selected\n", self.selected().len()));
+        out
     }
 }
 
@@ -180,5 +222,58 @@ mod tests {
         s.handle_key(Key::Up); // cursor → Claude row
         s.handle_key(Key::Toggle);
         assert_eq!(s.selected(), vec![Agent::Claude, Agent::Cursor]);
+    }
+
+    #[test]
+    fn plain_render_matches_layout_exactly() {
+        let mut s = state();
+        s.rows[0].hooked = true;
+        s.rows[0].checked = true;
+        s.handle_key(Key::Down); // cursor on Codex
+        let out = s.render(false);
+        let expected = "Select agents to hook (space = toggle, enter = confirm, esc = cancel):\n\n    [x] Claude Code  (hook installed ✓)\n  ❯ [ ] Codex CLI\n    [ ] Cursor\n    [ ] Gemini CLI\n\n1 selected\n";
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn plain_render_has_no_escape_codes() {
+        assert!(!state().render(false).contains('\x1b'));
+    }
+
+    #[test]
+    fn color_render_highlights_cursor_row_only() {
+        let out = state().render(true);
+        assert!(
+            out.contains("\x1b[1;38;5;178m  ❯ [ ] Claude Code\x1b[0m"),
+            "cursor row painted bronze; got: {out}"
+        );
+        assert_eq!(
+            out.matches("\x1b[1;38;5;178m").count(),
+            1,
+            "exactly one painted row"
+        );
+    }
+
+    #[test]
+    fn render_pads_labels_so_hook_markers_align() {
+        let mut s = SelectState::new(
+            "Select agents to unhook",
+            vec![
+                {
+                    let mut r = row(Agent::Cursor, "Cursor");
+                    r.hooked = true;
+                    r
+                },
+                {
+                    let mut r = row(Agent::Claude, "Claude Code");
+                    r.hooked = true;
+                    r
+                },
+            ],
+        );
+        s.handle_key(Key::Other); // no-op; cursor stays on row 0
+        let out = s.render(false);
+        assert!(out.contains("  ❯ [ ] Cursor       (hook installed ✓)\n"));
+        assert!(out.contains("    [ ] Claude Code  (hook installed ✓)\n"));
     }
 }
