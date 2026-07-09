@@ -260,21 +260,30 @@
   }
 
   /* ---------- patrol rail ---------- */
-  if (gsapOK && window.matchMedia('(min-width: 1100px)').matches) {
-    gsap.to('.patrol-fill', {
-      scaleY: 1, ease: 'none',
-      scrollTrigger: { trigger: document.body, start: 'top top', end: 'bottom bottom', scrub: 0.5 }
-    });
-    var wpIds = ['hero', 'demo', 'threats', 'pipeline', 'guardrail', 'metrics', 'install'];
-    wpIds.forEach(function (id, i) {
-      var el = document.getElementById(id);
-      var wp = document.querySelectorAll('.patrol .waypoint')[i];
-      if (!el || !wp) return;
-      var trig = el.closest('.pin-spacer') || el;
-      ScrollTrigger.create({
-        trigger: trig, start: 'top 55%', end: 'bottom 45%',
-        onToggle: function (st) { wp.classList.toggle('active', st.isActive); }
+  if (gsapOK) {
+    var mmPatrol = gsap.matchMedia();
+    mmPatrol.add('(min-width: 1100px)', function () {
+      gsap.to('.patrol-fill', {
+        scaleY: 1, ease: 'none',
+        scrollTrigger: { trigger: document.body, start: 'top top', end: 'bottom bottom', scrub: 0.5 }
       });
+      var wpIds = ['hero', 'demo', 'threats', 'pipeline', 'guardrail', 'metrics', 'install'];
+      var wps = document.querySelectorAll('.patrol .waypoint');
+      wpIds.forEach(function (id, i) {
+        var el = document.getElementById(id);
+        var wp = wps[i];
+        if (!el || !wp) return;
+        /* pinned scenes are wrapped in a .pin-spacer by the earlier scene
+           blocks; using it as trigger spans the full pinned duration */
+        var trig = el.closest('.pin-spacer') || el;
+        ScrollTrigger.create({
+          trigger: trig, start: 'top 55%', end: 'bottom 45%',
+          onToggle: function (st) { wp.classList.toggle('active', st.isActive); }
+        });
+      });
+      return function () {
+        wps.forEach(function (w) { w.classList.remove('active'); });
+      };
     });
   }
 
