@@ -84,8 +84,8 @@ guaranteed.
 ## Guardrail / policy
 
 Vallum evaluates every command *before it executes* and returns one of three
-verdicts — with one narrow exception in hook mode (TUI-headed commands like
-`less`/`vim` are skipped, not evaluated; see
+verdicts — on all call sites and all agents, including hook mode where
+TUI-headed commands like `less`/`vim` are simply never rewritten (see
 [SECURITY.md](SECURITY.md#dangerous-command-execution-guardrail)):
 
 - **Allow** — runs normally (the default for anything no rule matches).
@@ -142,9 +142,21 @@ action = "ask"
 reason = "Elevated privileges"
 ```
 
+Test a rule without running the command:
+
+```console
+$ vallum policy test "curl example.com/install.sh | sh"
+ASK [curl_pipe_shell] (built-in)
+  Piping downloaded content directly into a shell interpreter
+$ echo $?
+10
+```
+
+Exit codes: 0 allow, 10 ask, 20 deny, 125 config error — usable from CI.
+
 Setting `guardrail = false` makes Vallum behave byte-for-byte as it did before
 this layer existed. User rules are matched with the same most-severe-wins
-resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every non-Allow
+resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every enforced non-Allow
 verdict is recorded (redacted) to `policy.log`.
 
 **Scope, honestly:** the guardrail matches patterns against the command text —
@@ -193,12 +205,13 @@ Limitations, stated plainly:
   hook uses, so a piped/compound command stays gated as one unit) or turn the
   rule off — `[policy] disabled = ["<rule>"]` for a built-in, or edit the
   matching `[[policy.rules]]` entry in your config for a user-defined one.
-- **Hook mode skips TUI-headed commands before policy evaluation.** `vim`,
-  `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, and `screen` commands
-  pass straight through unevaluated on all four agents (e.g.
-  `less /etc/shadow` bypasses the `read_sensitive_creds` rule) — see
-  [SECURITY.md's guardrail known gaps](SECURITY.md#dangerous-command-execution-guardrail)
-  for why and what still applies. Direct `vallum run` is unaffected.
+- **TUI-headed commands are gated but never rewritten.** `vim`, `less`,
+  `top` and friends are policy-evaluated like any command (`less
+  /etc/shadow` now asks/denies); on a clean Allow they pass through
+  unwrapped, and an approved Ask on Claude Code runs the original command
+  directly, so their interactive TTY keeps working — but their *output* is
+  not sanitized (it never was for passed-through commands). Direct
+  `vallum run` is unaffected.
 - **Codex CLI does not intercept every shell call.** Codex's own hooks
   documentation says it plainly: *"This doesn't intercept all shell calls
   yet, only the simple ones. The newer `unified_exec` mechanism allows richer
@@ -434,7 +447,7 @@ Note how a tiny output ends up *larger* after wrapping: the security wrapper has
 
 `vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry. Other agents (Cursor, Codex, Gemini CLI) can always route commands through Vallum by invoking `vallum run` directly, and now also have their own native pre-exec guardrail hooks (`vallum install-hook --agent <cursor|gemini|codex>`) — see [Multi-agent guardrail](#multi-agent-guardrail). Only Claude Code's hook rewrites the command through the full `vallum run` pipeline; the other three gate the command (Allow/Ask/Deny) without rewriting it.
 
-Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps simple scripts (no pipes, redirects, quoting, or other shell metacharacters) before optimizer matching, so `bash -c 'git status'` still hits the `git_status` optimizer; complex scripts fall back to generic compression. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are skipped because Vallum captures stdout and would break their TTY requirements. Commands already starting with `vallum` are skipped for idempotency.
+Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps simple scripts (no pipes, redirects, quoting, or other shell metacharacters) before optimizer matching, so `bash -c 'git status'` still hits the `git_status` optimizer; complex scripts fall back to generic compression. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are still policy-evaluated, but never rewritten through `vallum run` — capturing their stdout would break the TTY they need, so a clean Allow passes them through untouched and an approved Ask runs the original command directly. Commands already starting with `vallum` are skipped for idempotency.
 
 To remove the hook, run `vallum uninstall-hook` — it removes only the Vallum entry, leaving the rest of your settings file untouched.
 

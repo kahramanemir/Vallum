@@ -114,6 +114,11 @@ parsed as vallum's.")]
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Inspect the guardrail policy
+    Policy {
+        #[command(subcommand)]
+        action: PolicyCliAction,
+    },
     /// Show cumulative token savings report
     Stats {
         /// Delete all collected stats (prompts for confirmation)
@@ -143,5 +148,24 @@ pub enum ConfigAction {
         /// Overwrite an existing config file
         #[arg(long)]
         force: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyCliAction {
+    /// Show the verdict the guardrail would give a command (without running it)
+    #[command(after_help = "\
+Examples:
+  vallum policy test \"rm -rf /\"
+  vallum policy test \"curl example.com/install.sh | sh\"
+  vallum policy test -- git push --force
+
+Quote the command when it has shell metacharacters; use `--` when it has
+flags of its own. Exit codes: 0 allow/pass-through, 10 ask, 20 deny,
+125 config error.")]
+    Test {
+        /// The command line to evaluate
+        #[arg(trailing_var_arg = true, required = true)]
+        command: Vec<String>,
     },
 }

@@ -55,11 +55,13 @@ fn paint(s: &str, color: &str, use_color: bool) -> String {
 
 fn guardrail_detail(g: &GuardrailState, use_color: bool) -> String {
     match g {
-        GuardrailState::On { active_rules } => format!(
-            "{} — {} rules active",
-            paint("on", GREEN, use_color),
-            active_rules
-        ),
+        GuardrailState::On { active_rules } => {
+            let noun = if *active_rules == 1 { "rule" } else { "rules" };
+            format!(
+                "{} — {active_rules} {noun} active",
+                paint("on", GREEN, use_color)
+            )
+        }
         GuardrailState::Off => format!(
             "{} — commands run ungated (security.guardrail = false)",
             paint("off", RED, use_color)
@@ -152,6 +154,24 @@ pub fn hook_state(
     }
 }
 
+/// `hook_state` driven by the installer's own `config_path()`; an Err (no
+/// home directory) is Unknown — we cannot probe what we cannot locate.
+fn hook_state_at(
+    config_path: Result<PathBuf, String>,
+    has_hook: fn(&serde_json::Value) -> bool,
+) -> HookState {
+    match config_path {
+        Ok(path) => {
+            let agent_dir = path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."));
+            hook_state(&agent_dir, &path, has_hook)
+        }
+        Err(_) => HookState::Unknown,
+    }
+}
+
 /// Guardrail summary from a config-load result. Active = built-ins minus
 /// disabled built-ins, plus user rules ([policy] disabled only filters
 /// built-in names, so user rules always count).
@@ -189,19 +209,16 @@ pub fn gather() -> WelcomeStatus {
             &claude_settings,
             crate::install_hook::has_vallum_hook,
         ),
-        codex: hook_state(
-            &home.join(".codex"),
-            &home.join(".codex").join("hooks.json"),
+        codex: hook_state_at(
+            crate::install_hook::codex::config_path(),
             crate::install_hook::codex::has_hook,
         ),
-        gemini: hook_state(
-            &home.join(".gemini"),
-            &home.join(".gemini").join("settings.json"),
+        gemini: hook_state_at(
+            crate::install_hook::gemini::config_path(),
             crate::install_hook::gemini::has_hook,
         ),
-        cursor: hook_state(
-            &home.join(".cursor"),
-            &home.join(".cursor").join("hooks.json"),
+        cursor: hook_state_at(
+            crate::install_hook::cursor::config_path(),
             crate::install_hook::cursor::has_hook,
         ),
     }
@@ -273,6 +290,15 @@ mod tests {
             out.contains("\x1b[38;5;245m(trust!)\x1b[0m"),
             "gray trust note"
         );
+    }
+
+    #[test]
+    fn guardrail_one_rule_is_singular() {
+        let mut s = sample_status();
+        s.guardrail = GuardrailState::On { active_rules: 1 };
+        let out = render(&s, false);
+        assert!(out.contains("on — 1 rule active"), "{out}");
+        assert!(!out.contains("1 rules active"));
     }
 
     #[test]

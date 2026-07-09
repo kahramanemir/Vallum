@@ -253,3 +253,43 @@ fn hook_cursor_ask_emits_native_ask_json() {
     assert!(stdout.contains("\"permission\":\"ask\""), "got: {stdout}");
     let _ = std::fs::remove_dir_all(&home);
 }
+
+#[test]
+fn hook_tui_ask_emits_no_updated_input() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    // Temp config: default policy, but sanitized audit log off so the test
+    // does not append to the developer's real ~/.vallum/logs.
+    let dir = std::env::temp_dir().join(format!("vallum_tui_ask_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("config.toml");
+    std::fs::write(&cfg, "[audit]\nsanitized_enabled = false\n").unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let mut child = Command::new(bin)
+        .arg("hook")
+        .env("VALLUM_CONFIG", &cfg)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn vallum hook");
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(br#"{"tool_name":"Bash","tool_input":{"command":"less /etc/shadow"}}"#)
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("hook must emit JSON for an Ask");
+    let hso = &v["hookSpecificOutput"];
+    assert_eq!(hso["permissionDecision"], "ask");
+    assert!(
+        hso.get("updatedInput").is_none(),
+        "TUI ask must not carry a rewrite: {v}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

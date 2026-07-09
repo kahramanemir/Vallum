@@ -52,27 +52,29 @@ fn vallum_entry() -> Value {
 
 /// Add the Vallum entry. If `force`, replace existing Vallum entries; else
 /// no-op when one is already present.
-pub fn add_vallum(settings: &mut Value, force: bool) -> bool {
+pub fn add_vallum(settings: &mut Value, force: bool) -> Result<bool, String> {
     if has_vallum_hook(settings) {
         if !force {
-            return false;
+            return Ok(false);
         }
         // Remove existing vallum entries first.
         remove_vallum(settings);
     }
     let hooks = settings
         .as_object_mut()
-        .expect("settings root must be an object")
+        .ok_or_else(|| "settings root is not a JSON object".to_string())?
         .entry("hooks")
         .or_insert_with(|| json!({}));
     let pre = hooks
         .as_object_mut()
-        .expect("hooks must be an object")
+        .ok_or_else(|| "the \"hooks\" key is not a JSON object".to_string())?
         .entry("PreToolUse")
         .or_insert_with(|| json!([]));
-    let arr = pre.as_array_mut().expect("PreToolUse must be an array");
+    let arr = pre
+        .as_array_mut()
+        .ok_or_else(|| "hooks.PreToolUse is not a JSON array".to_string())?;
     arr.push(vallum_entry());
-    true
+    Ok(true)
 }
 
 /// Remove every entry whose hooks[].command contains "vallum hook".
@@ -104,15 +106,14 @@ mod tests {
     use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn temp_dir() -> PathBuf {
+    fn temp_dir(tag: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
         let p = std::env::temp_dir().join(format!(
-            "vallum_install_hook_{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            "vallum_install_hook_claude_{tag}_{}_{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&p).unwrap();
         p
@@ -120,10 +121,10 @@ mod tests {
 
     #[test]
     fn install_into_missing_file_creates_it() {
-        let dir = temp_dir();
+        let dir = temp_dir("missing_file");
         let path = dir.join("settings.json");
         let mut settings = read_settings(&path).unwrap();
-        assert!(add_vallum(&mut settings, false));
+        assert!(add_vallum(&mut settings, false).unwrap());
         let s = serde_json::to_string(&settings).unwrap();
         fs::write(&path, &s).unwrap();
         let after = read_settings(&path).unwrap();
@@ -133,7 +134,7 @@ mod tests {
 
     #[test]
     fn install_preserves_other_hooks_and_top_level_fields() {
-        let dir = temp_dir();
+        let dir = temp_dir("preserves_fields");
         let path = dir.join("settings.json");
         let existing = json!({
             "theme": "dark",
@@ -145,7 +146,7 @@ mod tests {
         });
         fs::write(&path, serde_json::to_string(&existing).unwrap()).unwrap();
         let mut settings = read_settings(&path).unwrap();
-        assert!(add_vallum(&mut settings, false));
+        assert!(add_vallum(&mut settings, false).unwrap());
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 2);
         assert!(arr.iter().any(|e| e["matcher"] == "Edit"));
@@ -157,8 +158,8 @@ mod tests {
     #[test]
     fn install_is_idempotent_without_force() {
         let mut settings = json!({});
-        assert!(add_vallum(&mut settings, false));
-        assert!(!add_vallum(&mut settings, false));
+        assert!(add_vallum(&mut settings, false).unwrap());
+        assert!(!add_vallum(&mut settings, false).unwrap());
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
     }
@@ -166,8 +167,8 @@ mod tests {
     #[test]
     fn install_force_replaces_existing() {
         let mut settings = json!({});
-        add_vallum(&mut settings, false);
-        assert!(add_vallum(&mut settings, true));
+        add_vallum(&mut settings, false).unwrap();
+        assert!(add_vallum(&mut settings, true).unwrap());
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
     }
@@ -186,5 +187,12 @@ mod tests {
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["matcher"], "Edit");
+    }
+
+    #[test]
+    fn add_vallum_errors_on_malformed_hooks_key() {
+        let mut v = serde_json::json!({ "hooks": "not an object" });
+        let err = add_vallum(&mut v, false).unwrap_err();
+        assert!(err.contains("hooks"), "{err}");
     }
 }

@@ -39,26 +39,28 @@ fn vallum_entry() -> Value {
     })
 }
 
-pub fn add(settings: &mut Value, force: bool) -> bool {
+pub fn add(settings: &mut Value, force: bool) -> Result<bool, String> {
     if has_hook(settings) {
         if !force {
-            return false;
+            return Ok(false);
         }
         remove(settings);
     }
     let hooks = settings
         .as_object_mut()
-        .expect("settings root must be an object")
+        .ok_or_else(|| "settings root is not a JSON object".to_string())?
         .entry("hooks")
         .or_insert_with(|| json!({}));
     let arr = hooks
         .as_object_mut()
-        .expect("hooks must be an object")
+        .ok_or_else(|| "the \"hooks\" key is not a JSON object".to_string())?
         .entry("PreToolUse")
         .or_insert_with(|| json!([]));
-    let arr = arr.as_array_mut().expect("PreToolUse must be an array");
+    let arr = arr
+        .as_array_mut()
+        .ok_or_else(|| "hooks.PreToolUse is not a JSON array".to_string())?;
     arr.push(vallum_entry());
-    true
+    Ok(true)
 }
 
 pub fn remove(settings: &mut Value) -> bool {
@@ -90,7 +92,7 @@ mod tests {
     #[test]
     fn add_into_empty_sets_version_and_entry() {
         let mut settings = json!({});
-        assert!(add(&mut settings, false));
+        assert!(add(&mut settings, false).unwrap());
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["matcher"], "Bash");
@@ -101,9 +103,9 @@ mod tests {
     #[test]
     fn add_is_idempotent_and_force_replaces() {
         let mut settings = json!({});
-        assert!(add(&mut settings, false));
-        assert!(!add(&mut settings, false));
-        assert!(add(&mut settings, true));
+        assert!(add(&mut settings, false).unwrap());
+        assert!(!add(&mut settings, false).unwrap());
+        assert!(add(&mut settings, true).unwrap());
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
     }
@@ -118,7 +120,7 @@ mod tests {
                 ]
             }
         });
-        assert!(add(&mut settings, false));
+        assert!(add(&mut settings, false).unwrap());
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 2);
         assert_eq!(settings["theme"], "dark");
@@ -140,5 +142,12 @@ mod tests {
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["matcher"], "Edit");
         assert!(!remove(&mut settings));
+    }
+
+    #[test]
+    fn add_errors_on_malformed_hooks_key() {
+        let mut v = serde_json::json!({ "hooks": "not an object" });
+        let err = add(&mut v, false).unwrap_err();
+        assert!(err.contains("hooks"), "{err}");
     }
 }

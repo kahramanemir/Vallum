@@ -165,6 +165,35 @@ pub fn check_hook(settings_path: &Path) -> Check {
     }
 }
 
+/// `check_agent_hook` driven by the installer's own `config_path()`, so the
+/// doctor probe can never drift from where `install-hook` writes. An Err
+/// (no home directory) reads as agent-not-detected.
+fn check_agent_hook_at(
+    label: &str,
+    config_path: Result<PathBuf, String>,
+    agent_flag: &str,
+    has_hook: fn(&serde_json::Value) -> bool,
+    installed_note: Option<&str>,
+) -> Check {
+    match config_path {
+        Ok(path) => {
+            let agent_dir = path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."));
+            check_agent_hook(
+                label,
+                &agent_dir,
+                &path,
+                agent_flag,
+                has_hook,
+                installed_note,
+            )
+        }
+        Err(_) => Check::new(label, Status::Ok, "agent not detected — skipped"),
+    }
+}
+
 /// Report hook status for one non-Claude agent. An absent agent config dir
 /// means the agent itself is not on this machine — Ok/skip, not a warning.
 /// Malformed JSON in an existing hooks file is a hard Fail (the hook may
@@ -305,7 +334,6 @@ pub fn run() -> i32 {
         "vallum"
     };
 
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let checks = vec![
         check_config(&config_path),
         check_optimizer_names(&config.optimizer.disabled, &crate::optimizer::names()),
@@ -316,26 +344,23 @@ pub fn run() -> i32 {
             &crate::policy::builtin_names(),
         ),
         check_hook(&settings_path),
-        check_agent_hook(
+        check_agent_hook_at(
             "hook (cursor)",
-            &home.join(".cursor"),
-            &home.join(".cursor").join("hooks.json"),
+            crate::install_hook::cursor::config_path(),
             "cursor",
             crate::install_hook::cursor::has_hook,
             None,
         ),
-        check_agent_hook(
+        check_agent_hook_at(
             "hook (gemini)",
-            &home.join(".gemini"),
-            &home.join(".gemini").join("settings.json"),
+            crate::install_hook::gemini::config_path(),
             "gemini",
             crate::install_hook::gemini::has_hook,
             None,
         ),
-        check_agent_hook(
+        check_agent_hook_at(
             "hook (codex)",
-            &home.join(".codex"),
-            &home.join(".codex").join("hooks.json"),
+            crate::install_hook::codex::config_path(),
             "codex",
             crate::install_hook::codex::has_hook,
             Some("requires one-time trust in Codex; until trusted, Codex silently skips it (needs codex >= 0.141)"),

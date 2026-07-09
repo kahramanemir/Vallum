@@ -150,6 +150,18 @@ mod tests {
     }
 
     #[test]
+    fn tui_ask_fails_closed_too() {
+        let out = respond(
+            r#"{"tool_name":"Bash","tool_input":{"command":"less /etc/shadow"}}"#,
+            Some(&guardrail()),
+            &cfg_no_log(),
+        )
+        .expect("TUI ask must fail closed");
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["hookSpecificOutput"]["permissionDecision"], "deny");
+    }
+
+    #[test]
     fn deny_maps_to_deny() {
         let out = respond(
             r#"{"tool_name":"Bash","tool_input":{"command":"echo SECRETDROP"}}"#,
@@ -175,6 +187,18 @@ mod tests {
             respond(
                 r#"{"tool_name":"Bash","tool_input":{"command":"vim x"}}"#,
                 Some(&guardrail()),
+                &cfg_no_log()
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn guardrail_off_emits_no_decision() {
+        assert_eq!(
+            respond(
+                r#"{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}"#,
+                None,
                 &cfg_no_log()
             ),
             None

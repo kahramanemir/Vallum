@@ -5,6 +5,34 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- **TUI-headed commands are now gated in hook mode on all four agents.**
+  `less /etc/shadow` and friends were previously skipped before policy
+  evaluation (a disclosed known gap); they are now evaluated like any
+  command — Ask prompts natively on Claude Code/Cursor and fails closed on
+  Gemini CLI/Codex CLI. A clean Allow still passes the command through
+  unwrapped, and an approved Ask on Claude Code runs the original command
+  directly, so interactive TTYs keep working.
+
+### Added
+- **`vallum policy test "<cmd>"`** — one-shot guardrail verdict without
+  running an agent: prints `ALLOW` / `ASK [rule] (built-in|user rule)` /
+  `DENY [rule] …` / `PASS-THROUGH (…)` and exits 0/10/20 (125 on config
+  error) for scripting.
+
+### Fixed
+- `vallum install-hook` no longer panics when a hand-edited agent config
+  has the right JSON syntax but the wrong shape (e.g. a `hooks` key that
+  is a string) — it reports a clean error with the file path instead.
+- Welcome screen says `1 rule active` instead of `1 rules active`.
+
+### Changed
+- `vallum doctor` and the welcome screen derive their per-agent probe
+  paths from the installers' own path helpers, so the three can no longer
+  drift apart.
+
 ## [0.7.0]
 
 ### Added
@@ -191,6 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.7.0...HEAD
 [0.7.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.7.0
 [0.6.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.6.1
 [0.6.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.6.0
