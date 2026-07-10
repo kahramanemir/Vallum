@@ -11,9 +11,14 @@ const MAX_VIEWS: usize = 24;
 
 /// Shell interpreters whose `-c` argument is executed as a command.
 const INTERPRETERS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh"];
-/// Shell control operators that, as a standalone token, start a new command
-/// position — the next token is a command verb, not an argument.
+/// Shell control operators that, as a standalone token, end the current command
+/// and start a new one (the next verb belongs to a fresh command group).
 const SEPARATORS: &[&str] = &["|", "||", "&&", ";", ";;", "&", "|&", "(", "{"];
+/// Command-group lead verbs that only PRINT their arguments — they never
+/// execute an interpreter passed as an argument, so `echo bash -c '…'` is a
+/// benign mention. Kept deliberately small: a missing entry only costs a
+/// fail-safe extra Ask, whereas a wrong entry would silently skip a real exec.
+const PRINT_LEADS: &[&str] = &["echo", "printf", ":"];
 /// Cap on tokens scanned per command line.
 const MAX_TOKENS: usize = 64;
 
@@ -53,40 +58,52 @@ fn tokenize(cmd: &str) -> Vec<String> {
 
 /// Extract the arguments a shell would execute: an interpreter's `-c` argument
 /// and an `eval` argument. Unquoted one level so the returned string is a clean
-/// command line for re-evaluation. Only a token in *command position* (first
-/// token, or right after a `|`/`;`/`&&`/... separator) is treated as an
-/// interpreter or `eval`, so a literal mention as an argument
-/// (`echo bash -c '…'`, which a shell only prints) is never extracted.
-/// `echo`/`printf` are not interpreters either, so their quoted arguments are
-/// left alone.
+/// command line for re-evaluation.
+///
+/// Defaults to extracting (max recall — a wrapped danger should still be seen),
+/// and suppresses only when the interpreter's command group is led by a
+/// print-only verb (`echo bash -c '…'`, which a shell merely prints). This
+/// keeps wrapper-prefixed real execs (`sudo`/`env`/`timeout`/`FOO=bar bash -c
+/// '…'`) firing while dropping the benign mention. Being wrong about a lead
+/// verb only costs a fail-safe extra Ask, never a missed exec.
 fn extract_exec_payloads(cmd: &str) -> Vec<String> {
     let toks = tokenize(cmd);
     let mut out = Vec::new();
-    let mut cmd_pos = true;
+    // Lead verb of the current command group (reset at each separator, set to
+    // the first non-assignment token after it). Skipping env-assignments lets
+    // `FOO=bar bash -c '…'` still be led by `bash`.
+    let mut group_lead: Option<&str> = None;
     for (i, t) in toks.iter().enumerate() {
-        if cmd_pos {
-            if t == "eval" {
-                if let Some(p) = toks.get(i + 1) {
-                    if !p.is_empty() {
-                        out.push(p.clone());
-                    }
+        if is_separator(t) {
+            group_lead = None;
+            continue;
+        }
+        if group_lead.is_none() && !is_env_assignment(t) {
+            group_lead = Some(t);
+        }
+        if group_lead.is_some_and(|v| PRINT_LEADS.contains(&v)) {
+            continue; // benign mention — the group only prints its arguments
+        }
+        if t == "eval" {
+            if let Some(p) = toks.get(i + 1) {
+                if !p.is_empty() {
+                    out.push(p.clone());
                 }
             }
-            if INTERPRETERS.contains(&t.as_str()) {
-                if let Some(pos) = toks[i + 1..].iter().position(|x| x == "-c") {
-                    // don't scan across a separator into the next command
-                    let crossed = toks[i + 1..i + 1 + pos].iter().any(|x| is_separator(x));
-                    if !crossed {
-                        if let Some(p) = toks.get(i + 1 + pos + 1) {
-                            if !p.is_empty() {
-                                out.push(p.clone());
-                            }
+        }
+        if INTERPRETERS.contains(&t.as_str()) {
+            if let Some(pos) = toks[i + 1..].iter().position(|x| x == "-c") {
+                // don't scan across a separator into the next command group
+                let crossed = toks[i + 1..i + 1 + pos].iter().any(|x| is_separator(x));
+                if !crossed {
+                    if let Some(p) = toks.get(i + 1 + pos + 1) {
+                        if !p.is_empty() {
+                            out.push(p.clone());
                         }
                     }
                 }
             }
         }
-        cmd_pos = is_separator(t);
     }
     out
 }
@@ -94,6 +111,21 @@ fn extract_exec_payloads(cmd: &str) -> Vec<String> {
 /// A standalone shell control operator token.
 fn is_separator(tok: &str) -> bool {
     SEPARATORS.contains(&tok)
+}
+
+/// A leading environment assignment (`FOO=bar`) — a prefix that does not change
+/// the command verb, so it is skipped when finding a group's lead.
+fn is_env_assignment(tok: &str) -> bool {
+    match tok.find('=') {
+        Some(eq) if eq > 0 => {
+            let name = &tok[..eq];
+            name.chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        }
+        _ => false,
+    }
 }
 
 /// The raw command plus every precision-safe derived view, deduplicated and
@@ -174,18 +206,35 @@ mod tests {
     }
 
     #[test]
-    fn interpreter_as_argument_is_not_extracted() {
-        // `bash`/`eval` only count in command position; as a literal argument
-        // to echo the shell just prints them, so nothing is executed.
+    fn print_led_interpreter_mention_is_not_extracted() {
+        // A group led by a print-only verb only prints its arguments, so the
+        // interpreter mention is benign and nothing is extracted.
         assert!(extract_exec_payloads("echo bash -c 'rm -rf /'").is_empty());
         assert!(extract_exec_payloads("echo eval 'rm -rf /'").is_empty());
+        assert!(extract_exec_payloads("printf '%s' bash -c 'rm -rf /'").is_empty());
     }
 
     #[test]
     fn interpreter_after_a_pipe_is_extracted() {
-        // Piping into an interpreter IS a real exec — command position resets
-        // after the `|` separator.
+        // Piping into an interpreter IS a real exec — the group resets after
+        // the `|` separator, so `bash` leads a fresh group.
         let p = extract_exec_payloads("echo foo | bash -c 'rm -rf /'");
         assert!(p.contains(&"rm -rf /".to_string()), "got {p:?}");
+    }
+
+    #[test]
+    fn wrapper_prefixed_interpreter_is_extracted() {
+        // sudo/env/timeout/env-assignment prefixes do execute the interpreter
+        // they wrap — these must still be unwrapped (raw view doesn't catch
+        // them because the closing quote defeats the rule's end anchor).
+        for cmd in [
+            "sudo bash -c 'rm -rf /'",
+            "env bash -c 'rm -rf /'",
+            "timeout 5 bash -c 'rm -rf /'",
+            "FOO=bar bash -c 'rm -rf /'",
+        ] {
+            let p = extract_exec_payloads(cmd);
+            assert!(p.contains(&"rm -rf /".to_string()), "{cmd} -> {p:?}");
+        }
     }
 }
