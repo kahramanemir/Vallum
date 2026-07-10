@@ -378,6 +378,23 @@ mod tests {
     }
 
     #[test]
+    fn wrapped_commands_still_fire() {
+        let p = builtins();
+        for cmd in [
+            "bash -c 'rm -rf /'", // #1
+            "eval \"rm -rf /\"",  // #2
+            "sh -c \"chmod -R 777 /etc\"",
+            "bash -c 'sh -c \"rm -rf /\"'", // nested
+        ] {
+            assert_ne!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "wrapped command should fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
     fn builtin_positives_fire() {
         let p = builtins();
         for cmd in [
