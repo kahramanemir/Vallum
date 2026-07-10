@@ -11,6 +11,9 @@ const MAX_VIEWS: usize = 24;
 
 /// Shell interpreters whose `-c` argument is executed as a command.
 const INTERPRETERS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh"];
+/// Shell control operators that, as a standalone token, start a new command
+/// position — the next token is a command verb, not an argument.
+const SEPARATORS: &[&str] = &["|", "||", "&&", ";", ";;", "&", "|&", "(", "{"];
 /// Cap on tokens scanned per command line.
 const MAX_TOKENS: usize = 64;
 
@@ -50,33 +53,47 @@ fn tokenize(cmd: &str) -> Vec<String> {
 
 /// Extract the arguments a shell would execute: an interpreter's `-c` argument
 /// and an `eval` argument. Unquoted one level so the returned string is a clean
-/// command line for re-evaluation. `echo`/`printf` are not interpreters, so
-/// their quoted arguments are never extracted.
+/// command line for re-evaluation. Only a token in *command position* (first
+/// token, or right after a `|`/`;`/`&&`/... separator) is treated as an
+/// interpreter or `eval`, so a literal mention as an argument
+/// (`echo bash -c '…'`, which a shell only prints) is never extracted.
+/// `echo`/`printf` are not interpreters either, so their quoted arguments are
+/// left alone.
 fn extract_exec_payloads(cmd: &str) -> Vec<String> {
     let toks = tokenize(cmd);
     let mut out = Vec::new();
+    let mut cmd_pos = true;
     for (i, t) in toks.iter().enumerate() {
-        if t == "eval" {
-            if let Some(p) = toks.get(i + 1) {
-                if !p.is_empty() {
-                    out.push(p.clone());
+        if cmd_pos {
+            if t == "eval" {
+                if let Some(p) = toks.get(i + 1) {
+                    if !p.is_empty() {
+                        out.push(p.clone());
+                    }
                 }
             }
-        }
-        if INTERPRETERS.contains(&t.as_str()) {
-            for j in (i + 1)..toks.len() {
-                if toks[j] == "-c" {
-                    if let Some(p) = toks.get(j + 1) {
-                        if !p.is_empty() {
-                            out.push(p.clone());
+            if INTERPRETERS.contains(&t.as_str()) {
+                if let Some(pos) = toks[i + 1..].iter().position(|x| x == "-c") {
+                    // don't scan across a separator into the next command
+                    let crossed = toks[i + 1..i + 1 + pos].iter().any(|x| is_separator(x));
+                    if !crossed {
+                        if let Some(p) = toks.get(i + 1 + pos + 1) {
+                            if !p.is_empty() {
+                                out.push(p.clone());
+                            }
                         }
                     }
-                    break;
                 }
             }
         }
+        cmd_pos = is_separator(t);
     }
     out
+}
+
+/// A standalone shell control operator token.
+fn is_separator(tok: &str) -> bool {
+    SEPARATORS.contains(&tok)
 }
 
 /// The raw command plus every precision-safe derived view, deduplicated and
@@ -154,5 +171,21 @@ mod tests {
     fn unwrapped_payload_becomes_a_view() {
         let v = command_views("bash -c 'rm -rf /'");
         assert!(v.contains(&"rm -rf /".to_string()), "views: {v:?}");
+    }
+
+    #[test]
+    fn interpreter_as_argument_is_not_extracted() {
+        // `bash`/`eval` only count in command position; as a literal argument
+        // to echo the shell just prints them, so nothing is executed.
+        assert!(extract_exec_payloads("echo bash -c 'rm -rf /'").is_empty());
+        assert!(extract_exec_payloads("echo eval 'rm -rf /'").is_empty());
+    }
+
+    #[test]
+    fn interpreter_after_a_pipe_is_extracted() {
+        // Piping into an interpreter IS a real exec — command position resets
+        // after the `|` separator.
+        let p = extract_exec_payloads("echo foo | bash -c 'rm -rf /'");
+        assert!(p.contains(&"rm -rf /".to_string()), "got {p:?}");
     }
 }
