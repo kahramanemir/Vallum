@@ -99,9 +99,9 @@ parsed as vallum's.")]
     },
     /// Remove the Vallum pre-exec hook from an agent's config
     UninstallHook {
-        /// Which agent to uninstall from
-        #[arg(long, value_enum, default_value_t = AgentArg::Claude)]
-        agent: AgentArg,
+        /// Which agent to uninstall from (omit to pick interactively)
+        #[arg(long, value_enum)]
+        agent: Option<AgentArg>,
         #[arg(long)]
         user: bool,
         #[arg(long)]

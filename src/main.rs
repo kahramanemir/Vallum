@@ -354,14 +354,22 @@ fn main() {
                     std::process::exit(125);
                 }
             };
-            if *project && !matches!(agent, vallum::cli::AgentArg::Claude) {
-                eprintln!(
-                    "uninstall-hook: --project is Claude Code-only; {:?} installs are user-level in v1",
-                    agent
-                );
-                std::process::exit(125);
+            if *project {
+                if let Some(a) = agent {
+                    if !matches!(a, vallum::cli::AgentArg::Claude) {
+                        eprintln!(
+                            "uninstall-hook: --project is Claude Code-only; {a:?} installs are user-level in v1",
+                        );
+                        std::process::exit(125);
+                    }
+                }
             }
-            match install_hook::uninstall_agent(agent_from_arg(*agent), level) {
+            #[cfg(unix)]
+            if agent.is_none() && !*project && picker_available() {
+                interactive_uninstall(level); // exits the process
+            }
+            let resolved = agent.unwrap_or(vallum::cli::AgentArg::Claude);
+            match install_hook::uninstall_agent(agent_from_arg(resolved), level) {
                 Ok(msg) => println!("{msg}"),
                 Err(e) => {
                     eprintln!("uninstall-hook: {e}");
@@ -470,6 +478,47 @@ fn interactive_install(level: Level, force: bool) -> ! {
                     Ok(msg) => println!("{msg}"),
                     Err(e) => {
                         eprintln!("install-hook: {e}");
+                        failed = true;
+                    }
+                }
+            }
+            std::process::exit(if failed { 125 } else { 0 });
+        }
+    }
+}
+
+#[cfg(unix)]
+fn interactive_uninstall(level: Level) -> ! {
+    use vallum::install_hook::{agent_status, select, ALL_AGENTS};
+    let statuses: Vec<_> = ALL_AGENTS.iter().map(|&a| (a, agent_status(a))).collect();
+    let rows = select::Row::uninstall_rows(&statuses);
+    if rows.is_empty() {
+        println!("No Vallum hooks found; nothing to do.");
+        std::process::exit(0);
+    }
+    let state = select::SelectState::new("Select agents to unhook", rows);
+    match select::run_picker(state) {
+        Err(e) => {
+            eprintln!(
+                "uninstall-hook: {e}; pass --agent <claude|codex|cursor|gemini> to skip the picker"
+            );
+            std::process::exit(125);
+        }
+        Ok(None) => {
+            eprintln!("Aborted; nothing changed.");
+            std::process::exit(130);
+        }
+        Ok(Some(agents)) if agents.is_empty() => {
+            println!("Nothing selected; nothing changed.");
+            std::process::exit(0);
+        }
+        Ok(Some(agents)) => {
+            let mut failed = false;
+            for agent in agents {
+                match install_hook::uninstall_agent(agent, level) {
+                    Ok(msg) => println!("{msg}"),
+                    Err(e) => {
+                        eprintln!("uninstall-hook: {e}");
                         failed = true;
                     }
                 }
