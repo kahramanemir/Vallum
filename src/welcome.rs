@@ -109,7 +109,7 @@ pub fn render(status: &WelcomeStatus, use_color: bool) -> String {
          \x20 {hooks_label}       {hooks}\n\
          \n\
          \x20 {get_started}\n\
-         \x20   vallum install-hook --agent claude    {hint_hook}\n\
+         \x20   vallum install-hook                   {hint_hook}\n\
          \x20   vallum run -- <cmd>                   {hint_run}\n\
          \x20   vallum doctor                         {hint_doctor}\n\
          \n\
@@ -123,7 +123,7 @@ pub fn render(status: &WelcomeStatus, use_color: bool) -> String {
         hooks_label = paint("Hooks", BRONZE, use_color),
         hooks = hooks,
         get_started = paint("Get started:", BRONZE, use_color),
-        hint_hook = paint("hook your agent", GRAY, use_color),
+        hint_hook = paint("hook your agents", GRAY, use_color),
         hint_run = paint("gate a single command", GRAY, use_color),
         hint_doctor = paint("full health check", GRAY, use_color),
         help_line = paint("vallum --help for all commands", GRAY, use_color),
@@ -261,7 +261,7 @@ mod tests {
              \x20 Hooks       claude ✓  codex ✓ (trust!)  gemini ✗  cursor —\n\
              \n\
              \x20 Get started:\n\
-             \x20   vallum install-hook --agent claude    hook your agent\n\
+             \x20   vallum install-hook                   hook your agents\n\
              \x20   vallum run -- <cmd>                   gate a single command\n\
              \x20   vallum doctor                         full health check\n\
              \n\

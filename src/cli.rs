@@ -41,7 +41,7 @@ pub enum AgentArg {
     styles = help_styles(),
     after_help = "\
 Quick start:
-  vallum install-hook --agent claude    hook your agent
+  vallum install-hook                   hook your agents (interactive picker)
   vallum run -- <cmd>                   gate a single command
   vallum doctor                         full health check"
 )]

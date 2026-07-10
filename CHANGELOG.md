@@ -5,6 +5,18 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Interactive agent picker for `install-hook`/`uninstall-hook`.** Bare
+  `vallum install-hook` on a terminal now opens a multi-select (space =
+  toggle, `a` = toggle all, enter = confirm, esc = cancel) listing Claude
+  Code, Codex CLI, Cursor, and Gemini CLI with detected/installed status;
+  detected-but-unhooked agents come preselected. `uninstall-hook` gets the
+  same picker over currently hooked agents. Non-interactive invocations
+  (pipes, CI) keep the silent Claude Code default, and explicit `--agent`
+  never prompts. No new dependencies — hand-rolled termios raw mode.
+
 ## [0.8.0]
 
 ### Security
