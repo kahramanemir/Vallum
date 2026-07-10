@@ -443,11 +443,15 @@ fn main() {
 }
 
 /// Bare install/uninstall opens the picker only on a real terminal —
-/// pipes and CI keep the historical silent Claude default.
+/// pipes, CI, and dumb terminals keep the historical silent Claude default.
 #[cfg(unix)]
 fn picker_available() -> bool {
     use std::io::IsTerminal;
-    std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
+    std::io::stdin().is_terminal()
+        && std::io::stdout().is_terminal()
+        && std::env::var_os("TERM")
+            .map(|t| t != "dumb")
+            .unwrap_or(true)
 }
 
 #[cfg(unix)]

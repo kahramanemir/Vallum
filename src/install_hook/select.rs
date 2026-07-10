@@ -1,6 +1,9 @@
 //! Interactive multi-select picker for `install-hook`/`uninstall-hook`.
 //! Pure selection state machine + rendering live here, separated from the
 //! termios/ANSI layer so they are unit-testable without a TTY.
+//! Ctrl-C/Ctrl-Z arrive as bytes (ISIG off) so cancel restores the
+//! terminal; an external SIGTERM/SIGKILL bypasses the Drop guard and can
+//! leave the terminal raw — `reset` / `stty sane` recovers.
 
 use super::{agent_label, Agent, AgentStatus};
 
@@ -252,7 +255,7 @@ impl Drop for RawMode {
         unsafe {
             libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.original);
         }
-        print!("\x1b[?25h"); // re-show the cursor
+        let _ = write!(std::io::stdout(), "\x1b[?25h"); // re-show the cursor
         let _ = std::io::stdout().flush();
     }
 }
