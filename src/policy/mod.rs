@@ -86,9 +86,11 @@ impl Policy {
     }
 
     /// Evaluate a joined command line. Most-severe matching rule wins; Allow if
-    /// nothing matches. Rules are tried against both the raw line and a
-    /// lightly de-obfuscated copy, so `r''m` / `\rm` can't slip past a `\brm`
-    /// pattern (raw matches are never lost).
+    /// nothing matches. Each of the command's precision-safe views (the raw line
+    /// plus any unwrapped `-c`/`eval`/`base64` payloads — see
+    /// [`unwrap::command_views`]) is tried both directly and against a lightly
+    /// de-obfuscated copy, so wrappers and `r''m` / `\rm` splitting can't slip
+    /// past a rule (raw matches are never lost).
     pub fn evaluate(&self, command_line: &str) -> PolicyVerdict {
         let mut best: Option<&PolicyRule> = None;
         for view in unwrap::command_views(command_line) {

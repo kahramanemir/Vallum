@@ -240,23 +240,30 @@ sandbox**.
 The pre-exec guardrail matches against the raw command **and** a bounded set of
 precision-safe views that surface a wrapped or encoded inner command:
 
-- shell `-c` arguments (`bash -c '…'`, `sh -c "…"`, nested up to depth 3)
+- POSIX shell `-c` arguments (`bash`/`sh`/`zsh`/`dash`/`ksh`), bare or bundled
+  (`bash -c '…'`, `bash -xc '…'`), including wrapper prefixes
+  (`sudo`/`env`/`timeout`/`FOO=bar bash -c '…'`) and nesting up to depth 3
 - `eval` arguments
 - `base64 -d` / `--decode` payloads (decoded and re-checked)
 - `$IFS` / `${IFS}` token-separator splitting
-- word-internal quote splitting (`r'm'`) and escaped spaces (`rm\ -rf`)
+- word-internal quote splitting (`r'm'`), escaped spaces (`rm\ -rf`), and the
+  same splitting applied to the interpreter verb itself (`\bash -c '…'`,
+  `b''ash -c '…'`)
+- newlines are treated as command separators, so a print-led first line does
+  not mask an interpreter on the next line
 
 **Known limitation (by design):** the guardrail is defense-in-depth, not a
 shell sandbox. Distinguishing a safe sink (`echo "rm -rf /"`, which only prints
 the string) from an executed context in *every* case would require full
-shell-verb sink analysis, which would cost precision. Deeper variable and
-command-substitution indirection can still get through: the interpreter name
-can be assembled from a variable (`X=rm; $X -rf /`), hidden inside a command
-substitution that is not split out (`echo $(bash -c 'rm -rf /')`, `$(printf …)`),
-or introduced by a command separator glued to the surrounding words so the
-wrapped interpreter reads as one token (`echo x;bash -c 'rm -rf /'`, where
-`x;bash` is not split). Built-in rules are `Ask`, not `Deny`, and the guardrail
-is one layer — not a guarantee.
+shell-verb sink analysis, which would cost precision. Several classes can still
+get through: **non-shell interpreters** are not unwrapped — a payload passed to
+`python -c`, `perl -e`, or `node -e` is opaque to the matcher; the interpreter
+name can be **assembled from a variable** (`X=rm; $X -rf /`); it can be hidden
+inside a **command substitution** that is not split out (`echo $(bash -c 'rm -rf
+/')`, `` `bash -c '…'` ``, `$(printf …)`); or introduced by a **command
+separator glued to the surrounding words** so the wrapped interpreter reads as
+one token (`echo x;bash -c 'rm -rf /'`, where `x;bash` is not split). Built-in
+rules are `Ask`, not `Deny`, and the guardrail is one layer — not a guarantee.
 
 ## Supply-chain integrity
 
