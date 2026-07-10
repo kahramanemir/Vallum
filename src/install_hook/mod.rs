@@ -6,6 +6,8 @@ pub mod claude;
 pub mod codex;
 pub mod cursor;
 pub mod gemini;
+#[cfg(unix)]
+pub mod select;
 
 pub use claude::{has_vallum_hook, settings_path};
 
@@ -144,6 +146,53 @@ pub enum Agent {
     Codex,
 }
 
+/// All agents in picker order (matches `AgentArg` order).
+pub const ALL_AGENTS: [Agent; 4] = [Agent::Claude, Agent::Codex, Agent::Cursor, Agent::Gemini];
+
+/// Human-readable agent name used by the picker.
+pub fn agent_label(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "Claude Code",
+        Agent::Codex => "Codex CLI",
+        Agent::Cursor => "Cursor",
+        Agent::Gemini => "Gemini CLI",
+    }
+}
+
+/// Live user-level install status for one agent.
+#[derive(Debug, Clone, Copy)]
+pub struct AgentStatus {
+    /// The agent's config directory exists — the tool itself is present.
+    pub detected: bool,
+    /// A Vallum hook entry is present in the agent's config file.
+    pub hooked: bool,
+}
+
+/// Status from a config path + hook probe. Read/parse failures count as
+/// not-hooked: this drives picker display and preselection only — a real
+/// install/uninstall will surface the underlying error.
+fn status_at(path: Result<PathBuf, String>, has_hook: fn(&Value) -> bool) -> AgentStatus {
+    let Ok(path) = path else {
+        return AgentStatus {
+            detected: false,
+            hooked: false,
+        };
+    };
+    let detected = path.parent().map(Path::exists).unwrap_or(false);
+    let hooked = read_settings(&path).map(|s| has_hook(&s)).unwrap_or(false);
+    AgentStatus { detected, hooked }
+}
+
+/// Probe an agent's user-level config for the picker.
+pub fn agent_status(agent: Agent) -> AgentStatus {
+    match agent {
+        Agent::Claude => status_at(claude::settings_path(Level::User), has_vallum_hook),
+        Agent::Codex => status_at(codex::config_path(), codex::has_hook),
+        Agent::Cursor => status_at(cursor::config_path(), cursor::has_hook),
+        Agent::Gemini => status_at(gemini::config_path(), gemini::has_hook),
+    }
+}
+
 /// Per-agent install. Non-Claude agents are user-level only; `level` is
 /// validated at the CLI boundary before this is called.
 pub fn install_agent(agent: Agent, level: Level, force: bool) -> Result<String, String> {
@@ -207,5 +256,48 @@ mod tests {
         let current = fs::read_to_string(&path).unwrap();
         assert!(current.contains("\"new\""));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn status_at_detects_dir_and_hook() {
+        let dir = temp_dir("statusat");
+        let path = dir.join("hooks.json");
+        let s = status_at(Ok(path.clone()), super::codex::has_hook);
+        assert!(s.detected, "parent dir exists");
+        assert!(!s.hooked, "no config file yet");
+        fs::write(
+            &path,
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"command":"vallum hook --agent codex"}]}]}}"#,
+        )
+        .unwrap();
+        let s = status_at(Ok(path), super::codex::has_hook);
+        assert!(s.detected && s.hooked);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn status_at_missing_dir_is_undetected() {
+        let s = status_at(
+            Ok(PathBuf::from("/nonexistent-vallum-test/hooks.json")),
+            super::codex::has_hook,
+        );
+        assert!(!s.detected && !s.hooked);
+    }
+
+    #[test]
+    fn status_at_malformed_config_counts_as_not_hooked() {
+        let dir = temp_dir("statusatbad");
+        let path = dir.join("hooks.json");
+        fs::write(&path, "{broken").unwrap();
+        let s = status_at(Ok(path), super::codex::has_hook);
+        assert!(s.detected, "dir exists");
+        assert!(!s.hooked, "parse failure is display-only not-hooked");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn status_at_err_path_is_undetected() {
+        let s = status_at(Err("no home".to_string()), super::codex::has_hook);
+        assert!(!s.detected && !s.hooked);
     }
 }

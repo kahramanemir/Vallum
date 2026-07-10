@@ -317,14 +317,24 @@ fn main() {
                     std::process::exit(125);
                 }
             };
-            if *project && !matches!(agent, vallum::cli::AgentArg::Claude) {
-                eprintln!(
-                    "install-hook: --project is Claude Code-only; {:?} installs are user-level in v1",
-                    agent
-                );
-                std::process::exit(125);
+            if *project {
+                if let Some(a) = agent {
+                    if !matches!(a, vallum::cli::AgentArg::Claude) {
+                        eprintln!(
+                            "install-hook: --project is Claude Code-only; {a:?} installs are user-level in v1",
+                        );
+                        std::process::exit(125);
+                    }
+                }
             }
-            match install_hook::install_agent(agent_from_arg(*agent), level, *force) {
+            #[cfg(unix)]
+            if agent.is_none() && !*project && picker_available() {
+                interactive_install(level, *force); // exits the process
+            }
+            // Bare invocation without a TTY (pipes, CI, non-unix) keeps the
+            // historical silent Claude default.
+            let resolved = agent.unwrap_or(vallum::cli::AgentArg::Claude);
+            match install_hook::install_agent(agent_from_arg(resolved), level, *force) {
                 Ok(msg) => println!("{msg}"),
                 Err(e) => {
                     eprintln!("install-hook: {e}");
@@ -344,14 +354,22 @@ fn main() {
                     std::process::exit(125);
                 }
             };
-            if *project && !matches!(agent, vallum::cli::AgentArg::Claude) {
-                eprintln!(
-                    "uninstall-hook: --project is Claude Code-only; {:?} installs are user-level in v1",
-                    agent
-                );
-                std::process::exit(125);
+            if *project {
+                if let Some(a) = agent {
+                    if !matches!(a, vallum::cli::AgentArg::Claude) {
+                        eprintln!(
+                            "uninstall-hook: --project is Claude Code-only; {a:?} installs are user-level in v1",
+                        );
+                        std::process::exit(125);
+                    }
+                }
             }
-            match install_hook::uninstall_agent(agent_from_arg(*agent), level) {
+            #[cfg(unix)]
+            if agent.is_none() && !*project && picker_available() {
+                interactive_uninstall(level); // exits the process
+            }
+            let resolved = agent.unwrap_or(vallum::cli::AgentArg::Claude);
+            match install_hook::uninstall_agent(agent_from_arg(resolved), level) {
                 Ok(msg) => println!("{msg}"),
                 Err(e) => {
                     eprintln!("uninstall-hook: {e}");
@@ -420,6 +438,96 @@ fn main() {
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             generate(*shell, &mut cmd, "vallum", &mut std::io::stdout());
+        }
+    }
+}
+
+/// Bare install/uninstall opens the picker only on a real terminal —
+/// pipes, CI, and dumb terminals keep the historical silent Claude default.
+#[cfg(unix)]
+fn picker_available() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal()
+        && std::io::stdout().is_terminal()
+        && std::env::var_os("TERM")
+            .map(|t| t != "dumb")
+            .unwrap_or(true)
+}
+
+#[cfg(unix)]
+fn interactive_install(level: Level, force: bool) -> ! {
+    use vallum::install_hook::{agent_status, select, ALL_AGENTS};
+    let statuses: Vec<_> = ALL_AGENTS.iter().map(|&a| (a, agent_status(a))).collect();
+    let rows = select::Row::install_rows(&statuses);
+    let state = select::SelectState::new("Select agents to hook", rows);
+    match select::run_picker(state) {
+        Err(e) => {
+            eprintln!(
+                "install-hook: {e}; pass --agent <claude|codex|cursor|gemini> to skip the picker"
+            );
+            std::process::exit(125);
+        }
+        Ok(None) => {
+            eprintln!("Aborted; nothing changed.");
+            std::process::exit(130);
+        }
+        Ok(Some(agents)) if agents.is_empty() => {
+            println!("Nothing selected; nothing changed.");
+            std::process::exit(0);
+        }
+        Ok(Some(agents)) => {
+            let mut failed = false;
+            for agent in agents {
+                match install_hook::install_agent(agent, level, force) {
+                    Ok(msg) => println!("{msg}"),
+                    Err(e) => {
+                        eprintln!("install-hook: {e}");
+                        failed = true;
+                    }
+                }
+            }
+            std::process::exit(if failed { 125 } else { 0 });
+        }
+    }
+}
+
+#[cfg(unix)]
+fn interactive_uninstall(level: Level) -> ! {
+    use vallum::install_hook::{agent_status, select, ALL_AGENTS};
+    let statuses: Vec<_> = ALL_AGENTS.iter().map(|&a| (a, agent_status(a))).collect();
+    let rows = select::Row::uninstall_rows(&statuses);
+    if rows.is_empty() {
+        println!("No Vallum hooks found; nothing to do.");
+        std::process::exit(0);
+    }
+    let state = select::SelectState::new("Select agents to unhook", rows);
+    match select::run_picker(state) {
+        Err(e) => {
+            eprintln!(
+                "uninstall-hook: {e}; pass --agent <claude|codex|cursor|gemini> to skip the picker"
+            );
+            std::process::exit(125);
+        }
+        Ok(None) => {
+            eprintln!("Aborted; nothing changed.");
+            std::process::exit(130);
+        }
+        Ok(Some(agents)) if agents.is_empty() => {
+            println!("Nothing selected; nothing changed.");
+            std::process::exit(0);
+        }
+        Ok(Some(agents)) => {
+            let mut failed = false;
+            for agent in agents {
+                match install_hook::uninstall_agent(agent, level) {
+                    Ok(msg) => println!("{msg}"),
+                    Err(e) => {
+                        eprintln!("uninstall-hook: {e}");
+                        failed = true;
+                    }
+                }
+            }
+            std::process::exit(if failed { 125 } else { 0 });
         }
     }
 }

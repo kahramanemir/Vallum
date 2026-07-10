@@ -398,10 +398,10 @@ vallum stats                         # show cumulative token savings
 vallum stats --reset                 # delete collected stats
 
 # Integration & UX
-vallum install-hook                  # register vallum in ~/.claude/settings.json
-vallum install-hook --project        # register in <cwd>/.claude/settings.json
-vallum install-hook --agent cursor   # register in ~/.cursor/hooks.json (also: gemini, codex)
-vallum uninstall-hook                # remove the vallum hook entry
+vallum install-hook                  # pick agents interactively (space = toggle, enter = confirm)
+vallum install-hook --agent claude   # script one agent (also: cursor, gemini, codex)
+vallum install-hook --project        # Claude Code only, <cwd>/.claude/settings.json
+vallum uninstall-hook                # remove hooks (same picker; --agent to script)
 vallum hook                          # internal: invoked by the agent's hook config (don't run directly)
 vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
@@ -445,11 +445,11 @@ Note how a tiny output ends up *larger* after wrapping: the security wrapper has
 
 ## Claude Code integration
 
-`vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry. Other agents (Cursor, Codex, Gemini CLI) can always route commands through Vallum by invoking `vallum run` directly, and now also have their own native pre-exec guardrail hooks (`vallum install-hook --agent <cursor|gemini|codex>`) — see [Multi-agent guardrail](#multi-agent-guardrail). Only Claude Code's hook rewrites the command through the full `vallum run` pipeline; the other three gate the command (Allow/Ask/Deny) without rewriting it.
+`vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry. Other agents (Cursor, Codex, Gemini CLI) can always route commands through Vallum by invoking `vallum run` directly, and now also have their own native pre-exec guardrail hooks (`vallum install-hook --agent <cursor|gemini|codex>`) — see [Multi-agent guardrail](#multi-agent-guardrail). Only Claude Code's hook rewrites the command through the full `vallum run` pipeline; the other three gate the command (Allow/Ask/Deny) without rewriting it. Run bare on a terminal, `vallum install-hook` opens an interactive picker (space = toggle, enter = confirm) listing all four agents with their detected/installed status; in non-interactive contexts (pipes, CI) it defaults to Claude Code exactly as before.
 
 Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps simple scripts (no pipes, redirects, quoting, or other shell metacharacters) before optimizer matching, so `bash -c 'git status'` still hits the `git_status` optimizer; complex scripts fall back to generic compression. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are still policy-evaluated, but never rewritten through `vallum run` — capturing their stdout would break the TTY they need, so a clean Allow passes them through untouched and an approved Ask runs the original command directly. Commands already starting with `vallum` are skipped for idempotency.
 
-To remove the hook, run `vallum uninstall-hook` — it removes only the Vallum entry, leaving the rest of your settings file untouched.
+To remove the hook, run `vallum uninstall-hook` — it removes only the Vallum entry, leaving the rest of your settings file untouched. Run bare on a terminal, it opens the same picker over the agents that currently have a Vallum hook installed.
 
 **Live progress.** `vallum run --tee` appends the child's raw stdout/stderr to `~/.vallum/live.log` as lines arrive. Watch it from a side terminal with `tail -f ~/.vallum/live.log`. The tee target is a private file (`0600`), not a stream the agent ever reads — the agent's input is still the wrapped, scrubbed pipeline output on stdout. Tee is best-effort: if the file can't be opened or written, the command runs normally without it.
 
