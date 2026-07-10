@@ -3,6 +3,7 @@
 //! joined command line — no shell parsing (same posture as the scrubber).
 
 pub mod audit;
+mod unwrap;
 
 use crate::config::PolicyConfig;
 use regex::Regex;
@@ -89,21 +90,23 @@ impl Policy {
     /// lightly de-obfuscated copy, so `r''m` / `\rm` can't slip past a `\brm`
     /// pattern (raw matches are never lost).
     pub fn evaluate(&self, command_line: &str) -> PolicyVerdict {
-        let normalized = normalize_for_match(command_line);
-        let normalized = (normalized != command_line).then_some(normalized);
         let mut best: Option<&PolicyRule> = None;
-        for rule in &self.rules {
-            if rule.pattern.is_match(command_line)
-                || normalized
-                    .as_deref()
-                    .is_some_and(|n| rule.pattern.is_match(n))
-            {
-                let take = match best {
-                    None => true,
-                    Some(b) => rule.action.severity() > b.action.severity(),
-                };
-                if take {
-                    best = Some(rule);
+        for view in unwrap::command_views(command_line) {
+            let normalized = normalize_for_match(&view);
+            let normalized = (normalized != view).then_some(normalized);
+            for rule in &self.rules {
+                if rule.pattern.is_match(&view)
+                    || normalized
+                        .as_deref()
+                        .is_some_and(|n| rule.pattern.is_match(n))
+                {
+                    let take = match best {
+                        None => true,
+                        Some(b) => rule.action.severity() > b.action.severity(),
+                    };
+                    if take {
+                        best = Some(rule);
+                    }
                 }
             }
         }
