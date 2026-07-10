@@ -35,3 +35,12 @@ docker build -t app .
 kubectl get pods
 mkfs.ext4 loopback.img
 ls -la ~/.ssh
+# --- bypass-hardening precision guards (must stay Allow) ---
+echo "rm -rf /"
+echo 'do not run rm -rf /'
+git commit -m "cleanup: rm -rf logic in installer"
+bash -c 'ls -la'
+bash -c "echo hello"
+grep -rn "chmod 777" src/
+cp my\ file.txt dest.txt
+echo dGVzdA== | base64 -d

@@ -358,6 +358,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn wrappers_never_downgrade_a_firing_command_to_allow() {
+        let p = builtins();
+        let bases = ["rm -rf /", "chmod -R 777 /etc", "cat /etc/shadow"];
+        for base in bases {
+            for wrapped in [
+                format!("bash -c '{base}'"),
+                format!("sh -c \"{base}\""),
+                format!("eval \"{base}\""),
+                base.replacen(' ', "${IFS}", 1),
+            ] {
+                assert_ne!(
+                    p.evaluate(&wrapped).action,
+                    PolicyAction::Allow,
+                    "wrapper downgraded to Allow: {wrapped}"
+                );
+            }
+        }
+    }
+
     fn builtins() -> Policy {
         Policy::compile(&PolicyConfig::default()).unwrap()
     }

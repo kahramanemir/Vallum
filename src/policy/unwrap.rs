@@ -323,4 +323,13 @@ mod tests {
         let v = command_views("echo cm0gLXJmIC8= | base64 -d | sh");
         assert!(v.contains(&"rm -rf /".to_string()), "views: {v:?}");
     }
+
+    use proptest::prelude::*;
+    proptest! {
+        #[test]
+        fn command_views_never_panics(s in "[\\s\\S]{0,300}") {
+            let v = command_views(&s);
+            prop_assert!(v.len() <= super::MAX_VIEWS);
+        }
+    }
 }

@@ -1,0 +1,15 @@
+# Wrapped / encoded dangerous commands the guardrail MUST NOT Allow.
+# Each line, evaluated, must return Ask or Deny (never Allow).
+bash -c 'rm -rf /'
+sh -c "rm -rf /"
+zsh -c 'rm -rf ~'
+eval "rm -rf /"
+eval 'chmod -R 777 /etc'
+r'm' -rf /
+rm${IFS}-rf${IFS}/
+rm\ -rf\ /
+bash -c "chmod -R 777 /etc"
+bash -c 'sh -c "rm -rf /"'
+echo cm0gLXJmIC8= | base64 -d | sh
+bash -c 'cat ~/.ssh/id_rsa'
+c'h'mod -R 777 /etc

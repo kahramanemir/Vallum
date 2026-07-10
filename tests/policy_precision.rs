@@ -29,3 +29,29 @@ fn benign_commands_are_never_flagged() {
         flagged.join("\n")
     );
 }
+
+#[test]
+fn bypass_commands_are_never_allowed() {
+    let corpus = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/evals/corpus/policy_bypass.txt"
+    );
+    let body = std::fs::read_to_string(corpus).expect("read policy_bypass.txt");
+    let policy = Policy::compile(&PolicyConfig::default()).unwrap();
+
+    let mut leaked = Vec::new();
+    for line in body.lines() {
+        let cmd = line.trim();
+        if cmd.is_empty() || cmd.starts_with('#') {
+            continue;
+        }
+        if policy.evaluate(cmd).action == PolicyAction::Allow {
+            leaked.push(cmd.to_string());
+        }
+    }
+    assert!(
+        leaked.is_empty(),
+        "guardrail let wrapped/encoded dangerous commands through:\n{}",
+        leaked.join("\n")
+    );
+}
