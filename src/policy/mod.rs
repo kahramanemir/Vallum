@@ -127,15 +127,35 @@ impl Policy {
 /// parser — variable and eval indirection still get through; the guardrail is
 /// defense-in-depth, not a sandbox.
 fn normalize_for_match(cmd: &str) -> String {
-    let mut out = String::with_capacity(cmd.len());
-    let mut chars = cmd.chars().peekable();
+    // N1: collapse $IFS / ${IFS...} obfuscation to a space before scanning, so
+    // `rm${IFS}-rf${IFS}/` reads as spaced tokens. $IFS in a real command line
+    // is essentially always obfuscation.
+    static IFS_RE: OnceLock<Regex> = OnceLock::new();
+    let ifs = IFS_RE.get_or_init(|| Regex::new(r"\$\{IFS[^}]*\}|\$IFS\b|\$IFS").unwrap());
+    let pre = ifs.replace_all(cmd, " ");
+
+    let mut out = String::with_capacity(pre.len());
+    let mut prev_word = false;
+    let mut chars = pre.chars().peekable();
     while let Some(c) = chars.next() {
         match c {
+            // Empty quote pair (`''`, `""`) — a shell no-op that splits a word.
             '\'' | '"' if chars.peek() == Some(&c) => {
                 chars.next();
             }
-            '\\' if chars.peek().is_some_and(|n| n.is_ascii_alphanumeric()) => {}
-            _ => out.push(c),
+            // N2: a quote sitting right after a word character splits a bareword
+            // (`r'm'` -> `rm`). A quote that opens an argument is preceded by a
+            // space or start, so `echo "rm -rf /"` is left intact.
+            '\'' | '"' if prev_word => {}
+            // Identity backslash-escape (`\r` -> `r`) and escaped space
+            // (`rm\ -rf` -> `rm -rf`) — both shell no-ops that split a word.
+            '\\' if chars
+                .peek()
+                .is_some_and(|n| n.is_ascii_alphanumeric() || *n == ' ') => {}
+            _ => {
+                prev_word = c.is_ascii_alphanumeric() || c == '_';
+                out.push(c);
+            }
         }
     }
     out
@@ -396,6 +416,42 @@ mod tests {
                 p.evaluate(cmd).action,
                 PolicyAction::Allow,
                 "obfuscated command should fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn split_obfuscation_still_fires() {
+        let p = builtins();
+        for cmd in [
+            "r'm' -rf /",          // #3 word-internal quote split
+            "rm${IFS}-rf${IFS}/",  // #4 $IFS token separator
+            r"rm\ -rf\ /",         // #6 escaped-space split
+            "c'h'mod -R 777 /etc", // quote-split on another built-in
+        ] {
+            assert_ne!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "split-obfuscated command should fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn quoted_argument_mentions_do_not_fire() {
+        // A benign command that merely quotes a dangerous string as an argument
+        // (e.g. echoes or greps it) must stay Allow — the quote wraps a whole
+        // argument, so the word-internal-quote rule must not touch it.
+        let p = builtins();
+        for cmd in [
+            "echo \"rm -rf /\"",
+            "echo 'rm -rf /'",
+            "git commit -m \"cleanup rm -rf logic\"",
+        ] {
+            assert_eq!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "quoted mention should NOT fire: {cmd}"
             );
         }
     }
