@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- Guardrail now matches through common command wrappers: shell `-c` and `eval`
+  arguments, `base64 -d` payloads, `$IFS` token-splitting, and word-internal
+  quote / escaped-space obfuscation. Closes five confirmed bypasses where a
+  dangerous command was wrapped or encoded past the built-in rules. Precision is
+  unchanged (benign false-positive rate stays 0.000); `guardrail = false` output
+  is byte-identical. See SECURITY.md for the residual known limitation.
+
 ## [0.8.1]
 
 ### Added

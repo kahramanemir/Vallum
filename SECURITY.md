@@ -235,6 +235,29 @@ sandbox**.
 - Setting `security.guardrail = false` disables the layer entirely (Vallum then
   behaves exactly as it did before it existed).
 
+### Guardrail wrapper coverage
+
+The pre-exec guardrail matches against the raw command **and** a bounded set of
+precision-safe views that surface a wrapped or encoded inner command:
+
+- shell `-c` arguments (`bash -c '…'`, `sh -c "…"`, nested up to depth 3)
+- `eval` arguments
+- `base64 -d` / `--decode` payloads (decoded and re-checked)
+- `$IFS` / `${IFS}` token-separator splitting
+- word-internal quote splitting (`r'm'`) and escaped spaces (`rm\ -rf`)
+
+**Known limitation (by design):** the guardrail is defense-in-depth, not a
+shell sandbox. Distinguishing a safe sink (`echo "rm -rf /"`, which only prints
+the string) from an executed context in *every* case would require full
+shell-verb sink analysis, which would cost precision. Deeper variable and
+command-substitution indirection can still get through: the interpreter name
+can be assembled from a variable (`X=rm; $X -rf /`), hidden inside a command
+substitution that is not split out (`echo $(bash -c 'rm -rf /')`, `$(printf …)`),
+or introduced by a command separator glued to the surrounding words so the
+wrapped interpreter reads as one token (`echo x;bash -c 'rm -rf /'`, where
+`x;bash` is not split). Built-in rules are `Ask`, not `Deny`, and the guardrail
+is one layer — not a guarantee.
+
 ## Supply-chain integrity
 
 Release binaries are built in GitHub Actions by the `dist` pipeline. Each
