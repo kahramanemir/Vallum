@@ -151,10 +151,18 @@ fn normalize_for_match(cmd: &str) -> String {
             i += 1;
             continue;
         }
-        // N2: a bareword-splitting quote encloses a whitespace-free run and is
-        // adjacent to a word char on at least one side (`r'm'`, `c'h'mod`), so
-        // the split reconstructs. A normal quoted argument encloses whitespace
-        // (`echo "rm -rf $HOME"`), so its closing quote is kept intact.
+        // Empty quote pair (`''`, `""`) — a shell no-op regardless of
+        // adjacency, dropped unconditionally. Empty inner can never enclose
+        // whitespace, so this cannot cause a closing-quote false positive.
+        if (c == '\'' || c == '"') && i + 1 < n && chars[i + 1] == c {
+            i += 2;
+            continue;
+        }
+        // N2: a non-empty bareword-splitting quote encloses a whitespace-free
+        // run and is adjacent to a word char on at least one side (`r'm'`,
+        // `c'h'mod`), so the split reconstructs. A normal quoted argument
+        // encloses whitespace (`echo "rm -rf $HOME"`), so its closing quote is
+        // kept intact.
         if c == '\'' || c == '"' {
             if let Some(close) = (i + 1..n).find(|&j| chars[j] == c) {
                 let inner: String = chars[i + 1..close].iter().collect();
@@ -440,6 +448,8 @@ mod tests {
             "rm${IFS}-rf${IFS}/",  // #4 $IFS token separator
             r"rm\ -rf\ /",         // #6 escaped-space split
             "c'h'mod -R 777 /etc", // quote-split on another built-in
+            "rm '' -rf /",         // empty quote pair, whitespace-flanked
+            "rm ''-rf /",          // empty quote pair before a flag
         ] {
             assert_ne!(
                 p.evaluate(cmd).action,
