@@ -121,42 +121,54 @@ impl Policy {
     }
 }
 
-/// Cheap de-obfuscation before matching: empty quote pairs (`''`, `""`) and
-/// identity backslash-escapes (`\r` → `r`) are shell no-ops that split a word
-/// textually without changing what executes (`r''m`, `\rm`). Not a shell
-/// parser — variable and eval indirection still get through; the guardrail is
-/// defense-in-depth, not a sandbox.
+/// De-obfuscate a command into an extra match candidate. Collapses `$IFS`
+/// splitting, bareword-splitting quotes (`r'm'` -> `rm`), and identity
+/// backslash-escapes / escaped spaces (`\r` -> `r`, `rm\ -rf` -> `rm -rf`) —
+/// all shell no-ops that split a word without changing what executes. A normal
+/// quoted argument encloses whitespace (`echo "rm -rf /"`), so it is left
+/// intact and never turns a benign mention into a match. Not a shell parser —
+/// variable and eval indirection still get through; the guardrail is
+/// defense-in-depth, not a sandbox. Raw matches are never lost — this only
+/// ADDS a candidate.
 fn normalize_for_match(cmd: &str) -> String {
     // N1: collapse $IFS / ${IFS...} obfuscation to a space before scanning, so
     // `rm${IFS}-rf${IFS}/` reads as spaced tokens. $IFS in a real command line
     // is essentially always obfuscation.
     static IFS_RE: OnceLock<Regex> = OnceLock::new();
-    let ifs = IFS_RE.get_or_init(|| Regex::new(r"\$\{IFS[^}]*\}|\$IFS\b|\$IFS").unwrap());
+    let ifs = IFS_RE.get_or_init(|| Regex::new(r"\$\{IFS[^}]*\}|\$IFS").unwrap());
     let pre = ifs.replace_all(cmd, " ");
 
+    let chars: Vec<char> = pre.chars().collect();
+    let n = chars.len();
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let mut out = String::with_capacity(pre.len());
-    let mut prev_word = false;
-    let mut chars = pre.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            // Empty quote pair (`''`, `""`) — a shell no-op that splits a word.
-            '\'' | '"' if chars.peek() == Some(&c) => {
-                chars.next();
-            }
-            // N2: a quote sitting right after a word character splits a bareword
-            // (`r'm'` -> `rm`). A quote that opens an argument is preceded by a
-            // space or start, so `echo "rm -rf /"` is left intact.
-            '\'' | '"' if prev_word => {}
-            // Identity backslash-escape (`\r` -> `r`) and escaped space
-            // (`rm\ -rf` -> `rm -rf`) — both shell no-ops that split a word.
-            '\\' if chars
-                .peek()
-                .is_some_and(|n| n.is_ascii_alphanumeric() || *n == ' ') => {}
-            _ => {
-                prev_word = c.is_ascii_alphanumeric() || c == '_';
-                out.push(c);
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        // N2b: identity backslash-escape (`\r` -> `r`) and escaped space
+        // (`rm\ -rf` -> `rm -rf`) — drop the backslash, keep the next char.
+        if c == '\\' && i + 1 < n && (chars[i + 1].is_ascii_alphanumeric() || chars[i + 1] == ' ') {
+            i += 1;
+            continue;
+        }
+        // N2: a bareword-splitting quote encloses a whitespace-free run and is
+        // adjacent to a word char on at least one side (`r'm'`, `c'h'mod`), so
+        // the split reconstructs. A normal quoted argument encloses whitespace
+        // (`echo "rm -rf $HOME"`), so its closing quote is kept intact.
+        if c == '\'' || c == '"' {
+            if let Some(close) = (i + 1..n).find(|&j| chars[j] == c) {
+                let inner: String = chars[i + 1..close].iter().collect();
+                let prev_word = i > 0 && is_word(chars[i - 1]);
+                let next_word = close + 1 < n && is_word(chars[close + 1]);
+                if !inner.chars().any(|ch| ch.is_whitespace()) && (prev_word || next_word) {
+                    out.push_str(&inner);
+                    i = close + 1;
+                    continue;
+                }
             }
         }
+        out.push(c);
+        i += 1;
     }
     out
 }
@@ -446,6 +458,8 @@ mod tests {
         for cmd in [
             "echo \"rm -rf /\"",
             "echo 'rm -rf /'",
+            "echo \"rm -rf $HOME\"",
+            "echo 'rm -rf $HOME'",
             "git commit -m \"cleanup rm -rf logic\"",
         ] {
             assert_eq!(
