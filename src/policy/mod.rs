@@ -395,6 +395,18 @@ mod tests {
     }
 
     #[test]
+    fn base64_encoded_commands_still_fire() {
+        let p = builtins();
+        // echo <base64 of "rm -rf /"> | base64 -d | sh
+        let cmd = "echo cm0gLXJmIC8= | base64 -d | sh";
+        assert_ne!(
+            p.evaluate(cmd).action,
+            PolicyAction::Allow,
+            "should fire: {cmd}"
+        );
+    }
+
+    #[test]
     fn builtin_positives_fire() {
         let p = builtins();
         for cmd in [

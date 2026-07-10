@@ -4,6 +4,9 @@
 //! output). Every view is text a shell genuinely executes, so reinterpreting
 //! it never fires on a benign string that merely mentions a command.
 
+use regex::Regex;
+use std::sync::OnceLock;
+
 /// Max recursion depth when unwrapping nested wrappers (`bash -c "sh -c ..."`).
 const MAX_DEPTH: usize = 3;
 /// Hard cap on the number of views returned, to bound pathological nesting.
@@ -128,6 +131,65 @@ fn is_env_assignment(tok: &str) -> bool {
     }
 }
 
+/// Cap on base64 tokens decoded per command line.
+const MAX_DECODES: usize = 6;
+
+/// Decode standard base64 (`+`/`/` alphabet, optional `=` padding) to a UTF-8
+/// string. Returns None on an invalid character or non-UTF-8 output. Hand-rolled
+/// to avoid a dependency; input is a single command-line token, so unbounded
+/// growth is not a concern.
+fn b64_decode(s: &str) -> Option<String> {
+    fn val(c: u8) -> Option<u32> {
+        match c {
+            b'A'..=b'Z' => Some((c - b'A') as u32),
+            b'a'..=b'z' => Some((c - b'a' + 26) as u32),
+            b'0'..=b'9' => Some((c - b'0' + 52) as u32),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::new();
+    let mut buf = 0u32;
+    let mut bits = 0u32;
+    let mut n = 0usize;
+    for c in s.bytes().filter(|&b| b != b'=') {
+        buf = (buf << 6) | val(c)?;
+        bits += 6;
+        n += 1;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    if n < 2 {
+        return None;
+    }
+    String::from_utf8(out).ok()
+}
+
+/// If the command invokes `base64 -d`/`--decode`, decode base64-ish tokens and
+/// return their UTF-8 output. Gating on the decode flag keeps this
+/// attacker-specific: a benign command that merely contains a base64-looking
+/// token is not decoded.
+fn decode_base64_payloads(cmd: &str) -> Vec<String> {
+    static DECODE: OnceLock<Regex> = OnceLock::new();
+    let decode =
+        DECODE.get_or_init(|| Regex::new(r"(?i)\bbase64\b[^|\n]*\s(?:-d|-D|--decode)\b").unwrap());
+    if !decode.is_match(cmd) {
+        return Vec::new();
+    }
+    static TOKEN: OnceLock<Regex> = OnceLock::new();
+    let token = TOKEN.get_or_init(|| Regex::new(r"[A-Za-z0-9+/]{8,}={0,2}").unwrap());
+    let mut out = Vec::new();
+    for m in token.find_iter(cmd).take(MAX_DECODES) {
+        if let Some(decoded) = b64_decode(m.as_str()) {
+            out.push(decoded);
+        }
+    }
+    out
+}
+
 /// The raw command plus every precision-safe derived view, deduplicated and
 /// bounded. View 0 is always the raw line, so raw matches are never lost.
 pub fn command_views(cmd: &str) -> Vec<String> {
@@ -146,6 +208,9 @@ pub fn command_views(cmd: &str) -> Vec<String> {
         }
         for payload in extract_exec_payloads(&c) {
             queue.push((payload, depth + 1));
+        }
+        for decoded in decode_base64_payloads(&c) {
+            queue.push((decoded, depth + 1));
         }
     }
     views
@@ -236,5 +301,26 @@ mod tests {
             let p = extract_exec_payloads(cmd);
             assert!(p.contains(&"rm -rf /".to_string()), "{cmd} -> {p:?}");
         }
+    }
+
+    #[test]
+    fn decodes_standard_base64() {
+        // "rm -rf /" -> cm0gLXJmIC8=
+        assert_eq!(b64_decode("cm0gLXJmIC8=").as_deref(), Some("rm -rf /"));
+    }
+
+    #[test]
+    fn base64_only_decoded_when_decode_flag_present() {
+        // No `base64 -d` in the line -> the token is not decoded.
+        assert!(decode_base64_payloads("echo cm0gLXJmIC8=").is_empty());
+        // With a decode invocation -> decoded.
+        let p = decode_base64_payloads("echo cm0gLXJmIC8= | base64 -d | sh");
+        assert!(p.contains(&"rm -rf /".to_string()), "got {p:?}");
+    }
+
+    #[test]
+    fn encoded_payload_becomes_a_view() {
+        let v = command_views("echo cm0gLXJmIC8= | base64 -d | sh");
+        assert!(v.contains(&"rm -rf /".to_string()), "views: {v:?}");
     }
 }
