@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.1]
 
 ### Added
 - **Interactive agent picker for `install-hook`/`uninstall-hook`.** Bare
@@ -231,6 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.1
 [0.8.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.0
 [0.7.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.7.0
 [0.6.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.6.1
