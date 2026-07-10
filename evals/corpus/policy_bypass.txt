@@ -13,3 +13,9 @@ bash -c 'sh -c "rm -rf /"'
 echo cm0gLXJmIC8= | base64 -d | sh
 bash -c 'cat ~/.ssh/id_rsa'
 c'h'mod -R 777 /etc
+\bash -c 'rm -rf /'
+b''ash -c 'rm -rf /'
+bash -xc 'rm -rf /'
+bash -cx 'rm -rf /'
+sudo bash -c 'rm -rf /'
+timeout 5 bash -c 'rm -rf /'

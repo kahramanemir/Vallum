@@ -70,8 +70,21 @@ fn tokenize(cmd: &str) -> Vec<String> {
 /// '…'`) firing while dropping the benign mention. Being wrong about a lead
 /// verb only costs a fail-safe extra Ask, never a missed exec.
 fn extract_exec_payloads(cmd: &str) -> Vec<String> {
-    let toks = tokenize(cmd);
     let mut out = Vec::new();
+    // A newline ends a command as firmly as any separator, so scan each line as
+    // its own group — a print-led first line (`echo hi`) must not suppress an
+    // interpreter on the next line (`\n bash -c '…'`), and a `-c` scan must not
+    // reach across the newline.
+    for line in cmd.split(['\n', '\r']) {
+        extract_line_payloads(line, &mut out);
+    }
+    out
+}
+
+/// Extract exec payloads from a single newline-free command line. See
+/// [`extract_exec_payloads`] for the group/print-lead model.
+fn extract_line_payloads(cmd: &str, out: &mut Vec<String>) {
+    let toks = tokenize(cmd);
     // Lead verb of the current command group (reset at each separator, set to
     // the first non-assignment token after it). Skipping env-assignments lets
     // `FOO=bar bash -c '…'` still be led by `bash`.
@@ -95,7 +108,7 @@ fn extract_exec_payloads(cmd: &str) -> Vec<String> {
             }
         }
         if INTERPRETERS.contains(&t.as_str()) {
-            if let Some(pos) = toks[i + 1..].iter().position(|x| x == "-c") {
+            if let Some(pos) = toks[i + 1..].iter().position(|x| is_dash_c_flag(x)) {
                 // don't scan across a separator into the next command group
                 let crossed = toks[i + 1..i + 1 + pos].iter().any(|x| is_separator(x));
                 if !crossed {
@@ -108,12 +121,23 @@ fn extract_exec_payloads(cmd: &str) -> Vec<String> {
             }
         }
     }
-    out
 }
 
 /// A standalone shell control operator token.
 fn is_separator(tok: &str) -> bool {
     SEPARATORS.contains(&tok)
+}
+
+/// A single-dash short-flag bundle whose letters include `c` — the interpreter's
+/// "read commands from the next argument" flag, bare (`-c`) or bundled
+/// (`-xc`, `-cx`, `-lc`). Long flags (`--…`) and flags with values (`-c=x`) are
+/// excluded. Being liberal here only costs a fail-safe extra Ask.
+fn is_dash_c_flag(tok: &str) -> bool {
+    tok.starts_with('-')
+        && !tok.starts_with("--")
+        && tok.len() >= 2
+        && tok[1..].chars().all(|c| c.is_ascii_alphabetic())
+        && tok.contains('c')
 }
 
 /// A leading environment assignment (`FOO=bar`) — a prefix that does not change
@@ -205,6 +229,15 @@ pub fn command_views(cmd: &str) -> Vec<String> {
         views.push(c.clone());
         if depth >= MAX_DEPTH {
             continue;
+        }
+        // Enqueue the de-obfuscated form so a disguised interpreter verb
+        // (`\bash -c '…'`, `b''ash -c '…'`) is unwrapped too: the normalized
+        // copy reads `bash -c '…'`, and the next iteration extracts its payload.
+        // Precision-safe — normalize only adds a candidate, and the print-lead
+        // gating still applies to it.
+        let normalized = super::normalize_for_match(&c);
+        if normalized != c {
+            queue.push((normalized, depth + 1));
         }
         for payload in extract_exec_payloads(&c) {
             queue.push((payload, depth + 1));
@@ -300,6 +333,58 @@ mod tests {
         ] {
             let p = extract_exec_payloads(cmd);
             assert!(p.contains(&"rm -rf /".to_string()), "{cmd} -> {p:?}");
+        }
+    }
+
+    #[test]
+    fn interpreter_on_a_later_line_is_extracted() {
+        // A newline ends the print-led first line; the interpreter on line 2
+        // leads a fresh group and is unwrapped (I-1).
+        let p = extract_exec_payloads("echo hi\nbash -c 'rm -rf /'");
+        assert!(p.contains(&"rm -rf /".to_string()), "got {p:?}");
+    }
+
+    #[test]
+    fn dash_c_scan_does_not_cross_a_newline() {
+        // The `-c` search must not reach a script argument on the next line.
+        let p = extract_exec_payloads("sh\nfoo -c 'rm -rf /'");
+        assert!(
+            !p.contains(&"rm -rf /".to_string()),
+            "must not cross line: {p:?}"
+        );
+    }
+
+    #[test]
+    fn bundled_dash_c_flags_are_extracted() {
+        // -xc / -cx are valid bash exec flags (I-3).
+        for cmd in ["bash -xc 'rm -rf /'", "bash -cx 'rm -rf /'"] {
+            let p = extract_exec_payloads(cmd);
+            assert!(p.contains(&"rm -rf /".to_string()), "{cmd} -> {p:?}");
+        }
+    }
+
+    #[test]
+    fn is_dash_c_flag_recognizes_bundles_only() {
+        assert!(is_dash_c_flag("-c"));
+        assert!(is_dash_c_flag("-xc"));
+        assert!(is_dash_c_flag("-cx"));
+        assert!(!is_dash_c_flag("--command")); // long flag
+        assert!(!is_dash_c_flag("-x")); // no c
+        assert!(!is_dash_c_flag("-c=x")); // flag with value
+        assert!(!is_dash_c_flag("c")); // no dash
+    }
+
+    #[test]
+    fn obfuscated_interpreter_verb_is_unwrapped() {
+        // \bash / b''ash / e''val disguise the verb; the normalized view
+        // reconstructs it so command_views still surfaces the inner command (I-2).
+        for cmd in [
+            r"\bash -c 'rm -rf /'",
+            "b''ash -c 'rm -rf /'",
+            "e''val 'rm -rf /'",
+        ] {
+            let v = command_views(cmd);
+            assert!(v.contains(&"rm -rf /".to_string()), "{cmd} -> views {v:?}");
         }
     }
 
