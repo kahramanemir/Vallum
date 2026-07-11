@@ -19,3 +19,20 @@ bash -xc 'rm -rf /'
 bash -cx 'rm -rf /'
 sudo bash -c 'rm -rf /'
 timeout 5 bash -c 'rm -rf /'
+# --- 0.8.3: separated-flag bypasses (rm rule required r+f in one token) ---
+rm -r -f /
+rm -r -f ~
+rm -r -f $HOME
+rm -f -r /
+rm -f -r --no-preserve-root /
+# --- 0.8.3: shell metachar glued to the target path (end-anchor was (?:\s|$)) ---
+rm -rf /;
+rm -rf /&
+rm -rf /)
+rm -rf ~;
+(rm -rf /)
+$(rm -rf /)
+bash -c 'rm -rf /;true'
+# --- 0.8.3: force-push with a glued terminator (safe --force-with-lease stays Allow) ---
+git push --force;
+git push -f;

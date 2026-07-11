@@ -223,7 +223,7 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
         };
         vec![
             ask("rm_rf_root",
-                r"(?i)\brm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)\S*\s+(?:-\S+\s+)*(?:/|~|\$HOME)(?:/?\*?)(?:\s|$)",
+                r"(?i)\brm\s+(?:-\S+\s+)*(?:-\S*(?:r\S*f|f\S*r)\S*|(?:-\S*r\S*|--recursive)\s+(?:-\S+\s+)*(?:-\S*f\S*|--force)|(?:-\S*f\S*|--force)\s+(?:-\S+\s+)*(?:-\S*r\S*|--recursive)|--recursive|--force)\s+(?:-\S+\s+)*(?:/|~|\$HOME)(?:/?\*?)(?:[\s;&|)`]|$)",
                 "Recursive force-delete targeting a root or home path"),
             ask("curl_pipe_shell",
                 r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash)\b",
@@ -250,7 +250,7 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 r#"(?i)\b(?:cat|less|more|head|tail|bat|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials(?:[\s'";]|$)|/etc/shadow(?:[\s'";]|$))"#,
                 "Reading a private key, credential file, or shadow password file"),
             ask("git_push_force",
-                r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:\s|$)|\s-f(?:\s|$)|\s\+\w)",
+                r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:[\s;&|)`]|$)|\s-f(?:[\s;&|)`]|$)|\s\+\w)",
                 "Force-push can overwrite remote history"),
         ]
     })

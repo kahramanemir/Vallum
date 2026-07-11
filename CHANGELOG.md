@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Guardrail closes two direct-command bypasses of the `rm`/`git push` rules.**
+  (1) *Separated short flags*: `rm -r -f /` (and `-f -r`, with or without other
+  flags) now matches — the `rm_rf_root` rule previously required `r` and `f` in
+  one token (`-rf`/`-fr`) or a long form, so canonically-separated flags slipped
+  through. (2) *Shell metacharacter glued to the target*: `rm -rf /;`, `rm -rf
+  /&`, `(rm -rf /)`, `$(rm -rf /)`, and the same inside a `-c` wrapper (`bash -c
+  'rm -rf /;true'`) now match — both the `rm_rf_root` and `git_push_force` rules
+  anchored the final token on `(?:\s|$)`, which any glued `;`/`&`/`|`/`)`/backtick
+  defeated. Precision is unchanged: `echo "rm -rf /"` and `git push
+  --force-with-lease` (a quote / a `-` after the token, not a control operator)
+  stay `Allow`; benign false-positive rate remains 0.000. All built-ins remain
+  `Ask`.
+
 ## [0.8.2]
 
 ### Security
