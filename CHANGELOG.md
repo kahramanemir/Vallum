@@ -7,13 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2]
+
 ### Security
-- Guardrail now matches through common command wrappers: shell `-c` and `eval`
-  arguments, `base64 -d` payloads, `$IFS` token-splitting, and word-internal
-  quote / escaped-space obfuscation. Closes five confirmed bypasses where a
-  dangerous command was wrapped or encoded past the built-in rules. Precision is
-  unchanged (benign false-positive rate stays 0.000); `guardrail = false` output
-  is byte-identical. See SECURITY.md for the residual known limitation.
+- **Guardrail now matches through common command wrappers.** `Policy::evaluate`
+  reinterprets each command through a bounded set of precision-safe views: shell
+  `-c` and `eval` arguments (verb-aware — `sh`/`bash`/`zsh`/`dash`/`ksh`, bare or
+  bundled like `-xc`, behind wrapper prefixes like `sudo`/`env`/`timeout`, and
+  nested), `base64 -d` payloads (decoded and re-checked), `$IFS` token-splitting,
+  and word-internal quote / escaped-space obfuscation applied to both the payload
+  and the interpreter verb (`\bash`, `b''ash`). Newlines are treated as command
+  separators. Closes the confirmed bypasses where a dangerous command was wrapped
+  or encoded past the built-in rules (e.g. `bash -c 'rm -rf /'`,
+  `echo <base64> | base64 -d | sh`). Precision is unchanged (benign
+  false-positive rate stays 0.000); all built-ins remain `Ask`; `guardrail =
+  false` output is byte-identical. See SECURITY.md for the residual known
+  limitations.
 
 ## [0.8.1]
 
@@ -241,6 +250,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.2]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.2
 [0.8.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.1
 [0.8.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.0
 [0.7.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.7.0
