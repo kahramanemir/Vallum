@@ -262,8 +262,13 @@ name can be **assembled from a variable** (`X=rm; $X -rf /`); it can be hidden
 inside a **command substitution** that is not split out (`echo $(bash -c 'rm -rf
 /')`, `` `bash -c '…'` ``, `$(printf …)`); or introduced by a **command
 separator glued to the surrounding words** so the wrapped interpreter reads as
-one token (`echo x;bash -c 'rm -rf /'`, where `x;bash` is not split). Built-in
-rules are `Ask`, not `Deny`, and the guardrail is one layer — not a guarantee.
+one token (`echo x;bash -c 'rm -rf /'`, where `x;bash` is not split). A literal
+command **fed to a shell through a pipe or here-string** rather than a `-c`
+argument (`echo 'rm -rf /' | sh`, `bash <<< 'rm -rf /'`, `… | xargs bash -c`) is
+likewise opaque — the dangerous text is data on the interpreter's stdin, not a
+matchable argument — as is a wrapped command hidden inside a single combined
+token (`env -S "bash -c 'rm -rf /'"`). Built-in rules are `Ask`, not `Deny`, and
+the guardrail is one layer — not a guarantee.
 
 ## Supply-chain integrity
 
