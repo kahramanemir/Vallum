@@ -1,6 +1,13 @@
-# Vallum — a security boundary between AI coding agents and your shell
+# Vallum
 
-*Prompt-injection defense, secret redaction, untrusted-output sanitization, and command auditing for AI coding agents — a single Rust CLI proxy that acts as an LLM security guardrail on your terminal. `vallum run` works with any agent that runs shell commands (Claude Code, Cursor, Codex, Gemini CLI, or your own agent); the pre-exec Allow/Ask/Deny guardrail now hooks natively into all four agents, but automatic output-sanitization and token-optimization interception still ships for Claude Code only.*
+### The wall between AI coding agents and your shell.
+
+Vallum is a single Rust CLI that sits between an AI coding agent and your
+terminal. It **stops dangerous commands before they run**, **redacts secrets**
+and **neutralizes prompt-injection** in command output before it reaches the
+model, and audits everything. Prompt-injection defense, secret redaction, and
+an LLM/agent security guardrail in one dependency-light binary — for Claude
+Code, Cursor, Codex, Gemini CLI, or any agent that runs shell commands.
 
 [![CI](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/ci.yml)
 [![Security audit](https://github.com/kahramanemir/Vallum/actions/workflows/audit.yml/badge.svg)](https://github.com/kahramanemir/Vallum/actions/workflows/audit.yml)
@@ -14,7 +21,45 @@
   <img src="assets/vallum-demo.gif" alt="Terminal demo: a raw deploy log leaks an AWS key and a prompt-injection line; the same command through vallum run shows the key masked and the injection neutralized inside untrusted-output markers; a git push --force is then stopped by the pre-exec guardrail asking for confirmation" width="840">
 </p>
 
-A Rust CLI proxy that sits between AI agents and your shell as a **security boundary**. When an agent runs a command, Vallum redacts secrets, neutralizes prompt-injection attempts, wraps the result as untrusted data, preserves the child exit code, and audits everything — so what reaches the model is exactly what you intend it to see. As a side benefit, it strips ANSI noise and compresses long output, which also saves tokens.
+## What it does
+
+| Capability | What it does |
+|---|---|
+| **Guardrail** | Stops `rm -rf /`, `curl … \| sh`, force-push, and other dangerous commands *before they run* — prompts (`Ask`) or blocks (`Deny`), on by default. |
+| **Secret redaction** | Masks known key/token formats (OpenAI, AWS, GitHub, Stripe, and more) plus high-entropy credentials before output ever reaches the model. |
+| **Injection defense** | Neutralizes "ignore previous instructions"-style text in five languages, then wraps the output in untrusted-data markers so it can't hijack the agent. |
+| **Token savings** | Strips ANSI noise and compresses large build and test logs — a side benefit of routing output through the security pipeline. |
+
+> **Measured, not claimed.** Over a committed, labeled corpus: injection recall
+> **0.812** · precision **1.000** · benign false-positive rate **0.000**;
+> known-format secret recall **1.000**. Numbers are evidence, not a guarantee —
+> [full report](evals/report.md).
+
+## Quick start
+
+```bash
+# 1. Install (macOS + Linux)
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kahramanemir/Vallum/releases/latest/download/vallum-installer.sh | sh
+
+# 2. Try it on any command
+vallum run cargo test
+
+# 3. Gate your agent — pick Claude Code, Cursor, Gemini CLI, or Codex CLI
+vallum install-hook
+```
+
+Other install channels (Homebrew, Cargo, npm, prebuilt binaries with
+attestation) are in [Install](#install).
+
+## Works with your agent
+
+`vallum run` works with any agent that runs shell commands. The pre-exec
+guardrail also hooks **natively** into Claude Code, Cursor, Gemini CLI, and
+Codex CLI — one `vallum install-hook` and dangerous commands are gated inside
+the agent's own approval flow. Automatic output sanitization and token
+optimization run on Claude Code (and any explicit `vallum run`); on the other
+three agents Vallum gates commands without rewriting their output. See the
+[full matrix and honest limitations](#multi-agent-guardrail) below.
 
 ---
 
@@ -26,7 +71,7 @@ When an AI agent runs shell commands on your behalf, the command output flows st
 - It may contain **adversarial text** — log lines, scraped pages, or error messages crafted to hijack the agent ("ignore previous instructions…").
 - It is **unstructured and noisy**, burying the relevant signal and inflating token usage.
 
-Vallum is a single binary that puts a controlled boundary between that output and the model.
+Vallum is a single binary that puts a controlled boundary between that output and the model. When an agent runs a command, Vallum redacts secrets, neutralizes prompt-injection attempts, wraps the result as untrusted data, preserves the child exit code, and audits everything — so what reaches the model is exactly what you intend it to see. As a side benefit, it strips ANSI noise and compresses long output, which also saves tokens.
 
 > **Scope of the guarantees.** Secret redaction and injection neutralization are **best-effort, pattern-based** defenses. They raise the cost of an attack and catch common cases; they are not a substitute for treating all terminal output as untrusted. The untrusted-output wrapper is the durable control — keep your agent prompted to respect it.
 
@@ -98,9 +143,15 @@ silently, but nothing is silently blocked. The built-in patterns are
 deliberately narrow so ordinary commands are never touched (a committed
 benign-command precision gate guards against nagging on legitimate commands).
 
-Matching sees through common wrappers — shell `-c` and `eval` arguments,
-`base64 -d` payloads, `$IFS` splitting, and quote/escape word-splitting — so a
-dangerous command hidden inside `bash -c '…'` or a base64 blob is still caught.
+Matching reinterprets each command through a bounded set of precision-safe
+views, so a dangerous command hidden inside a wrapper is still caught: shell
+`-c` and `eval` arguments (verb-aware, bare or bundled like `-xc`, behind
+`sudo`/`env`/`timeout` prefixes, and nested), `base64 -d` payloads (decoded and
+re-checked), `$IFS` splitting, and quote/escape word-splitting applied to both
+the payload and the interpreter verb (`\bash`, `b''ash`). Newlines are treated
+as command separators. See [SECURITY.md](SECURITY.md) for the residual known
+limitations (variable indirection, command substitution, non-shell
+interpreters).
 
 Built-in rules (all default to `Ask`):
 
@@ -164,13 +215,11 @@ resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every enforced non-A
 verdict is recorded (redacted) to `policy.log`.
 
 **Scope, honestly:** the guardrail matches patterns against the command text —
-it is a speed bump / defense-in-depth layer, not a sandbox. Commands are
-lightly normalized before matching (empty quote pairs and identity backslash
-escapes are stripped, so `r''m -rf /` or `\rm -rf /` still fire), but a
-determined actor can always get around text matching with variable or
-command-substitution indirection. The output-side protections — secret
-scrubbing and injection defusal — do not depend on the guardrail and remain
-the backstop.
+it is a speed bump / defense-in-depth layer, not a sandbox. It sees through
+common wrappers (see above), but a determined actor can still get around text
+matching with variable or command-substitution indirection. The output-side
+protections — secret scrubbing and injection defusal — do not depend on the
+guardrail and remain the backstop.
 
 If the config file is broken (TOML or regex error), hook mode logs a warning
 to stderr and keeps gating with the **built-in** rules; your custom rules are
@@ -272,7 +321,7 @@ see the honest "Known misses" list in the report. Regenerate with
 `cargo run --example eval -- --write`; CI fails on regressions below the
 committed floors.
 
-## Built-in Optimizers
+## Built-in optimizers
 
 - `git status`: summarizes large working-tree sections while keeping branch state and representative file entries
 - `git diff` / `git log`: collapse large unchanged-context runs / long commit bodies while keeping headers, hunks, and changed lines
@@ -440,7 +489,7 @@ Example JSON output:
 }
 ```
 
-Note how a tiny output ends up *larger* after wrapping: the security wrapper has a fixed cost, and on short commands that cost dominates. Token savings show up on the large, noisy outputs (builds, test runs, big diffs) — see below.
+Note how a tiny output ends up *larger* after wrapping: the security wrapper has a fixed cost, and on short commands that cost dominates. Token savings show up on the large, noisy outputs (builds, test runs, big diffs) — see [Measuring savings](#measuring-savings).
 
 ### Exit codes
 
@@ -515,6 +564,9 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/scrubber/injection.rs`   | Prompt-injection neutralization                      |
 | `src/scrubber/normalize.rs`   | Invisible-char strip + homoglyph detection shadow    |
 | `src/scrubber/markers.rs`     | Untrusted-output marker defang                       |
+| `src/policy/mod.rs`           | Pre-exec Allow/Ask/Deny policy engine + built-in rules |
+| `src/policy/unwrap.rs`        | Bounded precision-safe command views (wrapper/encoding unwrap) |
+| `src/policy/audit.rs`         | Redacted `policy.log` verdict writer                 |
 | `src/tokenizer.rs`            | Pluggable `TokenEstimator` + heuristic default       |
 | `src/fsutil.rs`               | Private (0600) append-file helper                    |
 | `src/audit.rs`                | Append-only log writer                               |
@@ -556,6 +608,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Detection corpus growth + Chinese-language injection — corpus grown to 85 injection / 54 benign samples (curated deepset imports with per-row provenance), full zh ignore/reveal/override family coverage, EN "disregard above" + DAN/persona patterns, FR/ES/TR gaps closed; per-category recall table in the eval report
 - [x] Guardrail / policy layer — pre-exec Allow/Ask/Deny verdict on every command via the Claude Code hook and direct `vallum run` (deny → exit 125); ten narrow built-in rules for destructive commands, `[[policy.rules]]` config, redacted `policy.log` audit, benign-command precision gate, `vallum doctor` guardrail check
 - [x] Multi-agent hook support — pre-exec guardrail via native hooks for Cursor, Gemini CLI, and Codex CLI
+- [x] Guardrail bypass hardening — multi-view matching that unwraps shell `-c`/`eval` arguments, decodes `base64 -d` payloads, and normalizes `$IFS`/quote/escape and verb obfuscation, so wrapped dangerous commands are caught while benign-command precision stays at false-positive rate 0.000
 - [ ] Deferred — `cargo-fuzz`/libFuzzer harness, performance regression gating, Windows support (the `0600`/timeout-backed guarantees need a Windows equivalent first)
 
 ## Name
