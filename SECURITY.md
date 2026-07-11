@@ -235,6 +235,41 @@ sandbox**.
 - Setting `security.guardrail = false` disables the layer entirely (Vallum then
   behaves exactly as it did before it existed).
 
+### Guardrail wrapper coverage
+
+The pre-exec guardrail matches against the raw command **and** a bounded set of
+precision-safe views that surface a wrapped or encoded inner command:
+
+- POSIX shell `-c` arguments (`bash`/`sh`/`zsh`/`dash`/`ksh`), bare or bundled
+  (`bash -c '…'`, `bash -xc '…'`), including wrapper prefixes
+  (`sudo`/`env`/`timeout`/`FOO=bar bash -c '…'`) and nesting up to depth 3
+- `eval` arguments
+- `base64 -d` / `--decode` payloads (decoded and re-checked)
+- `$IFS` / `${IFS}` token-separator splitting
+- word-internal quote splitting (`r'm'`), escaped spaces (`rm\ -rf`), and the
+  same splitting applied to the interpreter verb itself (`\bash -c '…'`,
+  `b''ash -c '…'`)
+- newlines are treated as command separators, so a print-led first line does
+  not mask an interpreter on the next line
+
+**Known limitation (by design):** the guardrail is defense-in-depth, not a
+shell sandbox. Distinguishing a safe sink (`echo "rm -rf /"`, which only prints
+the string) from an executed context in *every* case would require full
+shell-verb sink analysis, which would cost precision. Several classes can still
+get through: **non-shell interpreters** are not unwrapped — a payload passed to
+`python -c`, `perl -e`, or `node -e` is opaque to the matcher; the interpreter
+name can be **assembled from a variable** (`X=rm; $X -rf /`); it can be hidden
+inside a **command substitution** that is not split out (`echo $(bash -c 'rm -rf
+/')`, `` `bash -c '…'` ``, `$(printf …)`); or introduced by a **command
+separator glued to the surrounding words** so the wrapped interpreter reads as
+one token (`echo x;bash -c 'rm -rf /'`, where `x;bash` is not split). A literal
+command **fed to a shell through a pipe or here-string** rather than a `-c`
+argument (`echo 'rm -rf /' | sh`, `bash <<< 'rm -rf /'`, `… | xargs bash -c`) is
+likewise opaque — the dangerous text is data on the interpreter's stdin, not a
+matchable argument — as is a wrapped command hidden inside a single combined
+token (`env -S "bash -c 'rm -rf /'"`). Built-in rules are `Ask`, not `Deny`, and
+the guardrail is one layer — not a guarantee.
+
 ## Supply-chain integrity
 
 Release binaries are built in GitHub Actions by the `dist` pipeline. Each

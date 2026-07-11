@@ -98,6 +98,10 @@ silently, but nothing is silently blocked. The built-in patterns are
 deliberately narrow so ordinary commands are never touched (a committed
 benign-command precision gate guards against nagging on legitimate commands).
 
+Matching sees through common wrappers — shell `-c` and `eval` arguments,
+`base64 -d` payloads, `$IFS` splitting, and quote/escape word-splitting — so a
+dangerous command hidden inside `bash -c '…'` or a base64 blob is still caught.
+
 Built-in rules (all default to `Ask`):
 
 | Rule | Catches |
@@ -163,9 +167,10 @@ verdict is recorded (redacted) to `policy.log`.
 it is a speed bump / defense-in-depth layer, not a sandbox. Commands are
 lightly normalized before matching (empty quote pairs and identity backslash
 escapes are stripped, so `r''m -rf /` or `\rm -rf /` still fire), but a
-determined actor can always get around text matching with variable or `eval`
-indirection. The output-side protections — secret scrubbing and injection
-defusal — do not depend on the guardrail and remain the backstop.
+determined actor can always get around text matching with variable or
+command-substitution indirection. The output-side protections — secret
+scrubbing and injection defusal — do not depend on the guardrail and remain
+the backstop.
 
 If the config file is broken (TOML or regex error), hook mode logs a warning
 to stderr and keeps gating with the **built-in** rules; your custom rules are

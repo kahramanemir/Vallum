@@ -3,6 +3,7 @@
 //! joined command line — no shell parsing (same posture as the scrubber).
 
 pub mod audit;
+mod unwrap;
 
 use crate::config::PolicyConfig;
 use regex::Regex;
@@ -85,25 +86,29 @@ impl Policy {
     }
 
     /// Evaluate a joined command line. Most-severe matching rule wins; Allow if
-    /// nothing matches. Rules are tried against both the raw line and a
-    /// lightly de-obfuscated copy, so `r''m` / `\rm` can't slip past a `\brm`
-    /// pattern (raw matches are never lost).
+    /// nothing matches. Each of the command's precision-safe views (the raw line
+    /// plus any unwrapped `-c`/`eval`/`base64` payloads — see
+    /// [`unwrap::command_views`]) is tried both directly and against a lightly
+    /// de-obfuscated copy, so wrappers and `r''m` / `\rm` splitting can't slip
+    /// past a rule (raw matches are never lost).
     pub fn evaluate(&self, command_line: &str) -> PolicyVerdict {
-        let normalized = normalize_for_match(command_line);
-        let normalized = (normalized != command_line).then_some(normalized);
         let mut best: Option<&PolicyRule> = None;
-        for rule in &self.rules {
-            if rule.pattern.is_match(command_line)
-                || normalized
-                    .as_deref()
-                    .is_some_and(|n| rule.pattern.is_match(n))
-            {
-                let take = match best {
-                    None => true,
-                    Some(b) => rule.action.severity() > b.action.severity(),
-                };
-                if take {
-                    best = Some(rule);
+        for view in unwrap::command_views(command_line) {
+            let normalized = normalize_for_match(&view);
+            let normalized = (normalized != view).then_some(normalized);
+            for rule in &self.rules {
+                if rule.pattern.is_match(&view)
+                    || normalized
+                        .as_deref()
+                        .is_some_and(|n| rule.pattern.is_match(n))
+                {
+                    let take = match best {
+                        None => true,
+                        Some(b) => rule.action.severity() > b.action.severity(),
+                    };
+                    if take {
+                        best = Some(rule);
+                    }
                 }
             }
         }
@@ -118,22 +123,62 @@ impl Policy {
     }
 }
 
-/// Cheap de-obfuscation before matching: empty quote pairs (`''`, `""`) and
-/// identity backslash-escapes (`\r` → `r`) are shell no-ops that split a word
-/// textually without changing what executes (`r''m`, `\rm`). Not a shell
-/// parser — variable and eval indirection still get through; the guardrail is
-/// defense-in-depth, not a sandbox.
+/// De-obfuscate a command into an extra match candidate. Collapses `$IFS`
+/// splitting, bareword-splitting quotes (`r'm'` -> `rm`), and identity
+/// backslash-escapes / escaped spaces (`\r` -> `r`, `rm\ -rf` -> `rm -rf`) —
+/// all shell no-ops that split a word without changing what executes. A normal
+/// quoted argument encloses whitespace (`echo "rm -rf /"`), so it is left
+/// intact and never turns a benign mention into a match. Not a shell parser —
+/// variable and eval indirection still get through; the guardrail is
+/// defense-in-depth, not a sandbox. Raw matches are never lost — this only
+/// ADDS a candidate.
 fn normalize_for_match(cmd: &str) -> String {
-    let mut out = String::with_capacity(cmd.len());
-    let mut chars = cmd.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '\'' | '"' if chars.peek() == Some(&c) => {
-                chars.next();
-            }
-            '\\' if chars.peek().is_some_and(|n| n.is_ascii_alphanumeric()) => {}
-            _ => out.push(c),
+    // N1: collapse $IFS / ${IFS...} obfuscation to a space before scanning, so
+    // `rm${IFS}-rf${IFS}/` reads as spaced tokens. $IFS in a real command line
+    // is essentially always obfuscation.
+    static IFS_RE: OnceLock<Regex> = OnceLock::new();
+    let ifs = IFS_RE.get_or_init(|| Regex::new(r"\$\{IFS[^}]*\}|\$IFS").unwrap());
+    let pre = ifs.replace_all(cmd, " ");
+
+    let chars: Vec<char> = pre.chars().collect();
+    let n = chars.len();
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(pre.len());
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        // N2b: identity backslash-escape (`\r` -> `r`) and escaped space
+        // (`rm\ -rf` -> `rm -rf`) — drop the backslash, keep the next char.
+        if c == '\\' && i + 1 < n && (chars[i + 1].is_ascii_alphanumeric() || chars[i + 1] == ' ') {
+            i += 1;
+            continue;
         }
+        // Empty quote pair (`''`, `""`) — a shell no-op regardless of
+        // adjacency, dropped unconditionally. Empty inner can never enclose
+        // whitespace, so this cannot cause a closing-quote false positive.
+        if (c == '\'' || c == '"') && i + 1 < n && chars[i + 1] == c {
+            i += 2;
+            continue;
+        }
+        // N2: a non-empty bareword-splitting quote encloses a whitespace-free
+        // run and is adjacent to a word char on at least one side (`r'm'`,
+        // `c'h'mod`), so the split reconstructs. A normal quoted argument
+        // encloses whitespace (`echo "rm -rf $HOME"`), so its closing quote is
+        // kept intact.
+        if c == '\'' || c == '"' {
+            if let Some(close) = (i + 1..n).find(|&j| chars[j] == c) {
+                let inner: String = chars[i + 1..close].iter().collect();
+                let prev_word = i > 0 && is_word(chars[i - 1]);
+                let next_word = close + 1 < n && is_word(chars[close + 1]);
+                if !inner.chars().any(|ch| ch.is_whitespace()) && (prev_word || next_word) {
+                    out.push_str(&inner);
+                    i = close + 1;
+                    continue;
+                }
+            }
+        }
+        out.push(c);
+        i += 1;
     }
     out
 }
@@ -315,6 +360,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn wrappers_never_downgrade_a_firing_command_to_allow() {
+        let p = builtins();
+        let bases = ["rm -rf /", "chmod -R 777 /etc", "cat /etc/shadow"];
+        for base in bases {
+            for wrapped in [
+                format!("bash -c '{base}'"),
+                format!("sh -c \"{base}\""),
+                format!("eval \"{base}\""),
+                base.replacen(' ', "${IFS}", 1),
+            ] {
+                assert_ne!(
+                    p.evaluate(&wrapped).action,
+                    PolicyAction::Allow,
+                    "wrapper downgraded to Allow: {wrapped}"
+                );
+            }
+        }
+    }
+
     fn builtins() -> Policy {
         Policy::compile(&PolicyConfig::default()).unwrap()
     }
@@ -332,6 +397,35 @@ mod tests {
             );
             assert!(!r.reason.is_empty(), "built-in {} needs a reason", r.name);
         }
+    }
+
+    #[test]
+    fn wrapped_commands_still_fire() {
+        let p = builtins();
+        for cmd in [
+            "bash -c 'rm -rf /'", // #1
+            "eval \"rm -rf /\"",  // #2
+            "sh -c \"chmod -R 777 /etc\"",
+            "bash -c 'sh -c \"rm -rf /\"'", // nested
+        ] {
+            assert_ne!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "wrapped command should fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn base64_encoded_commands_still_fire() {
+        let p = builtins();
+        // echo <base64 of "rm -rf /"> | base64 -d | sh
+        let cmd = "echo cm0gLXJmIC8= | base64 -d | sh";
+        assert_ne!(
+            p.evaluate(cmd).action,
+            PolicyAction::Allow,
+            "should fire: {cmd}"
+        );
     }
 
     #[test]
@@ -393,6 +487,46 @@ mod tests {
                 p.evaluate(cmd).action,
                 PolicyAction::Allow,
                 "obfuscated command should fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn split_obfuscation_still_fires() {
+        let p = builtins();
+        for cmd in [
+            "r'm' -rf /",          // #3 word-internal quote split
+            "rm${IFS}-rf${IFS}/",  // #4 $IFS token separator
+            r"rm\ -rf\ /",         // #6 escaped-space split
+            "c'h'mod -R 777 /etc", // quote-split on another built-in
+            "rm '' -rf /",         // empty quote pair, whitespace-flanked
+            "rm ''-rf /",          // empty quote pair before a flag
+        ] {
+            assert_ne!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "split-obfuscated command should fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn quoted_argument_mentions_do_not_fire() {
+        // A benign command that merely quotes a dangerous string as an argument
+        // (e.g. echoes or greps it) must stay Allow — the quote wraps a whole
+        // argument, so the word-internal-quote rule must not touch it.
+        let p = builtins();
+        for cmd in [
+            "echo \"rm -rf /\"",
+            "echo 'rm -rf /'",
+            "echo \"rm -rf $HOME\"",
+            "echo 'rm -rf $HOME'",
+            "git commit -m \"cleanup rm -rf logic\"",
+        ] {
+            assert_eq!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "quoted mention should NOT fire: {cmd}"
             );
         }
     }
