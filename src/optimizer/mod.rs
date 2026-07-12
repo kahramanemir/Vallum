@@ -1,7 +1,9 @@
 //! Per-command output optimizers: the `CommandOptimizer` trait and dispatch registry.
 
 pub mod apt;
+pub mod brew;
 pub mod cargo;
+pub mod cmake;
 pub mod docker;
 pub mod dotnet;
 pub mod file_list;
@@ -15,8 +17,10 @@ pub mod grep;
 pub mod kubectl;
 pub mod make;
 pub mod maven;
+pub mod ninja;
 pub mod npm;
 pub mod pip;
+pub mod poetry;
 pub mod pytest;
 pub mod terraform;
 
@@ -39,6 +43,10 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(gradle::GradleOptimizer),
             Box::new(dotnet::DotnetOptimizer),
             Box::new(go_build::GoBuildOptimizer),
+            Box::new(cmake::CmakeOptimizer),
+            Box::new(ninja::NinjaOptimizer),
+            Box::new(poetry::PoetryOptimizer),
+            Box::new(brew::BrewOptimizer),
             Box::new(npm::NpmOptimizer),
             Box::new(cargo::CargoOptimizer),
             Box::new(git_status::GitStatusOptimizer),

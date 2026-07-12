@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   API keys (`lin_api_…`), Figma personal access tokens (`figd_…`), Postman API
   keys (`PMAK-…`), and Databricks tokens (`dapi…`) — all distinctive-prefix
   formats, so ordinary prose (`sbproxy`, `lin_apiece`) stays untouched.
+- **Four more build-tool output optimizers.** `cmake` (collapses `-- Detecting`
+  / `-- Looking for` / `-- Performing Test` probe chatter), `ninja` (collapses
+  `[N/M] …` build-progress lines), `poetry` (collapses per-package
+  `• Installing`/`Updating`/`Removing` operations), and `brew` (collapses
+  `==> Downloading` chatter and `####…%` progress bars) — each keeping
+  results, warnings, and diagnostics verbatim.
 
 ## [0.8.6]
 
