@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`apt`/`apt-get install` output optimizer.** Collapses package-list reads,
+  `Get:` downloads, and `Unpacking`/`Setting up`/`Processing triggers` progress
+  (with or without a `sudo` prefix) while keeping the NEW-packages plan, the
+  install summary, and `E:`/`W:` diagnostics.
 - **`pip install` output optimizer.** Collapses dependency-resolution chatter
   (`Requirement already satisfied`, `Collecting`, `Downloading`, `Using cached`)
   while keeping the `Installing collected packages` / `Successfully installed`
