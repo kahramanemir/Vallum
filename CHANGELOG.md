@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Six more secret formats redacted.** Supabase personal access tokens
+  (`sbp_…`), Doppler service/personal tokens (`dp.st.…`/`dp.pt.…`/…), Linear
+  API keys (`lin_api_…`), Figma personal access tokens (`figd_…`), Postman API
+  keys (`PMAK-…`), and Databricks tokens (`dapi…`) — all distinctive-prefix
+  formats, so ordinary prose (`sbproxy`, `lin_apiece`) stays untouched.
+
 ## [0.8.6]
 
 ### Added

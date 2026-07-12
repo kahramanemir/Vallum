@@ -61,9 +61,10 @@ they are logged):
    `shp*_…`, Azure Storage `AccountKey=…`, Sentry DSNs, age secret keys
    (`AGE-SECRET-KEY-1…`), Google OAuth (`ya29.`/`GOCSPX-`), Stripe webhook
    secrets (`whsec_`), GitHub OAuth/app tokens (`gho_`/`ghu_`/`ghs_`/`ghr_`),
-   New Relic keys (`NRAK-`/…), JWTs (both `Bearer`-prefixed and bare
-   `eyJ….eyJ….sig`), PEM private keys, connection-string passwords, and
-   uppercase `.env`-style assignments.
+   New Relic keys (`NRAK-`/…), Supabase `sbp_…`, Doppler `dp.st.…`, Linear
+   `lin_api_…`, Figma `figd_…`, Postman `PMAK-…`, Databricks `dapi…`, JWTs
+   (both `Bearer`-prefixed and bare `eyJ….eyJ….sig`), PEM private keys,
+   connection-string passwords, and uppercase `.env`-style assignments.
    Extensible via `[scrubber] extra_secret_patterns`.
 2. **Context-gated entropy detection** (default on; `[scrubber] entropy =
    false` disables) — a value is masked only when it is the value of a
