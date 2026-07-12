@@ -109,6 +109,20 @@ parsed as vallum's.")]
     },
     /// Run install/health self-checks (config, hook, PATH, log dir)
     Doctor,
+    /// Check for a newer Vallum release and how to upgrade
+    #[command(after_help = "\
+Examples:
+  vallum update            report version and print the upgrade command
+  vallum update --check    only report (exit 10 if a newer version exists)
+  vallum update --run      run the upgrade (package-manager installs only)")]
+    Update {
+        /// Only report whether an update exists (exit 10 if behind); never runs anything
+        #[arg(long)]
+        check: bool,
+        /// Run the detected upgrade command (cargo/brew/npm installs only)
+        #[arg(long)]
+        run: bool,
+    },
     /// Inspect or scaffold the Vallum config file
     Config {
         #[command(subcommand)]

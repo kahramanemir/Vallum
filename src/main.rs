@@ -435,6 +435,9 @@ fn main() {
         Commands::Doctor => {
             std::process::exit(vallum::doctor::run());
         }
+        Commands::Update { check, run } => {
+            std::process::exit(vallum::update::run(*check, *run));
+        }
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             generate(*shell, &mut cmd, "vallum", &mut std::io::stdout());
