@@ -114,11 +114,11 @@ mod tests {
         .expect("ask must emit a decision");
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["permission"], "ask");
-        assert!(v["user_message"].as_str().unwrap().contains("root or home"));
+        assert!(v["user_message"].as_str().unwrap().contains("force-delete"));
         assert!(v["agent_message"]
             .as_str()
             .unwrap()
-            .contains("root or home"));
+            .contains("force-delete"));
     }
 
     #[test]

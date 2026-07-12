@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **Guardrail normalizes shell no-ops before matching.** A rule's anchor token
+  could be hidden by quoting (`rm -rf "/"`), backslash-escaping (`rm -rf \/`),
+  brace-listing (`rm -rf /{bin,etc,usr}`), or a trailing `/.`, while the shell
+  ran the identical command — verified end-to-end through the live hook. Each
+  command is now also matched through a `shell_normalize` view that dequotes,
+  unescapes, brace-expands, and collapses `/.`. `echo "rm -rf /"` stays `Allow`
+  (a quoted span with whitespace is never unquoted). `rm_rf_root` additionally
+  guards deletion of a whole top-level system directory (`/bin`, `/etc`, …),
+  while named deep subpaths (`/usr/local/x`) stay `Allow`. Benign false-positive
+  rate remains 0.000; all built-ins remain `Ask`.
+- **Guardrail closes two direct-command bypasses of the `rm`/`git push` rules.**
+  (1) *Separated short flags*: `rm -r -f /` (and `-f -r`, with or without other
+  flags) now matches — the `rm_rf_root` rule previously required `r` and `f` in
+  one token (`-rf`/`-fr`) or a long form, so canonically-separated flags slipped
+  through. (2) *Shell metacharacter glued to the target*: `rm -rf /;`, `rm -rf
+  /&`, `(rm -rf /)`, `$(rm -rf /)`, and the same inside a `-c` wrapper (`bash -c
+  'rm -rf /;true'`) now match — both the `rm_rf_root` and `git_push_force` rules
+  anchored the final token on `(?:\s|$)`, which any glued `;`/`&`/`|`/`)`/backtick
+  defeated. Precision is unchanged: `echo "rm -rf /"` and `git push
+  --force-with-lease` (a quote / a `-` after the token, not a control operator)
+  stay `Allow`; benign false-positive rate remains 0.000. All built-ins remain
+  `Ask`.
 - **Secret redaction no longer leaks the tail of an over-length key.** The
   `AIza`, `npm_`, and `AKIA` patterns used exact-count quantifiers (`{35}`,
   `{36}`, `{16}`) sized to the canonical key length, so a longer look-alike was

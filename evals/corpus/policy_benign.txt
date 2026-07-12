@@ -44,3 +44,12 @@ bash -c "echo hello"
 grep -rn "chmod 777" src/
 cp my\ file.txt dest.txt
 echo dGVzdA== | base64 -d
+# --- 0.8.3 normalization precision controls ---
+rm -rf "./build"
+ls "/"
+git commit -m "rm -rf cleanup"
+# --- 0.8.3 target-broadening precision controls (deep subpaths stay Allow) ---
+rm -rf /tmp/build
+rm -rf /home/emir/proj
+rm -rf /usr/local/mytool
+rm -rf /var/tmp/x

@@ -3,6 +3,7 @@
 //! joined command line — no shell parsing (same posture as the scrubber).
 
 pub mod audit;
+mod normalize;
 mod unwrap;
 
 use crate::config::PolicyConfig;
@@ -132,7 +133,7 @@ impl Policy {
 /// variable and eval indirection still get through; the guardrail is
 /// defense-in-depth, not a sandbox. Raw matches are never lost — this only
 /// ADDS a candidate.
-fn normalize_for_match(cmd: &str) -> String {
+pub(super) fn normalize_for_match(cmd: &str) -> String {
     // N1: collapse $IFS / ${IFS...} obfuscation to a space before scanning, so
     // `rm${IFS}-rf${IFS}/` reads as spaced tokens. $IFS in a real command line
     // is essentially always obfuscation.
@@ -223,8 +224,8 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
         };
         vec![
             ask("rm_rf_root",
-                r"(?i)\brm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)\S*\s+(?:-\S+\s+)*(?:/|~|\$HOME)(?:/?\*?)(?:\s|$)",
-                "Recursive force-delete targeting a root or home path"),
+                r"(?i)\brm\s+(?:-\S+\s+)*(?:-\S*(?:r\S*f|f\S*r)\S*|(?:-\S*r\S*|--recursive)\s+(?:-\S+\s+)*(?:-\S*f\S*|--force)|(?:-\S*f\S*|--force)\s+(?:-\S+\s+)*(?:-\S*r\S*|--recursive)|--recursive|--force)\s+(?:-\S+\s+)*(?:(?:/|~|\$HOME)(?:/?\*?)|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)(?:/\*?)?)(?:[\s;&|)`]|$)",
+                "Recursive force-delete targeting a root, home, or system path"),
             ask("curl_pipe_shell",
                 r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash)\b",
                 "Piping downloaded content directly into a shell interpreter"),
@@ -250,7 +251,7 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 r#"(?i)\b(?:cat|less|more|head|tail|bat|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials(?:[\s'";]|$)|/etc/shadow(?:[\s'";]|$))"#,
                 "Reading a private key, credential file, or shadow password file"),
             ask("git_push_force",
-                r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:\s|$)|\s-f(?:\s|$)|\s\+\w)",
+                r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:[\s;&|)`]|$)|\s-f(?:[\s;&|)`]|$)|\s\+\w)",
                 "Force-push can overwrite remote history"),
         ]
     })
