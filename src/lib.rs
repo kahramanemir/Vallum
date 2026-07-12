@@ -44,5 +44,6 @@ pub mod scrubber;
 pub mod stats;
 pub mod tokenizer;
 pub mod truncator;
+pub mod update;
 pub mod welcome;
 pub mod whitespace;
