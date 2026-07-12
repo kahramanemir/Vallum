@@ -343,6 +343,10 @@ committed floors.
 - `gradle` / `gradlew`: collapses `Download https://…` dependency chatter while keeping task output and the `BUILD SUCCESSFUL`/`BUILD FAILED` result
 - `dotnet build|restore|test|publish|run`: collapses NuGet `Restored …` / `Determining projects to restore` chatter while keeping build results and `CS####` diagnostics
 - `go build|mod|get|install`: collapses `go: downloading <mod> <ver>` chatter while keeping compiler errors (`go test` is handled separately)
+- `cmake`: collapses compiler/feature-probe chatter (`-- Detecting …`, `-- Looking for …`, `-- Performing Test …`, `-- Found …`) while keeping errors, warnings, and the `-- Configuring done` / `-- Build files …` lines
+- `ninja`: collapses `[N/M] …` build-progress lines while keeping compiler warnings and errors
+- `poetry`: collapses per-package `• Installing`/`Updating`/`Removing` operations while keeping the `Package operations` summary and errors
+- `brew`: collapses `==> Downloading` chatter and `####…%` progress bars while keeping `==> Pouring`/`Caveats`/`Summary`, warnings, and errors
 - `npm test|install|ci|run`: collapses repeated `PASS` and warning lines while preserving result summaries
 - `docker build|compose`: collapse layer/step progress while keeping step headers, errors, and the final result
 - `go test`: hide `=== RUN`/`--- PASS` spam while keeping failures and the summary
