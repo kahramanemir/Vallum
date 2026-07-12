@@ -84,18 +84,30 @@ fn brace_expand(s: &str) -> String {
     // length, never `+1` (a Unicode whitespace char may be multi-byte, and
     // slicing off a non-char-boundary panics — the command_views proptest feeds
     // arbitrary UTF-8).
-    let word_start = match s[..open].char_indices().rev().find(|(_, c)| c.is_whitespace()) {
+    let word_start = match s[..open]
+        .char_indices()
+        .rev()
+        .find(|(_, c)| c.is_whitespace())
+    {
         Some((i, c)) => i + c.len_utf8(),
         None => 0,
     };
-    let word_end = match s[close + 1..].char_indices().find(|(_, c)| c.is_whitespace()) {
+    let word_end = match s[close + 1..]
+        .char_indices()
+        .find(|(_, c)| c.is_whitespace())
+    {
         Some((i, _)) => close + 1 + i,
         None => s.len(),
     };
     let pre = &s[word_start..open];
     let post = &s[close + 1..word_end];
     let expanded: Vec<String> = alts.iter().map(|a| format!("{pre}{a}{post}")).collect();
-    format!("{}{}{}", &s[..word_start], expanded.join(" "), &s[word_end..])
+    format!(
+        "{}{}{}",
+        &s[..word_start],
+        expanded.join(" "),
+        &s[word_end..]
+    )
 }
 
 /// Collapse a `/.` path segment that is followed by `/`, whitespace, or the end
@@ -149,7 +161,10 @@ mod tests {
 
     #[test]
     fn brace_expand_expands_a_single_group_in_place() {
-        assert_eq!(brace_expand("rm -rf /{bin,etc,usr}"), "rm -rf /bin /etc /usr");
+        assert_eq!(
+            brace_expand("rm -rf /{bin,etc,usr}"),
+            "rm -rf /bin /etc /usr"
+        );
         // `{/,}` -> alternatives `/` and empty
         assert_eq!(brace_expand("rm -rf {/,}"), "rm -rf / ");
     }
