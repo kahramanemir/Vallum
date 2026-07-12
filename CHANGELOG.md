@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`vallum update` command.** Reports whether a newer Vallum release exists
+  and how to upgrade, detecting the install method (cargo / Homebrew / npm /
+  standalone) from the running binary's path. Latest-version check is
+  best-effort via the crates.io sparse index. Prints the upgrade command by
+  default; `--run` executes it (package-manager installs only, never a
+  standalone `curl | sh`); `--check` reports only and exits 10 when behind.
 - **Six more secret formats redacted.** Slack incoming webhooks, Discord bot
   tokens, Telegram bot tokens, DigitalOcean `dop_v1_` PATs, Shopify `shp*_`
   tokens, and Azure Storage `AccountKey=` connection-string keys are now

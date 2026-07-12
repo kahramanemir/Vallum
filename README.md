@@ -46,6 +46,9 @@ vallum run cargo test
 
 # 3. Gate your agent — pick Claude Code, Cursor, Gemini CLI, or Codex CLI
 vallum install-hook
+
+# Later: check for a newer release (prints the right upgrade command)
+vallum update
 ```
 
 Other install channels (Homebrew, Cargo, npm, prebuilt binaries with
