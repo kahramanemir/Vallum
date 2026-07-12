@@ -333,6 +333,9 @@ committed floors.
 - `pip install` (also `pip3` / `python -m pip install`): collapses `Requirement already satisfied` / `Collecting` / `Downloading` / `Using cached` chatter while keeping the `Installing collected packages` / `Successfully installed` outcome, errors, and warnings
 - `apt`/`apt-get install` (with or without `sudo`): collapses package-list reads, `Get:` downloads, `Unpacking`/`Setting up`/`Processing triggers` progress while keeping the NEW-packages plan, the `N upgraded, N newly installed …` summary, and `E:`/`W:` diagnostics
 - `mvn` / `mvnw`: collapses Maven's `Downloading from` / `Downloaded from` / `Progress` artifact chatter while keeping build phases, `[WARNING]`/`[ERROR]` lines, and the `BUILD SUCCESS`/`BUILD FAILURE` summary
+- `gradle` / `gradlew`: collapses `Download https://…` dependency chatter while keeping task output and the `BUILD SUCCESSFUL`/`BUILD FAILED` result
+- `dotnet build|restore|test|publish|run`: collapses NuGet `Restored …` / `Determining projects to restore` chatter while keeping build results and `CS####` diagnostics
+- `go build|mod|get|install`: collapses `go: downloading <mod> <ver>` chatter while keeping compiler errors (`go test` is handled separately)
 - `npm test|install|ci|run`: collapses repeated `PASS` and warning lines while preserving result summaries
 - `docker build|compose`: collapse layer/step progress while keeping step headers, errors, and the final result
 - `go test`: hide `=== RUN`/`--- PASS` spam while keeping failures and the summary
@@ -392,7 +395,7 @@ Supported settings:
 - `pipeline.min_optimize_tokens`: outputs below this estimate skip optimize/truncate
 - `pipeline.max_output_bytes`: maximum bytes captured from a command (default 10 MiB)
 - `pipeline.timeout_secs`: command timeout in seconds; `0` disables it (default 300)
-- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, pip, apt, maven, npm, docker, go_test, make, kubectl, terraform, grep, file_list) — default none
+- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, pip, apt, maven, gradle, dotnet, go_build, npm, docker, go_test, make, kubectl, terraform, grep, file_list) — default none
 - `pipeline.max_line_length`: cap individual line length; longer lines are truncated mid-line with an elision marker — default 2000, `0` disables
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
 - `scrubber.entropy`: context-gated entropy redaction of credential-ish assignment values — **default `true`**
