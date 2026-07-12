@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`mvn`/`mvnw` (Maven) output optimizer.** Collapses `Downloading from` /
+  `Downloaded from` / `Progress` artifact chatter while keeping build phases,
+  `[WARNING]`/`[ERROR]` lines, and the `BUILD SUCCESS`/`BUILD FAILURE` summary.
 - **`apt`/`apt-get install` output optimizer.** Collapses package-list reads,
   `Get:` downloads, and `Unpacking`/`Setting up`/`Processing triggers` progress
   (with or without a `sudo` prefix) while keeping the NEW-packages plan, the

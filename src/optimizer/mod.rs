@@ -11,6 +11,7 @@ pub mod go_test;
 pub mod grep;
 pub mod kubectl;
 pub mod make;
+pub mod maven;
 pub mod npm;
 pub mod pip;
 pub mod pytest;
@@ -31,6 +32,7 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(pytest::PytestOptimizer),
             Box::new(pip::PipOptimizer),
             Box::new(apt::AptOptimizer),
+            Box::new(maven::MavenOptimizer),
             Box::new(npm::NpmOptimizer),
             Box::new(cargo::CargoOptimizer),
             Box::new(git_status::GitStatusOptimizer),
