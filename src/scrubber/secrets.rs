@@ -58,12 +58,28 @@ fn secret_patterns() -> &'static [(Regex, &'static str)] {
             (Regex::new(r"pypi-[A-Za-z0-9_\-]{16,}").unwrap(), "pypi-***"),
             // Hugging Face access token
             (Regex::new(r"hf_[A-Za-z0-9]{20,}").unwrap(), "hf_***"),
+            // Slack incoming-webhook URL
+            (Regex::new(r"https://hooks\.slack\.com/services/[A-Za-z0-9]+/[A-Za-z0-9]+/[A-Za-z0-9]+").unwrap(), "https://hooks.slack.com/services/***"),
+            // Discord bot token (id.timestamp.hmac, distinctive segment lengths)
+            (Regex::new(r"\b[MNO][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}\b").unwrap(), "[REDACTED DISCORD TOKEN]"),
+            // Telegram bot token (numeric id : 35-char secret)
+            (Regex::new(r"\b[0-9]{8,10}:[A-Za-z0-9_-]{35}\b").unwrap(), "[REDACTED TELEGRAM TOKEN]"),
+            // DigitalOcean PAT / OAuth / refresh token
+            (Regex::new(r"do[opr]_v1_[a-f0-9]{64}").unwrap(), "do_v1_***"),
+            // Shopify access token (app / shared-secret / custom-app / private-app)
+            (Regex::new(r"shp(?:at|ss|ca|pa)_[a-fA-F0-9]{32}").unwrap(), "shp_***"),
+            // Azure Storage account key in a connection string
+            (Regex::new(r"(?i)AccountKey=[A-Za-z0-9+/]{80,}={0,2}").unwrap(), "AccountKey=***"),
             // Anthropic key — MUST precede the broad sk- rule
             (Regex::new(r"sk-ant-[0-9A-Za-z\-_]{10,}").unwrap(), "sk-ant-***"),
             // OpenAI project key (contains underscores the broad sk- rule stops at)
             // — MUST precede the broad sk- rule.
             (Regex::new(r"sk-proj-[A-Za-z0-9_\-]{20,}").unwrap(), "sk-proj-***"),
-            (Regex::new(r"sk-[a-zA-Z0-9\-]+").unwrap(), "sk-***"),
+            // Broad OpenAI-style `sk-` key. Requires >= 20 key chars so it does
+            // NOT re-hit the short `sk-ant-`/`sk-proj-` prefix already left by
+            // the provider rules above (which would double-mask to `sk-******`);
+            // real bare `sk-` keys are far longer. (regex crate has no lookahead.)
+            (Regex::new(r"sk-[a-zA-Z0-9\-]{20,}").unwrap(), "sk-***"),
             (Regex::new(r"ghp_[a-zA-Z0-9]+").unwrap(), "ghp_***"),
             // DB connection string — mask only the password component
             (Regex::new(r"(?i)\b(\w+)://([^:@/\s]+):([^@/\s]+)@").unwrap(), "${1}://${2}:***@"),
@@ -212,6 +228,41 @@ mod tests {
                 "over-length key leaked a suffix: {raw} -> {scrubbed}"
             );
         }
+    }
+
+    #[test]
+    fn scrubs_more_provider_formats() {
+        // Fixtures built with format!/repeat so there is no contiguous
+        // real-looking secret (push-protection safe) and lengths are exact.
+        let slack = format!(
+            "https://hooks.slack.com/services/T{}/B{}/{}",
+            "0".repeat(8),
+            "1".repeat(8),
+            "a".repeat(24)
+        );
+        let discord = format!("M{}.{}.{}", "a".repeat(23), "b".repeat(6), "c".repeat(27));
+        let telegram = format!("{}:{}", "1".repeat(9), "a".repeat(35));
+        let digitalocean = format!("dop_v1_{}", "a".repeat(64));
+        let shopify = format!("shpat_{}", "a".repeat(32));
+        let azure = format!("AccountKey={}==", "a".repeat(86));
+        for raw in [&slack, &discord, &telegram, &digitalocean, &shopify, &azure] {
+            let input = format!("token: {raw}");
+            let scrubbed = scrub_secrets(&input, &[], false);
+            assert!(
+                !scrubbed.contains(raw.as_str()),
+                "raw secret leaked: {input} -> {scrubbed}"
+            );
+        }
+    }
+
+    #[test]
+    fn sk_ant_key_is_not_double_masked() {
+        // The broad `sk-` rule must not re-hit the already-substituted
+        // `sk-ant-***` and mangle it into `sk-******`.
+        let input = concat!("sk-ant-", "api03-AbC123_def-456ghijklmno");
+        let scrubbed = scrub_secrets(input, &[], false);
+        assert!(scrubbed.contains("sk-ant-***"), "got: {scrubbed}");
+        assert!(!scrubbed.contains("sk-******"), "double-masked: {scrubbed}");
     }
 
     #[test]
