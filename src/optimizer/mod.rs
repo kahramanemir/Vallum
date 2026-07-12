@@ -1,5 +1,6 @@
 //! Per-command output optimizers: the `CommandOptimizer` trait and dispatch registry.
 
+pub mod apt;
 pub mod cargo;
 pub mod docker;
 pub mod file_list;
@@ -29,6 +30,7 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
         vec![
             Box::new(pytest::PytestOptimizer),
             Box::new(pip::PipOptimizer),
+            Box::new(apt::AptOptimizer),
             Box::new(npm::NpmOptimizer),
             Box::new(cargo::CargoOptimizer),
             Box::new(git_status::GitStatusOptimizer),
