@@ -70,6 +70,21 @@ fn secret_patterns() -> &'static [(Regex, &'static str)] {
             (Regex::new(r"shp(?:at|ss|ca|pa)_[a-fA-F0-9]{32}").unwrap(), "shp_***"),
             // Azure Storage account key in a connection string
             (Regex::new(r"(?i)AccountKey=[A-Za-z0-9+/]{80,}={0,2}").unwrap(), "AccountKey=***"),
+            // Sentry DSN (embeds the project public key)
+            (Regex::new(r"(?i)https://[0-9a-f]+@[\w.-]*sentry\.io/\d+").unwrap(), "[REDACTED SENTRY DSN]"),
+            // age encryption secret key (bech32, uppercase)
+            (Regex::new(r"AGE-SECRET-KEY-1[0-9A-Z]{20,}").unwrap(), "AGE-SECRET-KEY-***"),
+            // Google OAuth access token
+            (Regex::new(r"ya29\.[0-9A-Za-z_\-]{20,}").unwrap(), "ya29.***"),
+            // Google OAuth client secret
+            (Regex::new(r"GOCSPX-[0-9A-Za-z_\-]{20,}").unwrap(), "GOCSPX-***"),
+            // Stripe webhook signing secret
+            (Regex::new(r"whsec_[0-9a-zA-Z]{20,}").unwrap(), "whsec_***"),
+            // GitHub OAuth / user-to-server / server-to-server / refresh tokens
+            // (ghp_/github_pat_ are handled above)
+            (Regex::new(r"(gh[ousr]_)[A-Za-z0-9]{20,}").unwrap(), "${1}***"),
+            // New Relic license / user / browser keys
+            (Regex::new(r"(NR(?:AK|AA|JS|BR)-)[A-Z0-9]{20,}").unwrap(), "${1}***"),
             // Anthropic key — MUST precede the broad sk- rule
             (Regex::new(r"sk-ant-[0-9A-Za-z\-_]{10,}").unwrap(), "sk-ant-***"),
             // OpenAI project key (contains underscores the broad sk- rule stops at)
@@ -253,6 +268,32 @@ mod tests {
                 "raw secret leaked: {input} -> {scrubbed}"
             );
         }
+    }
+
+    #[test]
+    fn scrubs_provider_formats_batch_2() {
+        // format!/repeat fixtures: no contiguous real-looking secret, exact lengths.
+        let sentry = format!(
+            "https://{}@o123456.ingest.sentry.io/7891011",
+            "a".repeat(32)
+        );
+        let age = format!("AGE-SECRET-KEY-1{}", "A".repeat(58));
+        let ya29 = format!("ya29.{}", "a".repeat(40));
+        let gocspx = format!("GOCSPX-{}", "a".repeat(28));
+        let whsec = format!("whsec_{}", "a".repeat(32));
+        let gho = format!("gho_{}", "a".repeat(36));
+        let nrak = format!("NRAK-{}", "A".repeat(27));
+        for raw in [&sentry, &age, &ya29, &gocspx, &whsec, &gho, &nrak] {
+            let input = format!("token: {raw}");
+            let scrubbed = scrub_secrets(&input, &[], false);
+            assert!(
+                !scrubbed.contains(raw.as_str()),
+                "raw secret leaked: {input} -> {scrubbed}"
+            );
+        }
+        // Prefix-keeping replacements preserve the provider prefix.
+        assert!(scrub_secrets(&gho, &[], false).contains("gho_***"));
+        assert!(scrub_secrets(&nrak, &[], false).contains("NRAK-***"));
     }
 
     #[test]
