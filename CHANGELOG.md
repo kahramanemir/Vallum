@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6]
+
 ### Added
 - **Seven more secret formats redacted.** Sentry DSNs, age secret keys
   (`AGE-SECRET-KEY-1…`), Google OAuth access tokens (`ya29.`) and client
   secrets (`GOCSPX-`), Stripe webhook secrets (`whsec_`), GitHub
   OAuth/user/server/refresh tokens (`gho_`/`ghu_`/`ghs_`/`ghr_`), and New Relic
   keys (`NRAK-`/…) — all distinctive-prefix formats.
+- **Three more build-tool output optimizers.** `gradle`/`gradlew` (collapses
+  `Download https://…` chatter), `dotnet build|restore|test|publish|run`
+  (collapses NuGet `Restored …` chatter), and `go build|mod|get|install`
+  (collapses `go: downloading …` chatter) — each keeping build results and
+  diagnostics verbatim.
 
 ### Security
 - **Guardrail catalog: reverse shells and more destructive commands.** New
@@ -28,13 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instalação estão no README") stay untouched. The Latin scripts also gain
   accent-strip/homoglyph shadow companions. Injection recall over the committed
   corpus rises 0.828 → 0.842 at precision 1.000, benign FP rate 0.000.
-
-### Added
-- **Three more build-tool output optimizers.** `gradle`/`gradlew` (collapses
-  `Download https://…` chatter), `dotnet build|restore|test|publish|run`
-  (collapses NuGet `Restored …` chatter), and `go build|mod|get|install`
-  (collapses `go: downloading …` chatter) — each keeping build results and
-  diagnostics verbatim.
 
 ## [0.8.5]
 
@@ -364,6 +364,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.6]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.6
 [0.8.5]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.5
 [0.8.4]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.4
 [0.8.3]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.3
