@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3]
+
 ### Security
 - **Guardrail normalizes shell no-ops before matching.** A rule's anchor token
   could be hidden by quoting (`rm -rf "/"`), backslash-escaping (`rm -rf \/`),
@@ -282,6 +284,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.3]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.3
 [0.8.2]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.2
 [0.8.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.1
 [0.8.0]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.0
