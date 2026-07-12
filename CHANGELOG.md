@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Seven more secret formats redacted.** Sentry DSNs, age secret keys
+  (`AGE-SECRET-KEY-1…`), Google OAuth access tokens (`ya29.`) and client
+  secrets (`GOCSPX-`), Stripe webhook secrets (`whsec_`), GitHub
+  OAuth/user/server/refresh tokens (`gho_`/`ghu_`/`ghs_`/`ghr_`), and New Relic
+  keys (`NRAK-`/…) — all distinctive-prefix formats.
+
 ### Security
 - **Guardrail catalog: reverse shells and more destructive commands.** New
   `Ask` rules for reverse shells (bash `/dev/tcp`|`/dev/udp` redirects,
