@@ -38,18 +38,22 @@ fn secret_patterns() -> &'static [(Regex, &'static str)] {
             // GitLab personal/project/group access token
             (Regex::new(r"glpat-[A-Za-z0-9_\-]{20,}").unwrap(), "glpat-***"),
             (Regex::new(r"xox[baprs]-[A-Za-z0-9-]+").unwrap(), "xoxb-***"),
-            // AWS access key id
-            (Regex::new(r"AKIA[0-9A-Z]{16}").unwrap(), "AKIA***"),
-            // Google API key
-            (Regex::new(r"AIza[0-9A-Za-z\-_]{35}").unwrap(), "AIza***"),
+            // AWS access key id. Canonical length is 16 trailing chars, but use
+            // `{16,}` so an over-length look-alike is fully consumed rather than
+            // leaking its tail past `***`. `{16,}` only ever extends an existing
+            // match — it cannot match any string `{16}` did not — so it adds no
+            // false positives.
+            (Regex::new(r"AKIA[0-9A-Z]{16,}").unwrap(), "AKIA***"),
+            // Google API key (see AKIA note on `{35,}` vs `{35}`).
+            (Regex::new(r"AIza[0-9A-Za-z\-_]{35,}").unwrap(), "AIza***"),
             // Stripe live secret/restricted key
             (Regex::new(r"[sr]k_live_[0-9a-zA-Z]{16,}").unwrap(), "***_live_***"),
             // SendGrid API key
             (Regex::new(r"SG\.[A-Za-z0-9_\-]{16,32}\.[A-Za-z0-9_\-]{16,64}").unwrap(), "SG.***"),
             // Twilio API key SID (SK + 32 hex)
             (Regex::new(r"\bSK[0-9a-fA-F]{32}\b").unwrap(), "SK***"),
-            // npm automation/access token
-            (Regex::new(r"npm_[A-Za-z0-9]{36}").unwrap(), "npm_***"),
+            // npm automation/access token (see AKIA note on `{36,}` vs `{36}`).
+            (Regex::new(r"npm_[A-Za-z0-9]{36,}").unwrap(), "npm_***"),
             // PyPI upload token
             (Regex::new(r"pypi-[A-Za-z0-9_\-]{16,}").unwrap(), "pypi-***"),
             // Hugging Face access token
@@ -183,6 +187,29 @@ mod tests {
             assert!(
                 !scrubbed.contains(raw),
                 "raw secret leaked for {label} -> {scrubbed}"
+            );
+        }
+    }
+
+    #[test]
+    fn over_length_fixed_count_keys_do_not_leak_a_suffix() {
+        // Exact-count patterns (AIza{35}, npm_{36}, AKIA{16}) consumed only the
+        // canonical length; a longer look-alike leaked its tail past `***`
+        // (e.g. `AIza***ab`). The whole credential-char run must be redacted.
+        // Fixtures split with concat! so the repo secret scanner ignores them.
+        let cases = [
+            // AIza + 37 trailing chars (2 over the canonical 35)
+            concat!("AIza", "0123456789abcdefghijklmnopqrstuvwxyzAB"),
+            // npm_ + 38 trailing chars (2 over the canonical 36)
+            concat!("npm_", "0123456789abcdefghijklmnopqrstuvwxyzABCD"),
+            // AKIA + 18 trailing chars (2 over the canonical 16)
+            concat!("AKIA", "0123456789ABCDEFGH"),
+        ];
+        for raw in cases {
+            let scrubbed = scrub_secrets(raw, &[], false);
+            assert!(
+                scrubbed.ends_with("***") && !scrubbed.contains(&raw[raw.len() - 2..]),
+                "over-length key leaked a suffix: {raw} -> {scrubbed}"
             );
         }
     }
