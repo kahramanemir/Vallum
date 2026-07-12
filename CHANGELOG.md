@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Six more secret formats redacted.** Slack incoming webhooks, Discord bot
+  tokens, Telegram bot tokens, DigitalOcean `dop_v1_` PATs, Shopify `shp*_`
+  tokens, and Azure Storage `AccountKey=` connection-string keys are now
+  recognized by the known-format redactor.
+
+### Fixed
+- **`sk-ant-…` keys no longer double-mask to `sk-******`.** The broad `sk-`
+  pattern re-matched the `sk-ant-` / `sk-proj-` prefix left by the
+  provider-specific rules; it now requires a longer key run, so the provider
+  prefix is preserved (`sk-ant-***`) while real bare `sk-` keys still redact.
+
 ## [0.8.4]
 
 ### Security

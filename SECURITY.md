@@ -56,9 +56,11 @@ they are logged):
 1. **Format patterns** — OpenAI `sk-`/`sk-proj-`, Anthropic `sk-ant-…`,
    GitHub `ghp_`/`github_pat_`, GitLab `glpat-`, Slack `xox*`, AWS `AKIA…`,
    Google `AIza…`, Stripe `sk_live_`/`rk_live_`, SendGrid `SG.…`, Twilio
-   `SK…`, npm `npm_…`, PyPI `pypi-…`, Hugging Face `hf_…`, JWTs (both
-   `Bearer`-prefixed and bare `eyJ….eyJ….sig`), PEM private keys,
-   connection-string passwords, and uppercase `.env`-style assignments.
+   `SK…`, npm `npm_…`, PyPI `pypi-…`, Hugging Face `hf_…`, Slack incoming
+   webhooks, Discord/Telegram bot tokens, DigitalOcean `dop_v1_…`, Shopify
+   `shp*_…`, Azure Storage `AccountKey=…`, JWTs (both `Bearer`-prefixed and
+   bare `eyJ….eyJ….sig`), PEM private keys, connection-string passwords,
+   and uppercase `.env`-style assignments.
    Extensible via `[scrubber] extra_secret_patterns`.
 2. **Context-gated entropy detection** (default on; `[scrubber] entropy =
    false` disables) — a value is masked only when it is the value of a
