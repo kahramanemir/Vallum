@@ -30,6 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   --force-with-lease` (a quote / a `-` after the token, not a control operator)
   stay `Allow`; benign false-positive rate remains 0.000. All built-ins remain
   `Ask`.
+- **Secret redaction no longer leaks the tail of an over-length key.** The
+  `AIza`, `npm_`, and `AKIA` patterns used exact-count quantifiers (`{35}`,
+  `{36}`, `{16}`) sized to the canonical key length, so a longer look-alike was
+  masked only up to that count and leaked the remaining characters past `***`
+  (e.g. `AIza***ab`). Changed them to `{N,}` so the full credential-character run
+  is consumed. `{N,}` can only extend a match that `{N}` already made — it never
+  matches a string the old pattern did not — so canonical keys still redact to
+  `AIza***`/`npm_***`/`AKIA***` and no new false positives are introduced.
 
 ## [0.8.2]
 
