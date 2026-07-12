@@ -65,3 +65,9 @@ shred -u ./tmpfile
 truncate -s 0 ./app.log
 truncate -s 100M disk.img
 find . -name "*.o" | xargs rm
+# --- 0.8.6 catalog precision controls ---
+nc -l 8080
+nc example.com 80
+socat - TCP:host:9000
+git clean -n
+chown -R me:me ./build

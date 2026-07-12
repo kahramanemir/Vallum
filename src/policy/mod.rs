@@ -265,6 +265,15 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
             ask("xargs_rm_force",
                 r"(?i)\bxargs\s+(?:-\S+\s+)*rm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)",
                 "Piping into a recursive force-delete via xargs"),
+            ask("reverse_shell",
+                r"(?i)(?:/dev/(?:tcp|udp)/|\b(?:nc|ncat)\b[^|\n]*(?:\s-e(?:\s|$)|\s--exec\b)|\bsocat\b[^|\n]*\b(?:exec|system):)",
+                "Reverse-shell / remote code-execution pattern"),
+            ask("git_clean_force",
+                r"(?i)\bgit\s+clean\b[^|\n]*(?:\s-\S*f\S*|\s--force)",
+                "git clean -f permanently deletes untracked files"),
+            ask("chown_recursive_root",
+                r"(?i)\bchown\s+(?:-\S+\s+)*(?:-R|--recursive)\S*\s+(?:-\S+\s+)*\S+\s+(?:/|~|\$HOME|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library))(?:[\s;&|)`]|/\*?|$)",
+                "Recursive chown targeting a root, home, or system path"),
         ]
     })
 }
@@ -286,6 +295,9 @@ pub fn builtin_names() -> Vec<&'static str> {
         "shred_sensitive",
         "truncate_system",
         "xargs_rm_force",
+        "reverse_shell",
+        "git_clean_force",
+        "chown_recursive_root",
     ]
 }
 
@@ -404,7 +416,7 @@ mod tests {
     #[test]
     fn builtins_all_ask_and_named() {
         let names = builtin_names();
-        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), 17);
         assert_eq!(names.len(), builtin_rules().len(), "names must track rules");
         for r in builtin_rules() {
             assert_eq!(
