@@ -85,6 +85,18 @@ fn secret_patterns() -> &'static [(Regex, &'static str)] {
             (Regex::new(r"(gh[ousr]_)[A-Za-z0-9]{20,}").unwrap(), "${1}***"),
             // New Relic license / user / browser keys
             (Regex::new(r"(NR(?:AK|AA|JS|BR)-)[A-Z0-9]{20,}").unwrap(), "${1}***"),
+            // Supabase personal access token
+            (Regex::new(r"sbp_[a-f0-9]{40,}").unwrap(), "sbp_***"),
+            // Doppler service / personal / CLI / service-account token
+            (Regex::new(r"dp\.(?:pt|st|ct|sa|scim|audit)\.[A-Za-z0-9]{40,44}").unwrap(), "[REDACTED DOPPLER TOKEN]"),
+            // Linear API key
+            (Regex::new(r"lin_api_[A-Za-z0-9]{40,}").unwrap(), "lin_api_***"),
+            // Figma personal access token
+            (Regex::new(r"figd_[A-Za-z0-9_\-]{40,}").unwrap(), "figd_***"),
+            // Postman API key (id : secret, both hex)
+            (Regex::new(r"PMAK-[a-f0-9]{24}-[a-f0-9]{34}").unwrap(), "PMAK-***"),
+            // Databricks personal access token
+            (Regex::new(r"dapi[a-f0-9]{32,}").unwrap(), "dapi***"),
             // Anthropic key — MUST precede the broad sk- rule
             (Regex::new(r"sk-ant-[0-9A-Za-z\-_]{10,}").unwrap(), "sk-ant-***"),
             // OpenAI project key (contains underscores the broad sk- rule stops at)
@@ -294,6 +306,36 @@ mod tests {
         // Prefix-keeping replacements preserve the provider prefix.
         assert!(scrub_secrets(&gho, &[], false).contains("gho_***"));
         assert!(scrub_secrets(&nrak, &[], false).contains("NRAK-***"));
+    }
+
+    #[test]
+    fn scrubs_provider_formats_batch_3() {
+        // format!/repeat fixtures: no contiguous real-looking secret, exact lengths.
+        let supabase = format!("sbp_{}", "a".repeat(40));
+        let doppler = format!("dp.st.{}", "a".repeat(40));
+        let linear = format!("lin_api_{}", "a".repeat(40));
+        let figma = format!("figd_{}", "a".repeat(40));
+        let postman = format!("PMAK-{}-{}", "a".repeat(24), "b".repeat(34));
+        let databricks = format!("dapi{}", "a".repeat(32));
+        for raw in [&supabase, &doppler, &linear, &figma, &postman, &databricks] {
+            let input = format!("token: {raw}");
+            let scrubbed = scrub_secrets(&input, &[], false);
+            assert!(
+                !scrubbed.contains(raw.as_str()),
+                "raw secret leaked: {input} -> {scrubbed}"
+            );
+        }
+        // Prefix-keeping replacements preserve the provider prefix.
+        assert!(scrub_secrets(&supabase, &[], false).contains("sbp_***"));
+        assert!(scrub_secrets(&linear, &[], false).contains("lin_api_***"));
+        assert!(scrub_secrets(&figma, &[], false).contains("figd_***"));
+    }
+
+    #[test]
+    fn batch_3_prefixes_do_not_eat_prose() {
+        // The distinctive prefixes must not fire on ordinary words/short runs.
+        let input = "the sbproxy and lin_apiece and figment and dapifyd values are fine";
+        assert_eq!(scrub_secrets(input, &[], false), input);
     }
 
     #[test]
