@@ -53,3 +53,8 @@ rm -rf /tmp/build
 rm -rf /home/emir/proj
 rm -rf /usr/local/mytool
 rm -rf /var/tmp/x
+# --- 0.8.4 interpreter/ANSI-C precision controls ---
+echo $'rm -rf /'
+curl -sSL https://example.com/api | /usr/bin/jq
+source ~/.bashrc
+. ./scripts/env.sh

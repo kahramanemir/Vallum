@@ -120,11 +120,21 @@ fn path_normalize(s: &str) -> String {
     re.replace_all(s, "/$1").to_string()
 }
 
+/// Strip the `$` from an ANSI-C (`$'…'`) or locale (`$"…"`) quote so the inner
+/// text is revealed like a normal quote (`bash -c $'rm -rf /'` -> `bash -c
+/// 'rm -rf /'`, which then unwraps on the next pass). Escapes inside (`\xNN`,
+/// `\n`) are not decoded — the common evasion just wraps a literal command, and
+/// the raw view still exists.
+fn strip_ansi_c_quote(s: &str) -> String {
+    s.replace("$'", "'").replace("$\"", "\"")
+}
+
 /// The full normalization: run the existing conservative de-obfuscator first,
 /// then dequote, unescape, brace-expand, and path-normalize into one candidate.
 pub(super) fn shell_normalize(cmd: &str) -> String {
     let base = super::normalize_for_match(cmd);
-    let s = dequote(&base);
+    let s = strip_ansi_c_quote(&base);
+    let s = dequote(&s);
     let s = unescape(&s);
     let s = brace_expand(&s);
     path_normalize(&s)
@@ -199,5 +209,12 @@ mod tests {
         assert_eq!(shell_normalize(r#"rm${IFS}-rf${IFS}"/""#), "rm -rf /");
         // echo stays untouched (whitespace guard)
         assert_eq!(shell_normalize(r#"echo "rm -rf /""#), r#"echo "rm -rf /""#);
+    }
+
+    #[test]
+    fn shell_normalize_strips_ansi_c_dollar_quote() {
+        // `$'…'` -> `'…'` so the `-c`/eval payload unwraps on the next pass.
+        assert_eq!(shell_normalize("bash -c $'rm -rf /'"), "bash -c 'rm -rf /'");
+        assert_eq!(shell_normalize("eval $'rm -rf /'"), "eval 'rm -rf /'");
     }
 }

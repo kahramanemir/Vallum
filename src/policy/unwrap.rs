@@ -107,7 +107,7 @@ fn extract_line_payloads(cmd: &str, out: &mut Vec<String>) {
                 }
             }
         }
-        if INTERPRETERS.contains(&t.as_str()) {
+        if is_interpreter(t) {
             if let Some(pos) = toks[i + 1..].iter().position(|x| is_dash_c_flag(x)) {
                 // don't scan across a separator into the next command group
                 let crossed = toks[i + 1..i + 1 + pos].iter().any(|x| is_separator(x));
@@ -126,6 +126,13 @@ fn extract_line_payloads(cmd: &str, out: &mut Vec<String>) {
 /// A standalone shell control operator token.
 fn is_separator(tok: &str) -> bool {
     SEPARATORS.contains(&tok)
+}
+
+/// True if the token is a shell interpreter, matched by basename so a
+/// path-qualified `/bin/bash` is recognized like a bare `bash`.
+fn is_interpreter(tok: &str) -> bool {
+    let base = tok.rsplit('/').next().unwrap_or(tok);
+    INTERPRETERS.contains(&base)
 }
 
 /// A single-dash short-flag bundle whose letters include `c` — the interpreter's
@@ -371,6 +378,16 @@ mod tests {
             let p = extract_exec_payloads(cmd);
             assert!(p.contains(&"rm -rf /".to_string()), "{cmd} -> {p:?}");
         }
+    }
+
+    #[test]
+    fn path_qualified_interpreter_is_unwrapped() {
+        // `/bin/bash -c '…'` is recognized by basename, like a bare `bash`.
+        let p = extract_exec_payloads("/bin/bash -c 'rm -rf /'");
+        assert!(p.contains(&"rm -rf /".to_string()), "got {p:?}");
+        assert!(is_interpreter("/usr/bin/sh"));
+        assert!(is_interpreter("bash"));
+        assert!(!is_interpreter("/usr/bin/jq"));
     }
 
     #[test]
