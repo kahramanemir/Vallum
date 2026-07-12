@@ -11,6 +11,7 @@ pub mod grep;
 pub mod kubectl;
 pub mod make;
 pub mod npm;
+pub mod pip;
 pub mod pytest;
 pub mod terraform;
 
@@ -27,6 +28,7 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
     REG.get_or_init(|| {
         vec![
             Box::new(pytest::PytestOptimizer),
+            Box::new(pip::PipOptimizer),
             Box::new(npm::NpmOptimizer),
             Box::new(cargo::CargoOptimizer),
             Box::new(git_status::GitStatusOptimizer),
