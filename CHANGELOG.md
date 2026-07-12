@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Guardrail round 3 — more bypass classes and destructive tools.** Closes the
+  remaining round-2 report findings: ANSI-C `$'…'` quoting (`bash -c $'rm -rf
+  /'`) is de-prefixed and unwrapped; path-qualified interpreters are matched by
+  basename (`curl … | /bin/bash`, `/bin/bash -c '…'`); and `source`/`.` running
+  a process substitution (`source <(curl …)`) is recognized. Four destructive
+  tools join the built-in Ask catalog, each precision-scoped: `find -delete`
+  rooted at a root/home/system path, `shred` of a key/credential/system file,
+  `truncate -s 0` of a system file, and piping into `xargs rm -rf`. The Claude
+  Code hook now matches the `Bash` tool name case-insensitively, so a casing
+  change can't silently disable the gate. Benign false-positive rate stays
+  0.000; all built-ins remain `Ask`.
+
 ## [0.8.3]
 
 ### Security

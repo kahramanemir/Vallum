@@ -256,6 +256,10 @@ precision-safe views that surface a wrapped or encoded inner command:
   (`rm -rf /{bin,etc,usr}`), or writing `/.`. A quoted span that contains
   whitespace (`echo "rm -rf /"`) is never unquoted, so a benign mention stays
   benign
+- ANSI-C / locale `$'…'` / `$"…"` quotes are de-prefixed (`bash -c $'rm -rf /'`
+  unwraps), path-qualified interpreters are matched by basename (`/bin/bash -c
+  '…'`, `curl … | /usr/bin/sh`), and `source`/`.` executing a process
+  substitution (`source <(curl …)`) is recognized
 - newlines are treated as command separators, so a print-led first line does
   not mask an interpreter on the next line
 

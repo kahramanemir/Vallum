@@ -227,10 +227,10 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 r"(?i)\brm\s+(?:-\S+\s+)*(?:-\S*(?:r\S*f|f\S*r)\S*|(?:-\S*r\S*|--recursive)\s+(?:-\S+\s+)*(?:-\S*f\S*|--force)|(?:-\S*f\S*|--force)\s+(?:-\S+\s+)*(?:-\S*r\S*|--recursive)|--recursive|--force)\s+(?:-\S+\s+)*(?:(?:/|~|\$HOME)(?:/?\*?)|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)(?:/\*?)?)(?:[\s;&|)`]|$)",
                 "Recursive force-delete targeting a root, home, or system path"),
             ask("curl_pipe_shell",
-                r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash)\b",
+                r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:\S*/)?(?:sh|bash|zsh|dash)\b",
                 "Piping downloaded content directly into a shell interpreter"),
             ask("shell_download_exec",
-                r#"(?i)(?:\b(?:bash|sh|zsh)\s+<\(\s*(?:curl|wget)|\beval\s+["']?\$\((?:curl|wget)|\b(?:sh|bash)\s+-c\s+["']?\$\((?:curl|wget))"#,
+                r#"(?i)(?:\b(?:bash|sh|zsh)\s+<\(\s*(?:curl|wget)|(?:^|[;&|\s])(?:source|\.)\s+<\(\s*(?:curl|wget)|\beval\s+["']?\$\((?:curl|wget)|\b(?:sh|bash)\s+-c\s+["']?\$\((?:curl|wget))"#,
                 "Executing remotely-fetched content via process substitution or eval"),
             ask("dd_to_device",
                 r"(?i)\bdd\b[^|\n]*\bof=/dev/(?:sd|nvme|disk|hd|vd)",
@@ -253,6 +253,18 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
             ask("git_push_force",
                 r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:[\s;&|)`]|$)|\s-f(?:[\s;&|)`]|$)|\s\+\w)",
                 "Force-push can overwrite remote history"),
+            ask("find_delete_root",
+                r"(?i)\bfind\s+(?:-\S+\s+)*(?:/|~|\$HOME|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)(?:/\*?)?)\s+[^|\n]*?-delete\b",
+                "find -delete rooted at a root, home, or system path"),
+            ask("shred_sensitive",
+                r"(?i)\bshred\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)|\.aws/credentials|/etc/(?:shadow|passwd))",
+                "Shredding a private key, credential file, or system password file"),
+            ask("truncate_system",
+                r"(?i)\btruncate\b[^|\n]*-s\s*0\b[^|\n]*/(?:etc|bin|sbin|usr|var|lib|boot|root)(?:/|\s|$)",
+                "Truncating a system file to zero bytes"),
+            ask("xargs_rm_force",
+                r"(?i)\bxargs\s+(?:-\S+\s+)*rm\s+(?:-\S+\s+)*-\S*(?:r\S*f|f\S*r|recursive|force)",
+                "Piping into a recursive force-delete via xargs"),
         ]
     })
 }
@@ -270,6 +282,10 @@ pub fn builtin_names() -> Vec<&'static str> {
         "chmod_777_recursive",
         "read_sensitive_creds",
         "git_push_force",
+        "find_delete_root",
+        "shred_sensitive",
+        "truncate_system",
+        "xargs_rm_force",
     ]
 }
 
@@ -388,7 +404,8 @@ mod tests {
     #[test]
     fn builtins_all_ask_and_named() {
         let names = builtin_names();
-        assert_eq!(names.len(), 10);
+        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), builtin_rules().len(), "names must track rules");
         for r in builtin_rules() {
             assert_eq!(
                 r.action,
