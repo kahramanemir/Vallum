@@ -249,6 +249,13 @@ precision-safe views that surface a wrapped or encoded inner command:
 - word-internal quote splitting (`r'm'`), escaped spaces (`rm\ -rf`), and the
   same splitting applied to the interpreter verb itself (`\bash -c '…'`,
   `b''ash -c '…'`)
+- whole-token quote / backslash removal, brace-list expansion (`/{bin,etc}`),
+  and trailing-`/.` collapse on the command before matching, so a rule's anchor
+  token cannot be hidden by quoting the path (`rm -rf "/"`), quoting a flag
+  (`chmod "-R" 777 /`), escaping it (`rm -rf \/`), brace-listing it
+  (`rm -rf /{bin,etc,usr}`), or writing `/.`. A quoted span that contains
+  whitespace (`echo "rm -rf /"`) is never unquoted, so a benign mention stays
+  benign
 - newlines are treated as command separators, so a print-led first line does
   not mask an interpreter on the next line
 

@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(decide("git status", Some(&guardrail())), Verdict::Allow);
         match decide("rm -rf /", Some(&guardrail())) {
             Verdict::Ask { reason, rule_name } => {
-                assert!(reason.contains("root or home"));
+                assert!(reason.contains("force-delete"));
                 assert_eq!(rule_name, "rm_rf_root");
             }
             other => panic!("expected Ask, got {other:?}"),

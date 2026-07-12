@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **Guardrail normalizes shell no-ops before matching.** A rule's anchor token
+  could be hidden by quoting (`rm -rf "/"`), backslash-escaping (`rm -rf \/`),
+  brace-listing (`rm -rf /{bin,etc,usr}`), or a trailing `/.`, while the shell
+  ran the identical command — verified end-to-end through the live hook. Each
+  command is now also matched through a `shell_normalize` view that dequotes,
+  unescapes, brace-expands, and collapses `/.`. `echo "rm -rf /"` stays `Allow`
+  (a quoted span with whitespace is never unquoted). `rm_rf_root` additionally
+  guards deletion of a whole top-level system directory (`/bin`, `/etc`, …),
+  while named deep subpaths (`/usr/local/x`) stay `Allow`. Benign false-positive
+  rate remains 0.000; all built-ins remain `Ask`.
 - **Guardrail closes two direct-command bypasses of the `rm`/`git push` rules.**
   (1) *Separated short flags*: `rm -r -f /` (and `-f -r`, with or without other
   flags) now matches — the `rm_rf_root` rule previously required `r` and `f` in

@@ -205,7 +205,7 @@ mod tests {
                     command,
                     Some("vallum run --policy-approved -- bash -c 'rm -rf /'".to_string())
                 );
-                assert!(reason.contains("root or home"));
+                assert!(reason.contains("force-delete"));
             }
             other => panic!("expected Ask, got {other:?}"),
         }
