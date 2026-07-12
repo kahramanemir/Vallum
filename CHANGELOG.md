@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Three more build-tool output optimizers.** `gradle`/`gradlew` (collapses
+  `Download https://…` chatter), `dotnet build|restore|test|publish|run`
+  (collapses NuGet `Restored …` chatter), and `go build|mod|get|install`
+  (collapses `go: downloading …` chatter) — each keeping build results and
+  diagnostics verbatim.
+
 ## [0.8.5]
 
 ### Added

@@ -3,11 +3,14 @@
 pub mod apt;
 pub mod cargo;
 pub mod docker;
+pub mod dotnet;
 pub mod file_list;
 pub mod git_diff;
 pub mod git_log;
 pub mod git_status;
+pub mod go_build;
 pub mod go_test;
+pub mod gradle;
 pub mod grep;
 pub mod kubectl;
 pub mod make;
@@ -33,6 +36,9 @@ fn registry() -> &'static [Box<dyn CommandOptimizer + Send + Sync>] {
             Box::new(pip::PipOptimizer),
             Box::new(apt::AptOptimizer),
             Box::new(maven::MavenOptimizer),
+            Box::new(gradle::GradleOptimizer),
+            Box::new(dotnet::DotnetOptimizer),
+            Box::new(go_build::GoBuildOptimizer),
             Box::new(npm::NpmOptimizer),
             Box::new(cargo::CargoOptimizer),
             Box::new(git_status::GitStatusOptimizer),
