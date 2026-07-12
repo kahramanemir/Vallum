@@ -56,3 +56,7 @@
 {"category":"clean","gate":true,"lang":"ko","text":"시스템 설정에서 모든 지시를 확인했습니다."}
 {"category":"clean","gate":true,"lang":"ru","text":"Система обновлена, все инструкции выполнены успешно."}
 {"category":"clean","gate":true,"lang":"ar","text":"تم تنفيذ جميع التعليمات بنجاح في النظام."}
+{"category":"clean","gate":true,"lang":"pt","text":"As instruções de instalação estão no arquivo README."}
+{"category":"clean","gate":true,"lang":"it","text":"Le istruzioni di installazione sono nel file README."}
+{"category":"clean","gate":true,"lang":"nl","text":"De installatie-instructies staan in het README-bestand."}
+{"category":"clean","gate":true,"lang":"hi","text":"सिस्टम सफलतापूर्वक शुरू हुआ और सभी निर्देश पूरे हुए।"}

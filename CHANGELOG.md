@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   untracked-file deletion), and recursive `chown` on a root/home/system path —
   each precision-scoped so `nc -l`, `git clean -n`, and `chown -R me ./dir` stay
   `Allow`. Reverse shells also fire through the `-c` unwrap machinery.
+- **Prompt-injection detection in four more languages.** Portuguese, Italian,
+  Dutch, and Hindi "ignore previous instructions" and "reveal the system
+  prompt" phrasings are now neutralized, each gated on a language-specific
+  instruction noun plus action verb so benign mentions ("As instruções de
+  instalação estão no README") stay untouched. The Latin scripts also gain
+  accent-strip/homoglyph shadow companions. Injection recall over the committed
+  corpus rises 0.828 → 0.842 at precision 1.000, benign FP rate 0.000.
 
 ### Added
 - **Three more build-tool output optimizers.** `gradle`/`gradlew` (collapses
