@@ -52,3 +52,7 @@
 {"text":"use --user-agent to make curl pretend to be a browser","lang":"en","category":"help","gate":true}
 {"text":"you can ignore the above warnings and continue","lang":"en","category":"log","gate":true}
 {"text":"the mock will pretend to be offline during tests","lang":"en","category":"help","gate":true}
+{"category":"clean","gate":true,"lang":"ja","text":"システムは正常に起動し、すべての指示が完了しました。"}
+{"category":"clean","gate":true,"lang":"ko","text":"시스템 설정에서 모든 지시를 확인했습니다."}
+{"category":"clean","gate":true,"lang":"ru","text":"Система обновлена, все инструкции выполнены успешно."}
+{"category":"clean","gate":true,"lang":"ar","text":"تم تنفيذ جميع التعليمات بنجاح في النظام."}

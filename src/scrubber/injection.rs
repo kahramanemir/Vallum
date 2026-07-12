@@ -150,6 +150,21 @@ fn injection_patterns() -> &'static [Regex] {
             // new-instructions family (accepts full-width or ASCII colon)
             Regex::new(r"新(指令|指示|任务)\s*[:：][^\n]*").unwrap(),
 
+            // --- Japanese (SOV: instruction-noun then ignore/reveal verb).
+            // Gated on both the instruction/system-prompt noun and the action
+            // verb so an ordinary mention stays benign. ---
+            Regex::new(r"(指示|命令|指令).{0,8}?無視").unwrap(),
+            Regex::new(r"(システムプロンプト|システム指示|システムメッセージ|初期プロンプト).{0,10}?(表示|出力|見せ|教え|開示)").unwrap(),
+            // --- Korean (SOV) ---
+            Regex::new(r"(지시|명령|지침).{0,8}?무시").unwrap(),
+            Regex::new(r"(시스템\s?프롬프트|시스템\s?지시|초기\s?프롬프트).{0,10}?(보여|출력|알려|공개|표시)").unwrap(),
+            // --- Russian (verb + noun, Cyrillic-\w-aware) ---
+            Regex::new(r"(?i)(игнорир\w+|проигнорир\w+|забудь\w*)\s+.{0,30}?(инструкци\w+|указани\w+|команд\w+)").unwrap(),
+            Regex::new(r"(?i)(покажи|выведи|раскрой|повтори)\s+.{0,30}?систем\w+\s+(промпт|инструкци\w+|подсказк\w+)").unwrap(),
+            // --- Arabic (verb + noun) ---
+            Regex::new(r"(تجاهل|تجاهلي|انس|تخط[ىي])\s+.{0,25}?(التعليمات|الأوامر|التعليمة)").unwrap(),
+            Regex::new(r"(أظهر|اعرض|اطبع|اكشف)\s+.{0,25}?(موجه|تعليمات|أوامر)\s+النظام").unwrap(),
+
             // --- noun-free "disregard everything above" family: gated on a
             // directional word (above/before/prior/preceding/previously said)
             // and a trailing action, so "ignore everything above the fold"
