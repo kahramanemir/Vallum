@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4]
+
 ### Security
 - **Guardrail round 3 — more bypass classes and destructive tools.** Closes the
   remaining round-2 report findings: ANSI-C `$'…'` quoting (`bash -c $'rm -rf
@@ -297,6 +299,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.4]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.4
 [0.8.3]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.3
 [0.8.2]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.2
 [0.8.1]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.1
