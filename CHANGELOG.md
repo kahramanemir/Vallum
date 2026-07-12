@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Prompt-injection detection for Japanese, Korean, Russian, and Arabic.**
+  Ignore-instructions and reveal-system-prompt patterns for four more
+  (non-Latin) languages, each gated on both the noun and the action verb so a
+  plain mention stays benign. Injection recall rises 0.812 → 0.828 with
+  precision 1.000 and benign false-positive rate still 0.000.
 - **`vallum update` command.** Reports whether a newer Vallum release exists
   and how to upgrade, detecting the install method (cargo / Homebrew / npm /
   standalone) from the running binary's path. Latest-version check is
