@@ -69,7 +69,7 @@ pub enum HookDecision {
 /// about, or denies the command. Policy is evaluated on the ORIGINAL command,
 /// before it is wrapped for `vallum run`.
 pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>) -> HookDecision {
-    if tool_name != "Bash" {
+    if !tool_name.eq_ignore_ascii_case("Bash") {
         return HookDecision::PassThrough;
     }
     // The hook is the single point of policy enforcement in hook mode. The
@@ -191,6 +191,16 @@ mod tests {
                 )
             }
             other => panic!("expected Allow, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tool_name_match_is_case_insensitive() {
+        // A different casing of the shell tool (e.g. a future rename to `bash`)
+        // must still be gated, not silently passed through ungated.
+        match rewrite_decision("bash", "rm -rf /", Some(&guardrail())) {
+            HookDecision::Ask { .. } => {}
+            other => panic!("expected Ask for lowercase tool name, got {other:?}"),
         }
     }
 
