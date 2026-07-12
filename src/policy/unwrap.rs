@@ -239,6 +239,10 @@ pub fn command_views(cmd: &str) -> Vec<String> {
         if normalized != c {
             queue.push((normalized, depth + 1));
         }
+        let shell_normalized = super::normalize::shell_normalize(&c);
+        if shell_normalized != c {
+            queue.push((shell_normalized, depth + 1));
+        }
         for payload in extract_exec_payloads(&c) {
             queue.push((payload, depth + 1));
         }
@@ -263,6 +267,12 @@ mod tests {
     fn deduplicates_identical_views() {
         let v = command_views("ls");
         assert_eq!(v.iter().filter(|s| *s == "ls").count(), 1);
+    }
+
+    #[test]
+    fn shell_normalized_form_becomes_a_view() {
+        let v = command_views(r#"rm -rf "/""#);
+        assert!(v.contains(&"rm -rf /".to_string()), "views: {v:?}");
     }
 
     #[test]

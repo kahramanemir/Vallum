@@ -3,6 +3,7 @@
 //! joined command line — no shell parsing (same posture as the scrubber).
 
 pub mod audit;
+mod normalize;
 mod unwrap;
 
 use crate::config::PolicyConfig;
@@ -132,7 +133,7 @@ impl Policy {
 /// variable and eval indirection still get through; the guardrail is
 /// defense-in-depth, not a sandbox. Raw matches are never lost — this only
 /// ADDS a candidate.
-fn normalize_for_match(cmd: &str) -> String {
+pub(super) fn normalize_for_match(cmd: &str) -> String {
     // N1: collapse $IFS / ${IFS...} obfuscation to a space before scanning, so
     // `rm${IFS}-rf${IFS}/` reads as spaced tokens. $IFS in a real command line
     // is essentially always obfuscation.
