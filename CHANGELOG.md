@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5]
+
 ### Added
 - **`mvn`/`mvnw` (Maven) output optimizer.** Collapses `Downloading from` /
   `Downloaded from` / `Progress` artifact chatter while keeping build phases,
@@ -333,6 +335,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.5]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.5
 [0.8.4]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.4
 [0.8.3]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.3
 [0.8.2]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.2
