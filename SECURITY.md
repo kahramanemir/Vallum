@@ -58,9 +58,12 @@ they are logged):
    Google `AIza…`, Stripe `sk_live_`/`rk_live_`, SendGrid `SG.…`, Twilio
    `SK…`, npm `npm_…`, PyPI `pypi-…`, Hugging Face `hf_…`, Slack incoming
    webhooks, Discord/Telegram bot tokens, DigitalOcean `dop_v1_…`, Shopify
-   `shp*_…`, Azure Storage `AccountKey=…`, JWTs (both `Bearer`-prefixed and
-   bare `eyJ….eyJ….sig`), PEM private keys, connection-string passwords,
-   and uppercase `.env`-style assignments.
+   `shp*_…`, Azure Storage `AccountKey=…`, Sentry DSNs, age secret keys
+   (`AGE-SECRET-KEY-1…`), Google OAuth (`ya29.`/`GOCSPX-`), Stripe webhook
+   secrets (`whsec_`), GitHub OAuth/app tokens (`gho_`/`ghu_`/`ghs_`/`ghr_`),
+   New Relic keys (`NRAK-`/…), JWTs (both `Bearer`-prefixed and bare
+   `eyJ….eyJ….sig`), PEM private keys, connection-string passwords, and
+   uppercase `.env`-style assignments.
    Extensible via `[scrubber] extra_secret_patterns`.
 2. **Context-gated entropy detection** (default on; `[scrubber] entropy =
    false` disables) — a value is masked only when it is the value of a
