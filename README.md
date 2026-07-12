@@ -160,7 +160,7 @@ Built-in rules (all default to `Ask`):
 
 | Rule | Catches |
 |---|---|
-| `rm_rf_root` | Recursive force-delete targeting a root or home path |
+| `rm_rf_root` | Recursive force-delete targeting a root, home, or top-level system path |
 | `curl_pipe_shell` | Piping downloaded content directly into a shell (`curl … \| sh`) |
 | `shell_download_exec` | Executing remotely-fetched content via process substitution or `eval` |
 | `dd_to_device` | Writing directly to a block device with `dd` |
@@ -170,6 +170,13 @@ Built-in rules (all default to `Ask`):
 | `chmod_777_recursive` | Recursively granting world-writable permissions |
 | `read_sensitive_creds` | Reading a private key, credential file, or `/etc/shadow` |
 | `git_push_force` | Force-push that can overwrite remote history |
+| `find_delete_root` | `find -delete` rooted at a root/home/system path |
+| `shred_sensitive` | Shredding a key, credential, or system password file |
+| `truncate_system` | Truncating a system file to zero bytes |
+| `xargs_rm_force` | Piping into a recursive force-delete via `xargs rm` |
+| `reverse_shell` | Reverse shell (`/dev/tcp`, `nc -e`, `socat exec:`) |
+| `git_clean_force` | `git clean -f` permanently deletes untracked files |
+| `chown_recursive_root` | Recursive `chown` on a root/home/system path |
 
 **How `Ask` surfaces:**
 
