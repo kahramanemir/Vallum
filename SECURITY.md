@@ -143,10 +143,13 @@ Before a command runs, Vallum evaluates the **joined command line** against a
 narrow set of pattern rules and returns Allow / Ask / Deny (most-severe-wins).
 The guardrail is on by default; every built-in rule is `Ask`, so a matched
 command prompts for confirmation rather than being blocked outright. Built-ins
-cover `rm -rf` on a root/home path, `curl … | sh`, remote-fetch-and-exec,
+cover `rm -rf` on a root/home/system path, `curl … | sh`, remote-fetch-and-exec,
 `dd`/redirect/`mkfs` to a block device, the classic fork bomb, recursive
-`chmod 777`, reading private keys / credential files / `/etc/shadow`, and
-`git push --force`. Users can add `ask`/`deny` rules under `[policy]`.
+`chmod 777`, reading private keys / credential files / `/etc/shadow`,
+`git push --force`, `find -delete`/`shred`/`truncate`/`xargs rm` on sensitive
+targets, reverse shells (`/dev/tcp`, `nc -e`, `socat exec:`), `git clean -f`,
+and recursive `chown` on a system path. Users can add `ask`/`deny` rules under
+`[policy]`.
 
 **Enforcement points.** The same Allow/Ask/Deny decision core is reached from
 five call sites: direct `vallum run`, and four native pre-exec hooks — Claude

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Guardrail catalog: reverse shells and more destructive commands.** New
+  `Ask` rules for reverse shells (bash `/dev/tcp`|`/dev/udp` redirects,
+  `nc`/`ncat -e`/`--exec`, `socat exec:`/`system:`), `git clean -f` (permanent
+  untracked-file deletion), and recursive `chown` on a root/home/system path —
+  each precision-scoped so `nc -l`, `git clean -n`, and `chown -R me ./dir` stay
+  `Allow`. Reverse shells also fire through the `-c` unwrap machinery.
+
 ### Added
 - **Three more build-tool output optimizers.** `gradle`/`gradlew` (collapses
   `Download https://…` chatter), `dotnet build|restore|test|publish|run`
