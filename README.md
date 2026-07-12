@@ -330,6 +330,7 @@ committed floors.
 - `git diff` / `git log`: collapse large unchanged-context runs / long commit bodies while keeping headers, hunks, and changed lines
 - `cargo build|test|check|clippy|run`: collapses compile/download noise and preserves summaries, failures, and diagnostics
 - `pytest` and `python -m pytest`: hides progress-dot spam while keeping collection, failure, and summary sections
+- `pip install` (also `pip3` / `python -m pip install`): collapses `Requirement already satisfied` / `Collecting` / `Downloading` / `Using cached` chatter while keeping the `Installing collected packages` / `Successfully installed` outcome, errors, and warnings
 - `npm test|install|ci|run`: collapses repeated `PASS` and warning lines while preserving result summaries
 - `docker build|compose`: collapse layer/step progress while keeping step headers, errors, and the final result
 - `go test`: hide `=== RUN`/`--- PASS` spam while keeping failures and the summary
@@ -389,7 +390,7 @@ Supported settings:
 - `pipeline.min_optimize_tokens`: outputs below this estimate skip optimize/truncate
 - `pipeline.max_output_bytes`: maximum bytes captured from a command (default 10 MiB)
 - `pipeline.timeout_secs`: command timeout in seconds; `0` disables it (default 300)
-- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, npm, docker, go_test, make, kubectl, terraform, grep, file_list) — default none
+- `optimizer.disabled`: list of optimizer names to disable (git_status, git_diff, git_log, cargo, pytest, pip, npm, docker, go_test, make, kubectl, terraform, grep, file_list) — default none
 - `pipeline.max_line_length`: cap individual line length; longer lines are truncated mid-line with an elision marker — default 2000, `0` disables
 - `scrubber.extra_secret_patterns`: extra regex-based redaction rules
 - `scrubber.entropy`: context-gated entropy redaction of credential-ish assignment values — **default `true`**

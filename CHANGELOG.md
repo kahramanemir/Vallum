@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`pip install` output optimizer.** Collapses dependency-resolution chatter
+  (`Requirement already satisfied`, `Collecting`, `Downloading`, `Using cached`)
+  while keeping the `Installing collected packages` / `Successfully installed`
+  outcome, errors, and warnings.
 - **Prompt-injection detection for Japanese, Korean, Russian, and Arabic.**
   Ignore-instructions and reveal-system-prompt patterns for four more
   (non-Latin) languages, each gated on both the noun and the action verb so a
