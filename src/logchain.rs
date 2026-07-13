@@ -65,6 +65,166 @@ pub fn append_chained(path: &Path, context: &str, payload: &str) -> std::io::Res
     // Lock released when `file` drops.
 }
 
+/// Where and why the chain broke. `index` is the 1-based block number.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BreakInfo {
+    pub index: usize,
+    pub timestamp: String,
+    pub reason: String,
+}
+
+/// Result of verifying one policy.log's content.
+#[derive(Debug, Clone)]
+pub struct ChainReport {
+    pub total: usize,
+    pub chained: usize,
+    pub legacy: usize,
+    pub head: Option<String>,
+    pub break_at: Option<BreakInfo>,
+}
+
+impl ChainReport {
+    pub fn intact(&self) -> bool {
+        self.break_at.is_none()
+    }
+}
+
+/// Verify a full policy.log body. Pure: string in, report out. Blocks before
+/// the first `Chain:` block are legacy (unverifiable); from there on every
+/// hash is recomputed from genesis and the first break stops the scan.
+pub fn verify_content(content: &str) -> ChainReport {
+    let mut report = ChainReport {
+        total: 0,
+        chained: 0,
+        legacy: 0,
+        head: None,
+        break_at: None,
+    };
+    let mut blocks: Vec<Vec<&str>> = Vec::new();
+    let mut cur: Vec<&str> = Vec::new();
+    for line in content.lines() {
+        if line == DELIM {
+            blocks.push(std::mem::take(&mut cur));
+        } else {
+            cur.push(line);
+        }
+    }
+    let trailing = cur; // lines after the last delimiter (torn write?)
+
+    let mut prev = GENESIS.to_string();
+    let mut in_chain = false;
+    for (i, lines) in blocks.iter().enumerate() {
+        report.total += 1;
+        let index = i + 1;
+        let timestamp = lines.first().copied().unwrap_or("?").to_string();
+        let chain_pos = lines.iter().position(|l| l.starts_with("Chain: "));
+        let Some(pos) = chain_pos else {
+            if in_chain {
+                report.break_at = Some(BreakInfo {
+                    index,
+                    timestamp,
+                    reason: "unchained block after the chain started (inserted or rewritten)"
+                        .to_string(),
+                });
+                return report;
+            }
+            report.legacy += 1;
+            continue;
+        };
+        in_chain = true;
+        let value = lines[pos].strip_prefix("Chain: ").unwrap_or("");
+        if pos != lines.len() - 1 || !is_hex64(value) {
+            report.break_at = Some(BreakInfo {
+                index,
+                timestamp,
+                reason: "malformed Chain: line".to_string(),
+            });
+            return report;
+        }
+        let body: String = lines[..pos].iter().map(|l| format!("{l}\n")).collect();
+        let expected = sha256_hex(format!("{prev}{body}").as_bytes());
+        if expected != value {
+            report.break_at = Some(BreakInfo {
+                index,
+                timestamp,
+                reason:
+                    "hash mismatch (entry edited, or an earlier chained entry removed/reordered)"
+                        .to_string(),
+            });
+            return report;
+        }
+        prev = value.to_string();
+        report.chained += 1;
+        report.head = Some(prev.clone());
+    }
+
+    if trailing.iter().any(|l| !l.trim().is_empty()) {
+        if in_chain {
+            report.break_at = Some(BreakInfo {
+                index: report.total + 1,
+                timestamp: trailing.first().copied().unwrap_or("?").to_string(),
+                reason: "incomplete trailing block (torn write or tampering)".to_string(),
+            });
+        } else {
+            report.total += 1;
+            report.legacy += 1;
+        }
+    }
+    report
+}
+
+/// I/O wrapper. `Ok(None)` = file absent (nothing to verify).
+pub fn verify_file(path: &Path) -> Result<Option<ChainReport>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    Ok(Some(verify_content(&String::from_utf8_lossy(&bytes))))
+}
+
+/// Human report + exit code (0 intact / 20 tamper evidence). `expect_head`
+/// must already be lowercase hex (the CLI validates).
+pub fn render_report(path: &Path, r: &ChainReport, expect_head: Option<&str>) -> (String, i32) {
+    let mut out = String::new();
+    out.push_str(&format!("policy.log chain — {}\n", path.display()));
+    out.push_str(&format!(
+        "entries: {} total, {} chained, {} legacy (pre-chain, unverifiable)\n",
+        r.total, r.chained, r.legacy
+    ));
+    if let Some(b) = &r.break_at {
+        out.push_str(&format!(
+            "✗ chain BROKEN at block {} {} — {}\n",
+            b.index, b.timestamp, b.reason
+        ));
+        return (out, 20);
+    }
+    let Some(head) = &r.head else {
+        if expect_head.is_some() {
+            out.push_str("✗ expected a chained head but the log has no chained entries\n");
+            return (out, 20);
+        }
+        out.push_str("no chained entries yet — chain starts with the next Ask/Deny verdict\n");
+        return (out, 0);
+    };
+    out.push_str(&format!("head: {head}\n"));
+    match expect_head {
+        Some(exp) if exp == head => {
+            out.push_str("✓ chain intact, head matches the external anchor\n");
+            (out, 0)
+        }
+        Some(_) => {
+            out.push_str("✗ head MISMATCH — log truncated or rewritten since the anchored head\n");
+            (out, 20)
+        }
+        None => {
+            out.push_str(
+                "✓ chain intact (store the head externally; verify later with --expect-head)\n",
+            );
+            (out, 0)
+        }
+    }
+}
+
 #[cfg(unix)]
 fn lock_exclusive(file: &std::fs::File) -> std::io::Result<()> {
     use std::os::unix::io::AsRawFd;
@@ -159,6 +319,156 @@ mod tests {
             text.lines().any(|l| l == DELIM),
             "audit.rs delimiter drifted from logchain::DELIM"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Build a file with `n` chained entries and return its content.
+    fn chained_file(dir: &std::path::Path, n: usize) -> (std::path::PathBuf, String) {
+        let path = dir.join("policy.log");
+        for i in 0..n {
+            append_chained(&path, &format!("ASK [rule_{i}] agent=direct"), "cmd").unwrap();
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        (path, text)
+    }
+
+    #[test]
+    fn verify_intact_chain() {
+        let dir = tmp_dir("v_ok");
+        let (_, text) = chained_file(&dir, 3);
+        let r = verify_content(&text);
+        assert!(r.intact(), "{:?}", r.break_at);
+        assert_eq!((r.total, r.chained, r.legacy), (3, 3, 0));
+        assert!(r.head.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verify_detects_edited_payload() {
+        let dir = tmp_dir("v_edit");
+        let (_, text) = chained_file(&dir, 3);
+        let tampered = text.replacen("rule_1", "rule_X", 1);
+        let r = verify_content(&tampered);
+        let b = r.break_at.expect("must break");
+        assert_eq!(b.index, 2);
+        assert!(b.reason.contains("hash mismatch"), "{}", b.reason);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verify_detects_corrupt_chain_line() {
+        let dir = tmp_dir("v_corrupt");
+        let (_, text) = chained_file(&dir, 2);
+        // Corrupt the first Chain: value's first hex char to 'z'.
+        let pos = text.find("Chain: ").unwrap() + "Chain: ".len();
+        let mut t = text.clone();
+        t.replace_range(pos..pos + 1, "z");
+        let r = verify_content(&t);
+        assert!(!r.intact());
+        assert!(r.break_at.unwrap().reason.contains("malformed"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verify_detects_deleted_middle_block() {
+        let dir = tmp_dir("v_del");
+        let (_, text) = chained_file(&dir, 3);
+        // Remove the middle block (between 1st and 2nd delimiter).
+        let blocks: Vec<&str> = text.split_inclusive(&format!("{DELIM}\n")).collect();
+        let t = format!("{}{}", blocks[0], blocks[2]);
+        let r = verify_content(&t);
+        assert!(!r.intact());
+        assert_eq!(r.break_at.unwrap().index, 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verify_legacy_prefix_then_chain_is_intact() {
+        let dir = tmp_dir("v_legacy");
+        let path = dir.join("policy.log");
+        crate::audit::write_log_to_path(&path, "ASK [old] agent=direct", "old cmd").unwrap();
+        append_chained(&path, "ASK [new] agent=direct", "new cmd").unwrap();
+        let r = verify_content(&std::fs::read_to_string(&path).unwrap());
+        assert!(r.intact(), "{:?}", r.break_at);
+        assert_eq!((r.total, r.chained, r.legacy), (2, 1, 1));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verify_unchained_block_after_chain_breaks() {
+        let dir = tmp_dir("v_after");
+        let (path, _) = chained_file(&dir, 1);
+        crate::audit::write_log_to_path(&path, "ASK [sneak] agent=direct", "x").unwrap();
+        let r = verify_content(&std::fs::read_to_string(&path).unwrap());
+        assert!(!r.intact());
+        assert!(r.break_at.unwrap().reason.contains("unchained"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verify_incomplete_tail_after_chain_breaks() {
+        let dir = tmp_dir("v_tail");
+        let (_, text) = chained_file(&dir, 1);
+        let t = format!("{text}[2026-07-14T00:00:00+00:00]\nCommand: torn");
+        let r = verify_content(&t);
+        assert!(!r.intact());
+        assert!(r.break_at.unwrap().reason.contains("incomplete"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tail_truncation_is_invisible_without_anchor() {
+        // Documented limit: dropping the last block leaves an intact chain.
+        let dir = tmp_dir("v_trunc");
+        let (_, text) = chained_file(&dir, 3);
+        let blocks: Vec<&str> = text.split_inclusive(&format!("{DELIM}\n")).collect();
+        let t = format!("{}{}", blocks[0], blocks[1]);
+        let r = verify_content(&t);
+        assert!(r.intact());
+        assert_eq!(r.chained, 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verify_file_absent_is_none() {
+        let dir = tmp_dir("v_absent");
+        assert!(verify_file(&dir.join("nope.log")).unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn render_report_codes() {
+        let dir = tmp_dir("render");
+        let (path, text) = chained_file(&dir, 2);
+        let r = verify_content(&text);
+        let head = r.head.clone().unwrap();
+        assert_eq!(render_report(&path, &r, None).1, 0);
+        assert_eq!(render_report(&path, &r, Some(&head)).1, 0);
+        assert_eq!(render_report(&path, &r, Some(GENESIS)).1, 20);
+        let broken = verify_content(&text.replacen("rule_0", "rule_Z", 1));
+        assert_eq!(render_report(&path, &broken, None).1, 20);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_appends_do_not_fork_the_chain() {
+        let dir = tmp_dir("conc");
+        let path = dir.join("policy.log");
+        let mut handles = Vec::new();
+        for t in 0..8 {
+            let p = path.clone();
+            handles.push(std::thread::spawn(move || {
+                for i in 0..5 {
+                    append_chained(&p, &format!("ASK [t{t}_{i}] agent=direct"), "cmd").unwrap();
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        let r = verify_content(&std::fs::read_to_string(&path).unwrap());
+        assert!(r.intact(), "{:?}", r.break_at);
+        assert_eq!(r.chained, 40);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
