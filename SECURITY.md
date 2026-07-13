@@ -302,6 +302,42 @@ matchable argument — as is a wrapped command hidden inside a single combined
 token (`env -S "bash -c 'rm -rf /'"`). Built-in rules are `Ask`, not `Deny`, and
 the guardrail is one layer — not a guarantee.
 
+## MCP configuration scanning
+
+`vallum mcp scan` is a **static, read-only** check over MCP server
+configuration files. It discovers the well-known config locations (plus any
+explicit path arguments), parses the server definitions, and runs three
+existing engines over them: the secret scrubber on each server's `env` values,
+the guardrail policy engine on each server's launch command, and the injection
+detector on any tool-description text written into the config. It connects to
+no server, launches no process, and modifies no file.
+
+**What it catches:** plaintext credentials embedded in a server's `env`, a
+server whose launch command matches a dangerous pattern (`curl … | sh` and the
+guardrail's other rules), and prompt-injection phrasing in descriptions stored
+in the config. Exit codes are `0` clean, `10` warning-class findings, `20`
+high-severity (only reachable with a user-defined `deny` rule — every built-in
+rule is `Ask`, i.e. warning-class), and `125` for a usage/read error.
+
+**What it does NOT cover, stated plainly:**
+
+- **Runtime tool descriptions are invisible to it.** Most MCP servers supply
+  their tool list and descriptions at connection time via `tools/list`, not in
+  the config file. A static scan sees only descriptions literally written into
+  the config; the classic tool-poisoning payload delivered by a live server is
+  out of scope until a future live-introspection mode is added.
+- **It is pattern-based.** The injection check inherits the injection
+  detector's measured recall, and the launch-command check inherits the
+  guardrail's precision-safe matching and its documented wrapper limitations —
+  it is a speed bump, not a proof.
+- **It connects to nothing, so it cannot see behavior.** A server that is
+  benign in its config but malicious at runtime (a "rug pull"), or whose risk
+  lives in code rather than metadata, is not something a static config scan can
+  detect.
+- **It only looks where it knows to look** — the built-in well-known config
+  locations plus paths you pass explicitly. A server configured somewhere else
+  is not scanned unless you name its file.
+
 ## Supply-chain integrity
 
 Release binaries are built in GitHub Actions by the `dist` pipeline. Each
