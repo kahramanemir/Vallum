@@ -37,6 +37,7 @@ pub mod executor;
 pub mod fsutil;
 pub mod hook;
 pub mod install_hook;
+pub mod mcp;
 pub mod metrics;
 pub mod optimizer;
 pub mod policy;
