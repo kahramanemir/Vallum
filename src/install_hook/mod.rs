@@ -193,6 +193,29 @@ pub fn agent_status(agent: Agent) -> AgentStatus {
     }
 }
 
+/// Resolve an agent's hook config path and extract every hook command string
+/// (Vallum's own and foreign alike). `Ok(None)` = config file absent (agent not
+/// configured); `Ok(Some(..))` = present; `Err` = unreadable/malformed JSON.
+pub fn hook_commands(agent: Agent) -> Result<Option<Vec<String>>, String> {
+    let path = match agent {
+        Agent::Claude => claude::settings_path(Level::User)?,
+        Agent::Cursor => cursor::config_path()?,
+        Agent::Gemini => gemini::config_path()?,
+        Agent::Codex => codex::config_path()?,
+    };
+    if !path.exists() {
+        return Ok(None);
+    }
+    let settings = read_settings(&path)?;
+    let cmds = match agent {
+        Agent::Claude => claude::list_hook_commands(&settings),
+        Agent::Cursor => cursor::list_hook_commands(&settings),
+        Agent::Gemini => gemini::list_hook_commands(&settings),
+        Agent::Codex => codex::list_hook_commands(&settings),
+    };
+    Ok(Some(cmds))
+}
+
 /// Per-agent install. Non-Claude agents are user-level only; `level` is
 /// validated at the CLI boundary before this is called.
 pub fn install_agent(agent: Agent, level: Level, force: bool) -> Result<String, String> {
