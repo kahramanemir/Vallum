@@ -432,6 +432,18 @@ fn main() {
                 std::process::exit(code);
             }
         },
+        Commands::Mcp { action } => match action {
+            vallum::cli::McpAction::Scan { json, paths } => {
+                let config = match AppConfig::load() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Config Error: {e}");
+                        std::process::exit(125);
+                    }
+                };
+                std::process::exit(vallum::mcp::run_scan(paths, *json, &config));
+            }
+        },
         Commands::Doctor => {
             std::process::exit(vallum::doctor::run());
         }

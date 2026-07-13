@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `vallum mcp scan`: static scanner for MCP server configs — flags embedded
+  secrets (`env`), risky launch commands (`curl | sh`-style), and prompt
+  injection in embedded tool descriptions, reusing the existing scrubber and
+  guardrail engines. Read-only; exit codes 0/10/20/125 for CI. Static mode does
+  not see runtime `tools/list` descriptions (live introspection deferred).
+
 ## [0.8.7]
 
 ### Added

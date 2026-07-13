@@ -133,6 +133,11 @@ Examples:
         #[command(subcommand)]
         action: PolicyCliAction,
     },
+    /// Scan MCP server configs for embedded secrets, risky launch commands, and injection
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
     /// Show cumulative token savings report
     Stats {
         /// Delete all collected stats (prompts for confirmation)
@@ -181,5 +186,25 @@ flags of its own. Exit codes: 0 allow/pass-through, 10 ask, 20 deny,
         /// The command line to evaluate
         #[arg(trailing_var_arg = true, required = true)]
         command: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum McpAction {
+    /// Statically scan discovered (or given) MCP config files
+    #[command(after_help = "\
+Examples:
+  vallum mcp scan                     scan all discovered MCP configs
+  vallum mcp scan ./.mcp.json         scan a specific file (CI / pre-commit)
+  vallum mcp scan --json              structured output
+
+Exit codes: 0 clean, 10 warnings, 20 high-severity, 125 usage/read error.")]
+    Scan {
+        /// Emit structured JSON instead of plain text
+        #[arg(long)]
+        json: bool,
+        /// Specific config file(s) to scan; omit to auto-discover
+        #[arg(value_name = "PATH")]
+        paths: Vec<std::path::PathBuf>,
     },
 }

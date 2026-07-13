@@ -331,6 +331,27 @@ see the honest "Known misses" list in the report. Regenerate with
 `cargo run --example eval -- --write`; CI fails on regressions below the
 committed floors.
 
+## MCP scanning
+
+`vallum mcp scan` statically inspects the MCP server configuration on your
+machine — the same files your agents read — and reuses Vallum's existing
+engines to flag three things without connecting to any server:
+
+- **Embedded secrets** in a server's `env` block (the secret scrubber).
+- **Risky launch commands** — a server started via `curl … | sh` and friends
+  (the guardrail policy engine).
+- **Prompt injection** in tool descriptions written into the config (the
+  injection detector).
+
+It connects to nothing, launches nothing, and modifies nothing. Exit codes
+(`0` clean, `10` warnings, `20` high-severity, `125` usage error) make it
+CI-usable. With the built-in ruleset a risky launch command surfaces as a
+warning (exit `10`); the high-severity code (`20`) is reached only when you
+add a `deny` policy rule. **Honest limitation:** static scanning only sees
+descriptions written in the config file; most servers supply tool
+descriptions at runtime via `tools/list`, which a future live-introspection
+mode will cover.
+
 ## Built-in optimizers
 
 - `git status`: summarizes large working-tree sections while keeping branch state and representative file entries
@@ -479,6 +500,8 @@ vallum uninstall-hook                # remove hooks (same picker; --agent to scr
 vallum hook                          # internal: invoked by the agent's hook config (don't run directly)
 vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
+vallum mcp scan                      # scan discovered MCP configs for risks
+vallum mcp scan --json <path>...     # structured output / specific files
 vallum doctor                        # self-check: config, hook, guardrail, PATH, log dir
 vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
