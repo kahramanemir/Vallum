@@ -89,8 +89,12 @@ Pattern families ("ignore previous instructions", "you are now…", "reveal
 your system prompt", DAN/persona jailbreaks, injected `Assistant:`/`System:`
 turns, plus escalation banners ("IMPORTANT!!! ignore…" / "strictly adhere to
 the following instruction"), covert-action markers ("do not tell the user",
-"hide this from the user"), and data-exfiltration imperatives (send/email a
-credential-ish object to an external address/URL)) are detected across English,
+"hide this from the user"), data-exfiltration imperatives (send/email a
+credential-ish object to an external address/URL), forged chat-template /
+tool-call scaffolding (`<|im_start|>system`, `[INST]`, `<<SYS>>`,
+`<tool_call>`, Alpaca `### Instruction:` headers), and invisible-markup
+injections (an instruction hidden via `display:none`/`opacity:0` CSS)) are
+detected across English,
 Turkish, Spanish, German, French, Chinese, Japanese, Korean, Russian, Arabic,
 Portuguese, Italian, Dutch, and Hindi (coverage varies by family), resist
 line-splitting, and neutralize the whole trigger line (trigger + payload) with
@@ -110,8 +114,11 @@ dependency-free confusable table.
 
 **Known gaps**
 
-- The escalation/covert-action/exfiltration families are English-only so far
-  (the override/reveal families are multilingual).
+- The escalation/covert-action/exfiltration/scaffolding/hidden-markup families
+  are English-only so far (the override/reveal families are multilingual).
+- Invisible-markup detection is line-local: an instruction hidden across
+  multiple lines of un-minified HTML (hiding technique and directive on
+  different lines) is not correlated.
 - Confusables outside the curated table (the table targets ASCII-Latin
   look-alikes of the keyword alphabets, not the full Unicode confusable set).
 - Leetspeak digit substitution (`1gn0re`) — not folded.

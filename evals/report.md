@@ -8,10 +8,10 @@ Measured over the committed corpus in `evals/corpus/`. Numbers reflect the curre
 
 | metric | value |
 | --- | --- |
-| samples (injection / benign) | 107 / 68 |
+| samples (injection / benign) | 113 / 74 |
 | precision | 1.000 |
-| recall | 0.850 |
-| F1 | 0.919 |
+| recall | 0.858 |
+| F1 | 0.924 |
 | benign false-positive rate | 0.000 |
 
 ### Recall by language
@@ -20,7 +20,7 @@ Measured over the committed corpus in `evals/corpus/`. Numbers reflect the curre
 | --- | --- | --- |
 | ar | 2 / 2 | 1.000 |
 | de | 4 / 9 | 0.444 |
-| en | 43 / 54 | 0.796 |
+| en | 49 / 60 | 0.817 |
 | es | 5 / 5 | 1.000 |
 | fr | 6 / 6 | 1.000 |
 | hi | 2 / 2 | 1.000 |
@@ -43,12 +43,14 @@ Measured over the committed corpus in `evals/corpus/`. Numbers reflect the curre
 | evasion | 11 / 11 | 1.000 |
 | exfil | 2 / 2 | 1.000 |
 | faketurn | 2 / 2 | 1.000 |
+| hidden | 2 / 2 | 1.000 |
 | ignore | 35 / 40 | 0.875 |
 | manipulation | 0 / 5 | 0.000 |
 | mutation | 3 / 3 | 1.000 |
 | newinstr | 2 / 4 | 0.500 |
 | reveal | 21 / 23 | 0.913 |
 | roleplay | 10 / 11 | 0.909 |
+| scaffold | 4 / 4 | 1.000 |
 
 ## Secret redaction
 

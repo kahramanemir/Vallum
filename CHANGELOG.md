@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cross clause boundaries) so benign lines like "send your API key in the
   Authorization header" stay untouched. Injection recall over the committed
   corpus rises 0.842 → 0.850 at precision 1.000, benign FP rate 0.000.
+- **Prompt-injection detection: forged scaffolding and hidden-markup
+  families.** Informed by the CommandSans and IPI-proxy papers, two more
+  English families are neutralized: injected chat-template / tool-call
+  scaffolding (`<|im_start|>system`, `[INST]`/`[/INST]`, `<<SYS>>`,
+  `<tool_call>`/`<function_call>`/`<tool_result>`, Alpaca `### Instruction:`
+  headers) and invisible-markup injection (an instruction hidden behind
+  `display:none`/`opacity:0`/`visibility:hidden`/`font-size:0`/`aria-hidden`
+  CSS, gated on a model-directed cue so ordinary hidden UI text stays benign).
+  Injection recall rises 0.850 → 0.858 at precision 1.000, benign FP rate 0.000.
 
 ## [0.8.6]
 
