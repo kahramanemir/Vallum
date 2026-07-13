@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `==> Downloading` chatter and `####…%` progress bars) — each keeping
   results, warnings, and diagnostics verbatim.
 
+### Security
+- **Prompt-injection detection: escalation, covert-action, and exfiltration
+  families.** Informed by the InjecAgent benchmark, three new English pattern
+  families are neutralized: escalation banners (`IMPORTANT!!! ignore…`,
+  `strictly adhere to the following instruction`), covert-action markers (`do
+  not tell the user`, `hide this from the user`), and data-exfiltration
+  imperatives (send/email a credential-ish object — passwords, API keys, SSH
+  keys, `.env`, payment info — to an external email address or URL). Each is
+  precision-gated (the exfil rules require an external destination and do not
+  cross clause boundaries) so benign lines like "send your API key in the
+  Authorization header" stay untouched. Injection recall over the committed
+  corpus rises 0.842 → 0.850 at precision 1.000, benign FP rate 0.000.
+
 ## [0.8.6]
 
 ### Added
