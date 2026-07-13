@@ -337,6 +337,11 @@ rule is `Ask`, i.e. warning-class), and `125` for a usage/read error.
 - **It only looks where it knows to look** — the built-in well-known config
   locations plus paths you pass explicitly. A server configured somewhere else
   is not scanned unless you name its file.
+- **Within a scanned file, it reads only top-level server maps** (`mcpServers`
+  / `servers`, or Codex's `[mcp_servers]`). Servers nested elsewhere — for
+  example project-scoped entries under `projects.<dir>.mcpServers` in
+  `~/.claude.json` — are not parsed in this version, so a file can be
+  discovered and read yet still have servers the scan does not see.
 
 ## Supply-chain integrity
 

@@ -95,9 +95,9 @@ pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 
     }
 
     if json {
-        report::render_json(&report);
+        report::render_json(&report, usage_error);
     } else {
-        report::render_human(&report);
+        report::render_human(&report, usage_error);
     }
 
     exit_code(&report, usage_error)
