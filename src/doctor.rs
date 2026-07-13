@@ -278,6 +278,34 @@ pub fn check_binary_on_path(path_var: &str, exe: &str) -> Check {
     }
 }
 
+/// Verify the policy.log hash chain. Broken chain → Fail (tamper evidence);
+/// unreadable → Warn (an IO error is not tamper evidence); absent → Ok.
+pub fn log_chain_check(path: &Path) -> Check {
+    match crate::logchain::verify_file(path) {
+        Err(e) => Check::new("log-chain", Status::Warn, format!("unreadable: {e}")),
+        Ok(None) => Check::new(
+            "log-chain",
+            Status::Ok,
+            "no policy.log yet — chain starts with the first Ask/Deny verdict",
+        ),
+        Ok(Some(r)) => match &r.break_at {
+            Some(b) => Check::new(
+                "log-chain",
+                Status::Fail,
+                format!(
+                    "chain BROKEN at block {} — {} (details: `vallum log verify`)",
+                    b.index, b.reason
+                ),
+            ),
+            None => Check::new(
+                "log-chain",
+                Status::Ok,
+                format!("chain intact ({} chained, {} legacy)", r.chained, r.legacy),
+            ),
+        },
+    }
+}
+
 /// One foreign hook command found by the audit. `command` is redacted for
 /// display; `dangerous` is `Some(rule_name)` when the guardrail flags it.
 #[derive(Debug, Clone)]
@@ -466,6 +494,7 @@ pub fn run() -> i32 {
             Some(p) => hook_audit(p),
             None => Check::new("hook-audit", Status::Warn, "skipped — policy failed to compile"),
         },
+        log_chain_check(&resolve_log_dir(&config).join("policy.log")),
         check_log_dir(&resolve_log_dir(&config)),
     ];
 
@@ -753,5 +782,32 @@ mod tests {
             &policy,
         );
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn log_chain_absent_is_ok() {
+        let dir = temp_dir("chain_absent");
+        let c = log_chain_check(&dir.join("policy.log"));
+        assert_eq!(c.status, Status::Ok);
+        assert!(c.detail.contains("no policy.log"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn log_chain_intact_is_ok_and_broken_is_fail() {
+        let dir = temp_dir("chain_states");
+        let path = dir.join("policy.log");
+        crate::logchain::append_chained(&path, "ASK [r] agent=direct", "cmd").unwrap();
+        crate::logchain::append_chained(&path, "DENY [r2] agent=direct", "cmd2").unwrap();
+        let c = log_chain_check(&path);
+        assert_eq!(c.status, Status::Ok, "{}", c.detail);
+        assert!(c.detail.contains("chain intact"));
+        // Tamper: edit a payload byte.
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, text.replacen("cmd2", "cmdX", 1)).unwrap();
+        let c = log_chain_check(&path);
+        assert_eq!(c.status, Status::Fail);
+        assert!(c.detail.contains("BROKEN"), "{}", c.detail);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

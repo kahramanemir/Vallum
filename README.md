@@ -223,7 +223,10 @@ Exit codes: 0 allow, 10 ask, 20 deny, 125 config error — usable from CI.
 Setting `guardrail = false` makes Vallum behave byte-for-byte as it did before
 this layer existed. User rules are matched with the same most-severe-wins
 resolution as the built-ins (`Deny` > `Ask` > `Allow`), and every enforced non-Allow
-verdict is recorded (redacted) to `policy.log`.
+verdict is recorded (redacted) to `policy.log`. Every `policy.log` entry is
+hash-chained (SHA-256) to the previous one; `vallum log verify` detects in-place
+edits, deletions, and insertions, and an externally stored head hash
+(`--expect-head`) also catches tail truncation.
 
 **Scope, honestly:** the guardrail matches patterns against the command text —
 it is a speed bump / defense-in-depth layer, not a sandbox. It sees through
@@ -506,7 +509,9 @@ vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
 vallum mcp scan                      # scan discovered MCP configs for risks
 vallum mcp scan --json <path>...     # structured output / specific files
-vallum doctor                        # self-check: config, hook, guardrail, hook-audit, PATH, log dir
+vallum log verify                    # verify the policy.log hash chain (tamper evidence)
+vallum log verify --expect-head <hex>  # also compare against an externally stored head
+vallum doctor                        # self-check: config, hook, guardrail, hook-audit, log-chain, PATH, log dir
 vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
 

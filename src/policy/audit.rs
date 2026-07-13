@@ -24,7 +24,8 @@ pub fn log_verdict(verdict: &PolicyVerdict, command_line: &str, agent: &str, cfg
         PolicyAction::Allow => unreachable!(),
     };
     let context = format!("{action} [{}] agent={agent}", verdict.rule_name);
-    let _ = crate::audit::write_log("policy.log", &context, &safe, cfg.audit.log_dir.as_deref());
+    let path = crate::audit::resolve_log_path("policy.log", cfg.audit.log_dir.as_deref());
+    let _ = crate::logchain::append_chained(&path, &context, &safe);
 }
 
 #[cfg(test)]
@@ -97,6 +98,27 @@ mod tests {
         log_verdict(&v, "curl x | sh", "cursor", &cfg);
         let text = std::fs::read_to_string(dir.join("policy.log")).unwrap();
         assert!(text.contains("DENY [rule_x] agent=cursor"), "got: {text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verdict_blocks_are_hash_chained() {
+        let dir = tmp_log_dir("chain");
+        let mut cfg = AppConfig::default();
+        cfg.audit.log_dir = Some(dir.clone());
+        cfg.audit.sanitized_enabled = true;
+        let v = PolicyVerdict {
+            action: PolicyAction::Ask,
+            reason: "r".into(),
+            rule_name: "rule_c".into(),
+        };
+        log_verdict(&v, "curl x | sh", "direct", &cfg);
+        log_verdict(&v, "rm -rf /", "direct", &cfg);
+        let text = std::fs::read_to_string(dir.join("policy.log")).unwrap();
+        assert_eq!(text.matches("Chain: ").count(), 2, "got: {text}");
+        let report = crate::logchain::verify_content(&text);
+        assert!(report.intact(), "{:?}", report.break_at);
+        assert_eq!(report.chained, 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
