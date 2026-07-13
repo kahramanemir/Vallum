@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failing on one that matches a dangerous guardrail pattern (curl-pipe-shell,
   reverse shell, …). Both reuse the existing guardrail engine; no new
   detection logic. Defends against the malicious-hook / CVE-2025-59536 vector.
+- **Tamper-evident audit log.** Every `policy.log` Ask/Deny entry now carries
+  a SHA-256 hash chained to the previous entry (flock-serialized, genesis-
+  anchored). New `vallum log verify [--expect-head <hex>]` recomputes the
+  chain (exit 0 intact / 20 tamper evidence / 125 usage error) and prints the
+  head hash for external anchoring; `vallum doctor` gains a `log-chain`
+  check that fails on a broken chain. Adds the project's first crypto
+  dependency, RustCrypto's `sha2` — deliberately not hand-rolled.
 
 ## [0.8.7]
 

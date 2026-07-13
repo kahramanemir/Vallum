@@ -326,6 +326,33 @@ checks, both reusing the existing engines (no new detection logic):
   watch files, cover project-level Claude settings, or audit `.mcp.json`
   server definitions (that is `vallum mcp scan`).
 
+### Tamper-evident audit log (policy.log hash chain)
+
+Every Ask/Deny block appended to `policy.log` carries a `Chain:` line —
+`SHA256(previous_hash ++ block_body)`, genesis-anchored. `vallum log verify`
+recomputes the chain and reports the first break; `vallum doctor` runs the
+same check (`log-chain`, broken → ✗ non-zero exit). Appends are serialized
+with an exclusive `flock`, entries are single-lined so logged commands cannot
+inject fake chain/delimiter lines, and the payload is already redacted by the
+secret scrubber before hashing.
+
+Honest limits:
+
+- **Tail truncation is invisible to the chain alone** — deleting the last N
+  blocks leaves a self-consistent shorter chain. `vallum log verify` always
+  prints the current head hash; store it outside the machine (password
+  manager, another host) and pass it back via `--expect-head` to catch
+  truncation and full-file rewrites. Absence alone is not treated as tamper
+  evidence (a machine that has never logged a verdict has no chain), but
+  `--expect-head` against a missing log **does** fail (exit 20) — full
+  deletion is the easiest truncation, and the anchor exists to catch it.
+- An attacker with write access and knowledge of the scheme can **recompute
+  the whole chain** (there is no secret key — a same-host key would be
+  readable by the same attacker). The chain is tamper-*evident* against
+  in-place edits, not tamper-*proof*; the external anchor closes the gap.
+- Blocks written before this feature (no `Chain:` line) are legacy:
+  unverifiable and outside chain coverage.
+
 ## MCP configuration scanning
 
 `vallum mcp scan` is a **static, read-only** check over MCP server
