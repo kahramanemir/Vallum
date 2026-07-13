@@ -247,6 +247,15 @@ pub fn run_verify(expect_head: Option<&str>, cfg: &crate::config::AppConfig) -> 
             125
         }
         Ok(None) => {
+            // With an external anchor, absence IS evidence: full deletion is
+            // the easiest tail truncation, and the anchor exists to catch it.
+            if normalized.is_some() {
+                println!(
+                    "✗ expected a chained head but no policy.log exists at {} — log deleted or never anchored here",
+                    path.display()
+                );
+                return 20;
+            }
             println!(
                 "no policy.log at {} — nothing to verify (absence alone is not tamper evidence)",
                 path.display()
@@ -535,6 +544,9 @@ mod tests {
         cfg.audit.log_dir = Some(dir.clone());
         // Absent file → 0 (absence is not tamper evidence).
         assert_eq!(run_verify(None, &cfg), 0);
+        // Absent file WITH an anchor is tamper evidence (full deletion is
+        // the easiest tail truncation).
+        assert_eq!(run_verify(Some(GENESIS), &cfg), 20);
         // Bad --expect-head → 125 usage error.
         assert_eq!(run_verify(Some("nothex"), &cfg), 125);
         // Intact chain → 0.
