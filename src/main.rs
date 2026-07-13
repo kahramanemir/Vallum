@@ -444,6 +444,21 @@ fn main() {
                 std::process::exit(vallum::mcp::run_scan(paths, *json, &config));
             }
         },
+        Commands::Log { action } => match action {
+            vallum::cli::LogAction::Verify { expect_head } => {
+                let config = match AppConfig::load() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Config Error: {e}");
+                        std::process::exit(125);
+                    }
+                };
+                std::process::exit(vallum::logchain::run_verify(
+                    expect_head.as_deref(),
+                    &config,
+                ));
+            }
+        },
         Commands::Doctor => {
             std::process::exit(vallum::doctor::run());
         }

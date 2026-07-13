@@ -230,6 +230,37 @@ pub fn render_report(path: &Path, r: &ChainReport, expect_head: Option<&str>) ->
     }
 }
 
+/// CLI entry: resolve the policy.log path from config, verify, print, and
+/// return the process exit code (0 intact, 20 tamper evidence, 125 usage/IO).
+pub fn run_verify(expect_head: Option<&str>, cfg: &crate::config::AppConfig) -> i32 {
+    let normalized = expect_head.map(|s| s.to_ascii_lowercase());
+    if let Some(h) = &normalized {
+        if !is_hex64(h) {
+            eprintln!("log verify: --expect-head must be 64 hex characters");
+            return 125;
+        }
+    }
+    let path = crate::audit::resolve_log_path("policy.log", cfg.audit.log_dir.as_deref());
+    match verify_file(&path) {
+        Err(e) => {
+            eprintln!("log verify: {e}");
+            125
+        }
+        Ok(None) => {
+            println!(
+                "no policy.log at {} — nothing to verify (absence alone is not tamper evidence)",
+                path.display()
+            );
+            0
+        }
+        Ok(Some(report)) => {
+            let (text, code) = render_report(&path, &report, normalized.as_deref());
+            print!("{text}");
+            code
+        }
+    }
+}
+
 #[cfg(unix)]
 fn lock_exclusive(file: &std::fs::File) -> std::io::Result<()> {
     use std::os::unix::io::AsRawFd;
@@ -494,6 +525,24 @@ mod tests {
         let r = verify_content(&std::fs::read_to_string(&path).unwrap());
         assert!(r.intact(), "{:?}", r.break_at);
         assert_eq!(r.chained, 40);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn run_verify_paths_and_codes() {
+        let dir = tmp_dir("run_verify");
+        let mut cfg = crate::config::AppConfig::default();
+        cfg.audit.log_dir = Some(dir.clone());
+        // Absent file → 0 (absence is not tamper evidence).
+        assert_eq!(run_verify(None, &cfg), 0);
+        // Bad --expect-head → 125 usage error.
+        assert_eq!(run_verify(Some("nothex"), &cfg), 125);
+        // Intact chain → 0.
+        let path = dir.join("policy.log");
+        append_chained(&path, "ASK [r] agent=direct", "cmd").unwrap();
+        assert_eq!(run_verify(None, &cfg), 0);
+        // Wrong anchor → 20.
+        assert_eq!(run_verify(Some(GENESIS), &cfg), 20);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

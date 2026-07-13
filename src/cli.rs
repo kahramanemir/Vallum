@@ -138,6 +138,11 @@ Examples:
         #[command(subcommand)]
         action: McpAction,
     },
+    /// Inspect the audit logs
+    Log {
+        #[command(subcommand)]
+        action: LogAction,
+    },
     /// Show cumulative token savings report
     Stats {
         /// Delete all collected stats (prompts for confirmation)
@@ -206,5 +211,22 @@ Exit codes: 0 clean, 10 warnings, 20 high-severity, 125 usage/read error.")]
         /// Specific config file(s) to scan; omit to auto-discover
         #[arg(value_name = "PATH")]
         paths: Vec<std::path::PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum LogAction {
+    /// Verify the policy.log hash chain (tamper evidence)
+    #[command(after_help = "\
+Examples:
+  vallum log verify                       check the chain, print the head hash
+  vallum log verify --expect-head <hex>   also compare against an externally
+                                          stored head (catches tail truncation)
+
+Exit codes: 0 intact, 20 tamper evidence, 125 usage/read error.")]
+    Verify {
+        /// Externally stored head hash to compare against
+        #[arg(long, value_name = "HEX")]
+        expect_head: Option<String>,
     },
 }
