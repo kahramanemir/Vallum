@@ -78,6 +78,33 @@ fn json_missing_path_is_not_reported_clean() {
 }
 
 #[test]
+fn malformed_explicit_path_exits_125() {
+    // A corrupted config named explicitly (CI / pre-commit) must not pass
+    // green — an unparseable explicit file is a usage error, exit 125, like an
+    // unreadable one. (A malformed *discovered* file would stay a warning.)
+    let dir = std::env::temp_dir().join(format!(
+        "vallum_mcp_malformed_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("mcp.json");
+    std::fs::write(&cfg, "{ this is not valid json").unwrap();
+
+    let (stdout, _stderr, code) = run(&["mcp", "scan", cfg.to_str().unwrap()]);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(code, 125, "malformed explicit path must exit 125");
+    assert!(
+        !stdout.contains("No issues found"),
+        "must not claim clean on a parse failure: {stdout:?}"
+    );
+}
+
+#[test]
 fn control_chars_in_server_name_are_escaped_in_human_output() {
     // The scan reads untrusted MCP configs. A server name carrying terminal
     // escape sequences must not reach the terminal raw, or a malicious config

@@ -81,7 +81,16 @@ pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 
                             .findings
                             .extend(scan::scan_servers(&servers, policy.as_ref(), cfg));
                     }
-                    Err(e) => report.warnings.push(format!("{}: {e}", path.display())),
+                    Err(e) => {
+                        report.warnings.push(format!("{}: {e}", path.display()));
+                        // A malformed *explicit* path is a usage error (parallel
+                        // to an unreadable one), so CI gets a non-zero exit
+                        // instead of a silent green on a corrupted config. A
+                        // malformed *discovered* file stays a non-fatal warning.
+                        if explicit_paths.iter().any(|p| p == path) {
+                            usage_error = true;
+                        }
+                    }
                 }
             }
             Err(e) => {

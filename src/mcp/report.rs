@@ -66,7 +66,12 @@ pub fn render_human(report: &ScanReport, usage_error: bool) {
         println!("  warning: {}", safe(w));
     }
     if report.findings.is_empty() {
-        println!("No issues found.");
+        // Don't claim a clean result when a usage error (e.g. a malformed
+        // explicit path) meant we couldn't fully complete the scan — the
+        // warning above already carried the cause and the exit code is 125.
+        if !usage_error {
+            println!("No issues found.");
+        }
         return;
     }
     // Group by server for display.
