@@ -117,8 +117,12 @@ pub fn verify_content(content: &str) -> ChainReport {
         report.total += 1;
         let index = i + 1;
         let timestamp = lines.first().copied().unwrap_or("?").to_string();
-        let chain_pos = lines.iter().position(|l| l.starts_with("Chain: "));
-        let Some(pos) = chain_pos else {
+        // The writer always emits `Chain:` as the block's LAST line. Anchor
+        // detection there so a payload line that itself starts with `Chain: `
+        // (payloads are escaped to one line, but can still start that way)
+        // cannot masquerade as the chain line.
+        let is_chained = lines.last().is_some_and(|l| l.starts_with("Chain: "));
+        if !is_chained {
             if in_chain {
                 report.break_at = Some(BreakInfo {
                     index,
@@ -130,10 +134,11 @@ pub fn verify_content(content: &str) -> ChainReport {
             }
             report.legacy += 1;
             continue;
-        };
+        }
         in_chain = true;
+        let pos = lines.len() - 1;
         let value = lines[pos].strip_prefix("Chain: ").unwrap_or("");
-        if pos != lines.len() - 1 || !is_hex64(value) {
+        if !is_hex64(value) {
             report.break_at = Some(BreakInfo {
                 index,
                 timestamp,
@@ -437,6 +442,23 @@ mod tests {
     }
 
     #[test]
+    fn payload_starting_with_chain_prefix_still_verifies() {
+        let dir = tmp_dir("v_chainpayload");
+        let path = dir.join("policy.log");
+        append_chained(
+            &path,
+            "ASK [r] agent=direct",
+            "Chain: 0000000000000000000000000000000000000000000000000000000000000000",
+        )
+        .unwrap();
+        append_chained(&path, "ASK [r2] agent=direct", "cmd").unwrap();
+        let r = verify_content(&std::fs::read_to_string(&path).unwrap());
+        assert!(r.intact(), "{:?}", r.break_at);
+        assert_eq!(r.chained, 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn render_report_codes() {
         let dir = tmp_dir("render");
         let (path, text) = chained_file(&dir, 2);
@@ -447,6 +469,9 @@ mod tests {
         assert_eq!(render_report(&path, &r, Some(GENESIS)).1, 20);
         let broken = verify_content(&text.replacen("rule_0", "rule_Z", 1));
         assert_eq!(render_report(&path, &broken, None).1, 20);
+        let empty = verify_content("");
+        assert_eq!(render_report(&path, &empty, Some(GENESIS)).1, 20);
+        assert_eq!(render_report(&path, &empty, None).1, 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
