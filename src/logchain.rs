@@ -180,8 +180,10 @@ pub fn verify_content(content: &str) -> ChainReport {
 
 /// I/O wrapper. `Ok(None)` = file absent (nothing to verify).
 pub fn verify_file(path: &Path) -> Result<Option<ChainReport>, String> {
-    if !path.exists() {
-        return Ok(None);
+    match path.try_exists() {
+        Ok(false) => return Ok(None),
+        Ok(true) => {}
+        Err(e) => return Err(format!("stat {}: {e}", path.display())),
     }
     let bytes = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     Ok(Some(verify_content(&String::from_utf8_lossy(&bytes))))
@@ -478,6 +480,25 @@ mod tests {
     fn verify_file_absent_is_none() {
         let dir = tmp_dir("v_absent");
         assert!(verify_file(&dir.join("nope.log")).unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn verify_file_unreadable_dir_is_error_not_absent() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tmp_dir("v_eacces");
+        let sub = dir.join("locked");
+        std::fs::create_dir_all(&sub).unwrap();
+        let path = sub.join("policy.log");
+        append_chained(&path, "ASK [r] agent=direct", "cmd").unwrap();
+        std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let res = verify_file(&path);
+        std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            res.is_err(),
+            "dir-level EACCES must be an error, not absence"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

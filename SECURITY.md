@@ -339,8 +339,8 @@ secret scrubber before hashing.
 Honest limits:
 
 - **Tail truncation is invisible to the chain alone** — deleting the last N
-  blocks leaves a self-consistent shorter chain. `vallum log verify` always
-  prints the current head hash; store it outside the machine (password
+  blocks leaves a self-consistent shorter chain. `vallum log verify` prints
+  the head hash on every successful verify; store it outside the machine (password
   manager, another host) and pass it back via `--expect-head` to catch
   truncation and full-file rewrites. Absence alone is not treated as tamper
   evidence (a machine that has never logged a verdict has no chain), but
