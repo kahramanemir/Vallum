@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.7]
+
 ### Added
 - **Six more secret formats redacted.** Supabase personal access tokens
   (`sbp_…`), Doppler service/personal tokens (`dp.st.…`/`dp.pt.…`/…), Linear
@@ -399,6 +401,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.7]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.7
 [0.8.6]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.6
 [0.8.5]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.5
 [0.8.4]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.4
