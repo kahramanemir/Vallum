@@ -177,6 +177,7 @@ Built-in rules (all default to `Ask`):
 | `reverse_shell` | Reverse shell (`/dev/tcp`, `nc -e`, `socat exec:`) |
 | `git_clean_force` | `git clean -f` permanently deletes untracked files |
 | `chown_recursive_root` | Recursive `chown` on a root/home/system path |
+| `write_agent_config` | A shell command writing to an agent config/hook file (`.claude/settings.json` and friends) — possible hook injection |
 
 **How `Ask` surfaces:**
 
@@ -256,7 +257,10 @@ All four installers write to a user-level config
 removes exactly the entry the installer added, and `vallum doctor` reports
 per-agent status (`hook (claude)`, `hook (cursor)`, `hook (gemini)`,
 `hook (codex)`), showing "agent not detected — skipped" for agents that
-aren't installed on the machine. Every Ask/Deny verdict, on any agent, is
+aren't installed on the machine. `vallum doctor` also audits the hook
+commands installed in each agent's config and flags any it did not install
+(a foreign hook is a review prompt; one matching a dangerous guardrail
+pattern fails the check). Every Ask/Deny verdict, on any agent, is
 still recorded to `policy.log` with `agent=<claude|cursor|gemini|codex|direct>`.
 
 Limitations, stated plainly:
@@ -502,7 +506,7 @@ vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
 vallum mcp scan                      # scan discovered MCP configs for risks
 vallum mcp scan --json <path>...     # structured output / specific files
-vallum doctor                        # self-check: config, hook, guardrail, PATH, log dir
+vallum doctor                        # self-check: config, hook, guardrail, hook-audit, PATH, log dir
 vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
 

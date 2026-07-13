@@ -216,6 +216,9 @@ pub fn resolve_ask(assume_yes: bool, is_tty: bool, response: Option<&str>) -> As
 pub fn builtin_rules() -> &'static [PolicyRule] {
     static RULES: OnceLock<Vec<PolicyRule>> = OnceLock::new();
     RULES.get_or_init(|| {
+        // Path segments of the agent config / hook files Vallum protects.
+        // Matched anywhere on the line; the leading `\.` anchors each segment.
+        const AGENT_CFG: &str = r"(?:\.claude/settings(?:\.local)?\.json|\.cursor/hooks\.json|\.codex/(?:hooks\.json|config\.toml)|\.gemini/settings\.json|\.mcp\.json)";
         let ask = |name: &str, pat: &str, reason: &str| PolicyRule {
             name: name.to_string(),
             pattern: Regex::new(pat).unwrap(),
@@ -274,6 +277,12 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
             ask("chown_recursive_root",
                 r"(?i)\bchown\s+(?:-\S+\s+)*(?:-R|--recursive)\S*\s+(?:-\S+\s+)*\S+\s+(?:/|~|\$HOME|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library))(?:[\s;&|)`]|/\*?|$)",
                 "Recursive chown targeting a root, home, or system path"),
+            ask("write_agent_config",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}['"]?\s*(?:[;&|)]|$))"#,
+                    cfg = AGENT_CFG
+                ),
+                "Writing to an AI agent config/hook file (possible hook injection)"),
         ]
     })
 }
@@ -298,6 +307,7 @@ pub fn builtin_names() -> Vec<&'static str> {
         "reverse_shell",
         "git_clean_force",
         "chown_recursive_root",
+        "write_agent_config",
     ]
 }
 
@@ -416,7 +426,7 @@ mod tests {
     #[test]
     fn builtins_all_ask_and_named() {
         let names = builtin_names();
-        assert_eq!(names.len(), 17);
+        assert_eq!(names.len(), 18);
         assert_eq!(names.len(), builtin_rules().len(), "names must track rules");
         for r in builtin_rules() {
             assert_eq!(
@@ -623,6 +633,48 @@ mod tests {
                 p.evaluate(cmd).action,
                 PolicyAction::Allow,
                 "should NOT fire: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn write_agent_config_asks_on_writes() {
+        let p = Policy::compile(&crate::config::PolicyConfig::default()).unwrap();
+        let writes = [
+            "echo '{\"hooks\":{}}' > ~/.claude/settings.json",
+            "echo x >> .claude/settings.local.json",
+            "cat payload | tee .cursor/hooks.json",
+            "dd of=.codex/hooks.json",
+            "sed -i 's/a/b/' .gemini/settings.json",
+            "cp evil.json .claude/settings.json",
+            "mv /tmp/x .mcp.json",
+            "install -m 644 evil .codex/config.toml",
+        ];
+        for w in writes {
+            assert_eq!(
+                p.evaluate(w).action,
+                PolicyAction::Ask,
+                "expected Ask for: {w}"
+            );
+        }
+    }
+
+    #[test]
+    fn write_agent_config_allows_reads_and_source_copies() {
+        let p = Policy::compile(&crate::config::PolicyConfig::default()).unwrap();
+        let benign = [
+            "cat ~/.claude/settings.json",
+            "jq . .claude/settings.json",
+            "less .cursor/hooks.json",
+            "diff .claude/settings.json /tmp/old.json",
+            "cp .claude/settings.json settings.backup.json", // path is the SOURCE
+            "jq . .claude/settings.json > /tmp/out.json",    // writes elsewhere
+        ];
+        for b in benign {
+            assert_eq!(
+                p.evaluate(b).action,
+                PolicyAction::Allow,
+                "expected Allow for: {b}"
             );
         }
     }

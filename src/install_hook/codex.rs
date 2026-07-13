@@ -29,6 +29,28 @@ pub fn has_hook(settings: &Value) -> bool {
         .unwrap_or(false)
 }
 
+/// Every hook command under hooks.PreToolUse[].hooks[].command.
+pub fn list_hook_commands(settings: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(entries) = settings
+        .get("hooks")
+        .and_then(|h| h.get("PreToolUse"))
+        .and_then(|p| p.as_array())
+    else {
+        return out;
+    };
+    for entry in entries {
+        if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
+            for h in hooks {
+                if let Some(cmd) = h.get("command").and_then(|c| c.as_str()) {
+                    out.push(cmd.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
 /// The exact JSON entry we add to hooks.PreToolUse.
 fn vallum_entry() -> Value {
     json!({
@@ -149,5 +171,18 @@ mod tests {
         let mut v = serde_json::json!({ "hooks": "not an object" });
         let err = add(&mut v, false).unwrap_err();
         assert!(err.contains("hooks"), "{err}");
+    }
+
+    #[test]
+    fn list_hook_commands_reads_entries() {
+        let settings = serde_json::json!({
+            "hooks": { "PreToolUse": [
+                { "hooks": [{ "type": "command", "command": "vallum hook --agent codex" }] }
+            ]}
+        });
+        assert_eq!(
+            list_hook_commands(&settings),
+            vec!["vallum hook --agent codex".to_string()]
+        );
     }
 }

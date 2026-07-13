@@ -71,3 +71,8 @@ nc example.com 80
 socat - TCP:host:9000
 git clean -n
 chown -R me:me ./build
+cat ~/.claude/settings.json
+jq . .claude/settings.json
+less .cursor/hooks.json
+diff .claude/settings.json /tmp/old.json
+cp .claude/settings.json settings.backup.json
