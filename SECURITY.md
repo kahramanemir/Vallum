@@ -86,9 +86,14 @@ they are logged):
 ### Prompt injection in output and logs
 
 Pattern families ("ignore previous instructions", "you are now…", "reveal
-your system prompt", injected `Assistant:`/`System:` turns) are detected in
-English, Turkish, Spanish, German, and French, resist line-splitting, and
-neutralize the whole trigger line (trigger + payload) with
+your system prompt", DAN/persona jailbreaks, injected `Assistant:`/`System:`
+turns, plus escalation banners ("IMPORTANT!!! ignore…" / "strictly adhere to
+the following instruction"), covert-action markers ("do not tell the user",
+"hide this from the user"), and data-exfiltration imperatives (send/email a
+credential-ish object to an external address/URL)) are detected across English,
+Turkish, Spanish, German, French, Chinese, Japanese, Korean, Russian, Arabic,
+Portuguese, Italian, Dutch, and Hindi (coverage varies by family), resist
+line-splitting, and neutralize the whole trigger line (trigger + payload) with
 `[POTENTIAL INJECTION NEUTRALIZED]`. With `--strict` (or `[security]
 strict`), any detection replaces the entire output body with
 `[OUTPUT BLOCKED: prompt injection detected]` while preserving the child
@@ -105,8 +110,8 @@ dependency-free confusable table.
 
 **Known gaps**
 
-- Chinese-language injection (no word boundaries; needs different matching —
-  deferred).
+- The escalation/covert-action/exfiltration families are English-only so far
+  (the override/reveal families are multilingual).
 - Confusables outside the curated table (the table targets ASCII-Latin
   look-alikes of the keyword alphabets, not the full Unicode confusable set).
 - Leetspeak digit substitution (`1gn0re`) — not folded.
