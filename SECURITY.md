@@ -302,6 +302,30 @@ matchable argument — as is a wrapped command hidden inside a single combined
 token (`env -S "bash -c 'rm -rf /'"`). Built-in rules are `Ask`, not `Deny`, and
 the guardrail is one layer — not a guarantee.
 
+### Agent-config self-protection
+
+Vallum defends the agent config/hook files it manages with two complementary
+checks, both reusing the existing engines (no new detection logic):
+
+- **Write guardrail (`write_agent_config`):** Asks before a shell write-verb
+  (redirect, `tee`, `dd of=`, `sed -i`, `cp`/`mv`/`install` to a destination)
+  targets a protected config/hook file (`.claude/settings.json`,
+  `.claude/settings.local.json`, `.cursor/hooks.json`, `.codex/hooks.json`,
+  `.codex/config.toml`, `.gemini/settings.json`, `.mcp.json`). Reads and
+  copies *from* these files never fire. It does **not** see non-shell writers
+  (`python -c 'open(...,"w")'`), a variable-assembled path, or a `cp` whose
+  destination is not the final token — fail-safe, same scope as the rest of
+  the guardrail. Vallum's own `install-hook` writes via Rust `std::fs`, so it
+  never triggers.
+- **Doctor hook-audit:** `vallum doctor` inspects the four JSON agent hook
+  configs (user-level), lists foreign hook commands — any it did not install —
+  as a Warn, and fails (`✗`, non-zero exit) on one matching a dangerous
+  guardrail pattern (curl-pipe-shell, reverse shell, …). Displayed commands
+  are redacted through the secret scrubber first. It is a static,
+  pattern-based, pull check (the user must run `vallum doctor`); it does not
+  watch files, cover project-level Claude settings, or audit `.mcp.json`
+  server definitions (that is `vallum mcp scan`).
+
 ## MCP configuration scanning
 
 `vallum mcp scan` is a **static, read-only** check over MCP server

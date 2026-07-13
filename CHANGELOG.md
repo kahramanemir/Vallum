@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   injection in embedded tool descriptions, reusing the existing scrubber and
   guardrail engines. Read-only; exit codes 0/10/20/125 for CI. Static mode does
   not see runtime `tools/list` descriptions (live introspection deferred).
+- **Agent-config self-protection.** A `write_agent_config` guardrail rule Asks
+  before a shell command writes to an agent config/hook file
+  (`.claude/settings.json` and friends), and `vallum doctor` now audits the
+  installed hook commands — flagging any Vallum did not install (Warn) and
+  failing on one that matches a dangerous guardrail pattern (curl-pipe-shell,
+  reverse shell, …). Both reuse the existing guardrail engine; no new
+  detection logic. Defends against the malicious-hook / CVE-2025-59536 vector.
 
 ## [0.8.7]
 
