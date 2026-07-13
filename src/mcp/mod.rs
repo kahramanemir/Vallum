@@ -3,3 +3,6 @@
 //! Read-only — connects to nothing, launches nothing, modifies nothing.
 
 pub mod model;
+pub mod scan;
+
+pub use scan::{CheckKind, Finding, Severity};
