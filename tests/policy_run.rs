@@ -13,7 +13,10 @@ fn deny_rule_blocks_direct_run_with_exit_125() {
     let cfg = dir.join("config.toml");
     std::fs::write(
         &cfg,
-        "[[policy.rules]]\npattern = 'echo BLOCKME'\naction = \"deny\"\nreason = \"blocked in test\"\n",
+        format!(
+            "[audit]\nlog_dir = \"{}\"\n[[policy.rules]]\npattern = 'echo BLOCKME'\naction = \"deny\"\nreason = \"blocked in test\"\n",
+            dir.display()
+        ),
     )
     .unwrap();
 
@@ -40,7 +43,10 @@ fn assume_yes_lets_ask_proceed() {
     let cfg = dir.join("config.toml");
     std::fs::write(
         &cfg,
-        "[[policy.rules]]\npattern = 'echo ASKME'\naction = \"ask\"\nreason = \"ask in test\"\n",
+        format!(
+            "[audit]\nlog_dir = \"{}\"\n[[policy.rules]]\npattern = 'echo ASKME'\naction = \"ask\"\nreason = \"ask in test\"\n",
+            dir.display()
+        ),
     )
     .unwrap();
 
@@ -66,7 +72,10 @@ fn policy_approved_bypasses_regate_on_wrapped_command() {
     let cfg = dir.join("config.toml");
     std::fs::write(
         &cfg,
-        "[[policy.rules]]\npattern = 'echo BLOCKME'\naction = \"deny\"\nreason = \"blocked in test\"\n",
+        format!(
+            "[audit]\nlog_dir = \"{}\"\n[[policy.rules]]\npattern = 'echo BLOCKME'\naction = \"deny\"\nreason = \"blocked in test\"\n",
+            dir.display()
+        ),
     )
     .unwrap();
 

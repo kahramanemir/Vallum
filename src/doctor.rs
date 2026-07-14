@@ -306,6 +306,38 @@ pub fn log_chain_check(path: &Path) -> Check {
     }
 }
 
+/// Circuit-breaker status. A trip is designed behavior, not an install
+/// failure — locked is Warn, never Fail.
+pub fn breaker_check(cfg: &crate::config::AppConfig) -> Check {
+    if !cfg.security.circuit_breaker {
+        return Check::new(
+            "breaker",
+            Status::Ok,
+            "disabled (security.circuit_breaker = false)",
+        );
+    }
+    let s = &cfg.security;
+    match crate::breaker::active_trip_at(
+        &crate::breaker::state_path(cfg),
+        s.breaker_threshold,
+        s.breaker_window_secs,
+    ) {
+        Some(trip) => Check::new(
+            "breaker",
+            Status::Warn,
+            format!("LOCKED until {} — clear with `vallum unlock`", trip.until),
+        ),
+        None => Check::new(
+            "breaker",
+            Status::Ok,
+            format!(
+                "armed — threshold {} in {}s, cooldown {}s",
+                s.breaker_threshold, s.breaker_window_secs, s.breaker_cooldown_secs
+            ),
+        ),
+    }
+}
+
 /// One foreign hook command found by the audit. `command` is redacted for
 /// display; `dangerous` is `Some(rule_name)` when the guardrail flags it.
 #[derive(Debug, Clone)]
@@ -495,6 +527,7 @@ pub fn run() -> i32 {
             None => Check::new("hook-audit", Status::Warn, "skipped — policy failed to compile"),
         },
         log_chain_check(&resolve_log_dir(&config).join("policy.log")),
+        breaker_check(&config),
         check_log_dir(&resolve_log_dir(&config)),
     ];
 
@@ -808,6 +841,37 @@ mod tests {
         let c = log_chain_check(&path);
         assert_eq!(c.status, Status::Fail);
         assert!(c.detail.contains("BROKEN"), "{}", c.detail);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn breaker_check_states() {
+        let dir = temp_dir("breaker_states");
+        let mut cfg = crate::config::AppConfig::default();
+        cfg.audit.log_dir = Some(dir.clone());
+
+        // Armed (no state file yet) → Ok with the configured numbers.
+        let c = breaker_check(&cfg);
+        assert_eq!(c.status, Status::Ok);
+        assert!(c.detail.contains("armed"), "{}", c.detail);
+        assert!(
+            c.detail.contains('5') && c.detail.contains("60"),
+            "{}",
+            c.detail
+        );
+
+        // Locked → Warn with unlock instructions.
+        let until = (chrono::Local::now() + chrono::Duration::seconds(300)).to_rfc3339();
+        std::fs::write(dir.join("breaker.state"), format!("locked {until}\n")).unwrap();
+        let c = breaker_check(&cfg);
+        assert_eq!(c.status, Status::Warn);
+        assert!(c.detail.contains("vallum unlock"), "{}", c.detail);
+
+        // Disabled → Ok "disabled".
+        cfg.security.circuit_breaker = false;
+        let c = breaker_check(&cfg);
+        assert_eq!(c.status, Status::Ok);
+        assert!(c.detail.contains("disabled"), "{}", c.detail);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

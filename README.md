@@ -179,6 +179,24 @@ Built-in rules (all default to `Ask`):
 | `chown_recursive_root` | Recursive `chown` on a root/home/system path |
 | `write_agent_config` | A shell command writing to an agent config/hook file (`.claude/settings.json` and friends) — possible hook injection |
 
+### Circuit breaker (blast radius)
+
+When the guardrail returns 5 Ask/Deny verdicts within 60 seconds (a runaway
+agent probing dangerous commands), Vallum trips a circuit breaker: **every**
+command is denied for 5 minutes — or until you run `vallum unlock`. The trip
+itself is recorded in the hash-chained `policy.log` (requires the default
+`[audit] sanitized_enabled = true`; the breaker itself works either way). Tune
+or disable it under
+`[security]`:
+
+```toml
+[security]
+circuit_breaker = true        # default on
+breaker_threshold = 5         # Ask/Deny events …
+breaker_window_secs = 60      # … within this window → trip
+breaker_cooldown_secs = 300   # lock duration
+```
+
 **How `Ask` surfaces:**
 
 - **Hook mode (Claude Code, Cursor):** the verdict maps to the agent's native
@@ -511,7 +529,8 @@ vallum mcp scan                      # scan discovered MCP configs for risks
 vallum mcp scan --json <path>...     # structured output / specific files
 vallum log verify                    # verify the policy.log hash chain (tamper evidence)
 vallum log verify --expect-head <hex>  # also compare against an externally stored head
-vallum doctor                        # self-check: config, hook, guardrail, hook-audit, log-chain, PATH, log dir
+vallum unlock                        # clear a tripped circuit-breaker lock
+vallum doctor                        # self-check: config, hook, guardrail, hook-audit, log-chain, breaker, PATH, log dir
 vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
 

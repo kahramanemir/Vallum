@@ -81,6 +81,9 @@ fn hook_broken_config_warns_and_keeps_builtin_guardrail() {
     let mut child = Command::new(bin)
         .arg("hook")
         .env("VALLUM_CONFIG", &cfg)
+        // Isolate ~/.vallum (breaker.state) to the temp dir: the built-in
+        // fallback records the Ask verdict and must not touch the real home.
+        .env("HOME", &dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -260,7 +263,8 @@ fn hook_tui_ask_emits_no_updated_input() {
     use std::process::{Command, Stdio};
 
     // Temp config: default policy, but sanitized audit log off so the test
-    // does not append to the developer's real ~/.vallum/logs.
+    // does not append to the developer's real ~/.vallum/logs. HOME is also
+    // redirected here so the breaker's Ask recording stays isolated too.
     let dir = std::env::temp_dir().join(format!("vallum_tui_ask_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let cfg = dir.join("config.toml");
@@ -270,6 +274,7 @@ fn hook_tui_ask_emits_no_updated_input() {
     let mut child = Command::new(bin)
         .arg("hook")
         .env("VALLUM_CONFIG", &cfg)
+        .env("HOME", &dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
