@@ -143,6 +143,8 @@ Examples:
         #[command(subcommand)]
         action: LogAction,
     },
+    /// Clear a tripped circuit-breaker lock (see [security] circuit_breaker)
+    Unlock,
     /// Show cumulative token savings report
     Stats {
         /// Delete all collected stats (prompts for confirmation)

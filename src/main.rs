@@ -106,6 +106,14 @@ fn main() {
             // would double-gate (and, being non-interactive, fail closed on an
             // already-approved Ask), so we skip.
             if config.security.guardrail && !*policy_approved {
+                if let Some(trip) = vallum::breaker::active_trip(&config) {
+                    let verdict = vallum::policy::PolicyVerdict {
+                        action: vallum::policy::PolicyAction::Deny,
+                        reason: vallum::breaker::trip_reason(&trip),
+                        rule_name: "circuit_breaker".to_string(),
+                    };
+                    emit_block(*json, &verdict, cmd, args);
+                }
                 // Unreachable Err: AppConfig::load() -> validate() already
                 // compiled every user regex, so a failure here means config
                 // drift. Fail closed rather than silently running ungated.
@@ -131,6 +139,7 @@ fn main() {
                             "direct",
                             &config,
                         );
+                        vallum::breaker::record_and_check(&config);
                         emit_block(*json, &verdict, cmd, args);
                     }
                     vallum::policy::PolicyAction::Ask => {
@@ -141,6 +150,7 @@ fn main() {
                             "direct",
                             &config,
                         );
+                        vallum::breaker::record_and_check(&config);
                         let assume_yes = config.security.assume_yes
                             || std::env::var("VALLUM_ASSUME_YES")
                                 .map(|v| v == "1")
@@ -459,6 +469,25 @@ fn main() {
                 ));
             }
         },
+        Commands::Unlock => {
+            let config = match AppConfig::load() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Config Error: {e}");
+                    std::process::exit(125);
+                }
+            };
+            match vallum::breaker::unlock(&config) {
+                Ok(Some(until)) => {
+                    println!("circuit breaker unlocked (was locked until {until})")
+                }
+                Ok(None) => println!("circuit breaker is not locked"),
+                Err(e) => {
+                    eprintln!("unlock: {e}");
+                    std::process::exit(125);
+                }
+            }
+        }
         Commands::Doctor => {
             std::process::exit(vallum::doctor::run());
         }
