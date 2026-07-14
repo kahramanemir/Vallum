@@ -62,11 +62,12 @@ fn assume_yes_lets_ask_proceed() {
 }
 
 // The hook enforces policy once, then re-wraps the approved command through
-// `vallum run --policy-approved -- bash -c '<original>'`. That inner run must
-// NOT re-gate — otherwise the approved command would fail closed (no tty) and
-// never run. This mirrors that wrapper exactly against a matching Deny rule.
+// `vallum run --approval-token <hmac> -- bash -c '<original>'`. That inner run
+// must NOT re-gate the approved command — otherwise it would fail closed
+// (no tty) and never run. A VALID token for the exact command line proves
+// approval and lets it through even against a matching Deny rule.
 #[test]
-fn policy_approved_bypasses_regate_on_wrapped_command() {
+fn valid_token_bypasses_regate_on_wrapped_command() {
     let dir = std::env::temp_dir().join(format!("vallum_polrun3_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let cfg = dir.join("config.toml");
@@ -78,13 +79,18 @@ fn policy_approved_bypasses_regate_on_wrapped_command() {
         ),
     )
     .unwrap();
+    // Same secret the hook would have created, in the same resolved location.
+    let secret = b"polrun-secret-key-exactly-32-byt".to_vec();
+    std::fs::write(dir.join("approval.secret"), &secret).unwrap();
+    let token = vallum::approval::token_for("bash -c echo BLOCKME", &secret);
 
     let out = Command::new(vallum_bin())
         .env("VALLUM_CONFIG", &cfg)
         .env("VALLUM_ASSUME_YES", "0")
         .args([
             "run",
-            "--policy-approved",
+            "--approval-token",
+            &token,
             "--",
             "bash",
             "-c",
@@ -100,6 +106,53 @@ fn policy_approved_bypasses_regate_on_wrapped_command() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(String::from_utf8_lossy(&out.stdout).contains("BLOCKME"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// A forged token (agent self-asserting a bypass) does NOT match the machine
+// secret, so the command is re-gated and the Deny rule blocks it (exit 125).
+#[test]
+fn forged_token_is_regated_and_denied() {
+    let dir = std::env::temp_dir().join(format!("vallum_polrun4_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("config.toml");
+    std::fs::write(
+        &cfg,
+        format!(
+            "[audit]\nlog_dir = \"{}\"\n[[policy.rules]]\npattern = 'echo BLOCKME'\naction = \"deny\"\nreason = \"blocked in test\"\n",
+            dir.display()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("approval.secret"),
+        b"real-secret-key-exactly-32-bytes",
+    )
+    .unwrap();
+
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .env("VALLUM_ASSUME_YES", "0")
+        .args([
+            "run",
+            "--approval-token",
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            "--",
+            "bash",
+            "-c",
+            "echo BLOCKME",
+        ])
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        out.status.code(),
+        Some(125),
+        "forged token must be re-gated and denied; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("blocked in test"));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
