@@ -35,7 +35,7 @@ fn decision_json(permission: &'static str, reason: String) -> Option<String> {
 /// Cursor's normal flow proceed (P1).
 pub(crate) fn respond(raw: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Option<String> {
     let input: CursorInput = serde_json::from_str(raw).ok()?;
-    match super::decide(&input.command, policy) {
+    match super::gate(&input.command, policy, cfg) {
         Verdict::PassThrough | Verdict::Allow => None,
         Verdict::Ask { reason, rule_name } => {
             super::audit_verdict(
@@ -72,8 +72,20 @@ mod tests {
     use crate::config::{PolicyConfig, PolicyRuleConfig};
 
     fn cfg_no_log() -> AppConfig {
+        // Isolate breaker.state to a temp dir so gate()'s Ask/Deny recording
+        // never touches the developer's real ~/.vallum.
+        let dir = std::env::temp_dir().join(format!(
+            "vallum_cursor_codec_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
         let mut c = AppConfig::default();
         c.audit.sanitized_enabled = false; // unit tests must not write policy.log
+        c.audit.log_dir = Some(dir);
         c
     }
 

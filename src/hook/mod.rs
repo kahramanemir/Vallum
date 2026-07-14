@@ -72,6 +72,30 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
     }
 }
 
+/// The breaker-aware funnel every enforcement point calls. Order matters:
+/// empty and `vallum`-headed commands pass through BEFORE the trip check so
+/// `vallum unlock` stays reachable while locked (the pass-through only
+/// skips the rewrite — the executed binary is Vallum itself, and a wrapped
+/// `vallum run` re-enters this gate in the child process).
+pub fn gate(command: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Verdict {
+    let trimmed = command.trim_start();
+    let head = trimmed.split_whitespace().next().unwrap_or("");
+    if trimmed.is_empty() || head == "vallum" {
+        return decide(command, policy);
+    }
+    if let Some(trip) = crate::breaker::active_trip(cfg) {
+        return Verdict::Deny {
+            reason: crate::breaker::trip_reason(&trip),
+            rule_name: "circuit_breaker".to_string(),
+        };
+    }
+    let verdict = decide(command, policy);
+    if matches!(verdict, Verdict::Ask { .. } | Verdict::Deny { .. }) {
+        crate::breaker::record_and_check(cfg);
+    }
+    verdict
+}
+
 /// Read all of stdin. None on read error — codecs exit 0 silently.
 pub(crate) fn read_stdin() -> Option<String> {
     let mut buf = String::new();
@@ -227,6 +251,95 @@ mod tests {
 
     fn guardrail() -> Policy {
         Policy::compile(&PolicyConfig::default()).unwrap()
+    }
+
+    /// Cfg whose breaker state lives in an isolated temp dir.
+    fn breaker_cfg(tag: &str) -> (AppConfig, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "vallum_gate_{tag}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut cfg = AppConfig::default();
+        cfg.audit.log_dir = Some(dir.clone());
+        (cfg, dir)
+    }
+
+    fn lock_now(dir: &std::path::Path) {
+        let until = (chrono::Local::now() + chrono::Duration::seconds(300)).to_rfc3339();
+        std::fs::write(dir.join("breaker.state"), format!("locked {until}\n")).unwrap();
+    }
+
+    #[test]
+    fn gate_denies_everything_while_tripped() {
+        let (cfg, dir) = breaker_cfg("deny_all");
+        lock_now(&dir);
+        match gate("git status", Some(&guardrail()), &cfg) {
+            Verdict::Deny { rule_name, reason } => {
+                assert_eq!(rule_name, "circuit_breaker");
+                assert!(reason.contains("vallum unlock"), "{reason}");
+            }
+            other => panic!("expected breaker deny, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gate_passes_vallum_and_empty_through_while_tripped() {
+        let (cfg, dir) = breaker_cfg("passthrough");
+        lock_now(&dir);
+        assert_eq!(
+            gate("vallum unlock", Some(&guardrail()), &cfg),
+            Verdict::PassThrough
+        );
+        assert_eq!(gate("   ", Some(&guardrail()), &cfg), Verdict::PassThrough);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gate_records_ask_verdicts_and_trips_at_threshold() {
+        let (mut cfg, dir) = breaker_cfg("records");
+        cfg.security.breaker_threshold = 3;
+        // 3 Ask verdicts: each returned unchanged; the 3rd writes the lock.
+        for _ in 0..3 {
+            match gate("rm -rf /", Some(&guardrail()), &cfg) {
+                Verdict::Ask { .. } => {}
+                other => panic!("expected Ask, got {other:?}"),
+            }
+        }
+        // Next command — benign — is now denied.
+        match gate("git status", Some(&guardrail()), &cfg) {
+            Verdict::Deny { rule_name, .. } => assert_eq!(rule_name, "circuit_breaker"),
+            other => panic!("expected breaker deny, got {other:?}"),
+        }
+        // The trip is in policy.log for forensics.
+        let log = std::fs::read_to_string(dir.join("policy.log")).unwrap();
+        assert!(log.contains("circuit_breaker"), "{log}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gate_allow_verdicts_never_count() {
+        let (mut cfg, dir) = breaker_cfg("allow_free");
+        cfg.security.breaker_threshold = 1;
+        for _ in 0..5 {
+            assert_eq!(gate("git status", Some(&guardrail()), &cfg), Verdict::Allow);
+        }
+        assert!(!dir.join("breaker.state").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gate_disabled_breaker_is_inert() {
+        let (mut cfg, dir) = breaker_cfg("disabled");
+        cfg.security.circuit_breaker = false;
+        lock_now(&dir);
+        assert_eq!(gate("git status", Some(&guardrail()), &cfg), Verdict::Allow);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Claude Code `PreToolUse` codec: rewrite Bash tool calls through `vallum run`.
 
 use super::Verdict;
+use crate::config::AppConfig;
 use crate::policy::{Policy, PolicyAction};
 use serde::Deserialize;
 use serde::Serialize;
@@ -68,7 +69,12 @@ pub enum HookDecision {
 /// Decide whether to rewrite, and whether the pre-exec policy allows, asks
 /// about, or denies the command. Policy is evaluated on the ORIGINAL command,
 /// before it is wrapped for `vallum run`.
-pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>) -> HookDecision {
+pub fn rewrite_decision(
+    tool_name: &str,
+    command: &str,
+    policy: Option<&Policy>,
+    cfg: &AppConfig,
+) -> HookDecision {
     if !tool_name.eq_ignore_ascii_case("Bash") {
         return HookDecision::PassThrough;
     }
@@ -81,7 +87,7 @@ pub fn rewrite_decision(tool_name: &str, command: &str, policy: Option<&Policy>)
         "vallum run --policy-approved -- bash -c {}",
         super::shell_escape(command)
     );
-    match super::decide(command, policy) {
+    match super::gate(command, policy, cfg) {
         Verdict::PassThrough => HookDecision::PassThrough,
         Verdict::Allow => HookDecision::Allow { command: wrapped },
         Verdict::Ask { reason, rule_name } => {
@@ -114,7 +120,12 @@ pub fn run() -> i32 {
 
     let (config, policy) = super::load_config_and_policy();
 
-    let decision = rewrite_decision(&input.tool_name, &input.tool_input.command, policy.as_ref());
+    let decision = rewrite_decision(
+        &input.tool_name,
+        &input.tool_input.command,
+        policy.as_ref(),
+        &config,
+    );
 
     let out = match decision {
         HookDecision::PassThrough => return 0,
@@ -180,9 +191,26 @@ mod tests {
         Policy::compile(&PolicyConfig::default()).unwrap()
     }
 
+    /// Cfg with breaker/audit state isolated to a temp dir (tests must not
+    /// touch the developer's real ~/.vallum).
+    fn isolated_cfg() -> crate::config::AppConfig {
+        let dir = std::env::temp_dir().join(format!(
+            "vallum_claude_codec_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut cfg = crate::config::AppConfig::default();
+        cfg.audit.log_dir = Some(dir);
+        cfg
+    }
+
     #[test]
     fn allow_rewrites_plain_command() {
-        let d = rewrite_decision("Bash", "git status", Some(&guardrail()));
+        let d = rewrite_decision("Bash", "git status", Some(&guardrail()), &isolated_cfg());
         match d {
             HookDecision::Allow { command } => {
                 assert_eq!(
@@ -198,7 +226,7 @@ mod tests {
     fn tool_name_match_is_case_insensitive() {
         // A different casing of the shell tool (e.g. a future rename to `bash`)
         // must still be gated, not silently passed through ungated.
-        match rewrite_decision("bash", "rm -rf /", Some(&guardrail())) {
+        match rewrite_decision("bash", "rm -rf /", Some(&guardrail()), &isolated_cfg()) {
             HookDecision::Ask { .. } => {}
             other => panic!("expected Ask for lowercase tool name, got {other:?}"),
         }
@@ -206,7 +234,7 @@ mod tests {
 
     #[test]
     fn dangerous_command_asks_with_reason() {
-        let d = rewrite_decision("Bash", "rm -rf /", Some(&guardrail()));
+        let d = rewrite_decision("Bash", "rm -rf /", Some(&guardrail()), &isolated_cfg());
         match d {
             HookDecision::Ask {
                 command, reason, ..
@@ -236,7 +264,12 @@ mod tests {
 
     #[test]
     fn denied_command_returns_deny_no_rewrite() {
-        let d = rewrite_decision("Bash", "echo SECRETDROP", Some(&guardrail_with_deny()));
+        let d = rewrite_decision(
+            "Bash",
+            "echo SECRETDROP",
+            Some(&guardrail_with_deny()),
+            &isolated_cfg(),
+        );
         match d {
             HookDecision::Deny { reason, .. } => assert!(reason.contains("denied in test")),
             other => panic!("expected Deny, got {other:?}"),
@@ -245,7 +278,7 @@ mod tests {
 
     #[test]
     fn guardrail_off_always_allows() {
-        let d = rewrite_decision("Bash", "rm -rf /", None);
+        let d = rewrite_decision("Bash", "rm -rf /", None, &isolated_cfg());
         match d {
             HookDecision::Allow { command } => {
                 assert_eq!(
@@ -260,26 +293,31 @@ mod tests {
     #[test]
     fn non_bash_and_tui_pass_through() {
         assert!(matches!(
-            rewrite_decision("Edit", "git status", None),
+            rewrite_decision("Edit", "git status", None, &isolated_cfg()),
             HookDecision::PassThrough
         ));
         assert!(matches!(
-            rewrite_decision("Bash", "vim foo", Some(&guardrail())),
+            rewrite_decision("Bash", "vim foo", Some(&guardrail()), &isolated_cfg()),
             HookDecision::PassThrough
         ));
         assert!(matches!(
-            rewrite_decision("Bash", "vallum run x", None),
+            rewrite_decision("Bash", "vallum run x", None, &isolated_cfg()),
             HookDecision::PassThrough
         ));
         assert!(matches!(
-            rewrite_decision("Bash", "", None),
+            rewrite_decision("Bash", "", None, &isolated_cfg()),
             HookDecision::PassThrough
         ));
     }
 
     #[test]
     fn tui_ask_has_no_rewrite() {
-        let d = rewrite_decision("Bash", "less /etc/shadow", Some(&guardrail()));
+        let d = rewrite_decision(
+            "Bash",
+            "less /etc/shadow",
+            Some(&guardrail()),
+            &isolated_cfg(),
+        );
         match d {
             HookDecision::Ask {
                 command, reason, ..
@@ -289,5 +327,21 @@ mod tests {
             }
             other => panic!("expected Ask, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn tripped_breaker_denies_benign_command() {
+        let cfg = isolated_cfg();
+        let dir = cfg.audit.log_dir.clone().unwrap();
+        let until = (chrono::Local::now() + chrono::Duration::seconds(300)).to_rfc3339();
+        std::fs::write(dir.join("breaker.state"), format!("locked {until}\n")).unwrap();
+        match rewrite_decision("Bash", "git status", Some(&guardrail()), &cfg) {
+            HookDecision::Deny { rule_name, reason } => {
+                assert_eq!(rule_name, "circuit_breaker");
+                assert!(reason.contains("vallum unlock"), "{reason}");
+            }
+            other => panic!("expected deny, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
