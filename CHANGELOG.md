@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Blast-radius circuit breaker.** When the guardrail returns 5 Ask/Deny
+  verdicts within 60 seconds (a runaway agent), Vallum now trips a breaker
+  that denies **all** commands for 5 minutes — or until `vallum unlock`.
+  On by default, tunable/disable-able under `[security]`; trips are recorded
+  in the hash-chained `policy.log`; `vallum doctor` shows the breaker state.
+  OWASP Agentic Top-10 blast-radius control.
+
 ## [0.8.8]
 
 ### Added

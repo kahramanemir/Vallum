@@ -353,6 +353,31 @@ Honest limits:
 - Blocks written before this feature (no `Chain:` line) are legacy:
   unverifiable and outside chain coverage.
 
+### Blast-radius circuit breaker
+
+The guardrail rules gate one command at a time; the circuit breaker watches
+the *rate*. Five Ask/Deny verdicts inside 60 seconds (defaults; `[security]`
+tunable) trip a machine-wide lock: every subsequent command — including ones
+the guardrail would allow — is denied for the cooldown (300s) or until
+`vallum unlock`. The verdict that trips the breaker is returned unchanged;
+lockdown starts with the next command. Trips are logged to the hash-chained
+`policy.log` (`rule_name = circuit_breaker`). `vallum`-headed commands keep
+their pass-through so `vallum unlock` stays reachable — a wrapped
+`vallum run` still re-enters the policy (and the trip check) in the child
+process.
+
+Honest limits:
+
+- The state file (`~/.vallum/logs/breaker.state`) shares the config file's
+  trust boundary: an attacker with filesystem write access can delete or
+  edit it. The breaker is a brake on runaway **agent behavior**, not an
+  on-host tamper-proof control.
+- The window is machine-global, not per-agent-session: agents running in
+  parallel share the counter (deliberate — the blast radius being limited
+  is the machine's).
+- Counting is best-effort: if the state file cannot be written, verdicts
+  still stand but the breaker may undercount.
+
 ## MCP configuration scanning
 
 `vallum mcp scan` is a **static, read-only** check over MCP server
