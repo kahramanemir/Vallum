@@ -125,10 +125,11 @@ pub fn unlock_at(path: &Path) -> Result<Option<String>, String> {
     file.read_to_string(&mut content)
         .map_err(|e| format!("read {}: {e}", path.display()))?;
     let now = Local::now();
-    // Window length doesn't matter for unlock; keep events as-is (window 0
-    // would prune everything — use a day so recent context survives).
-    let (events, lock) = parse_and_prune(&content, now, 86_400);
-    let rendered = render(&events, None);
+    // Unlock is a deliberate human action — grant a fresh window, so a new
+    // burst still re-trips but the old (already-punished) one doesn't. We only
+    // need the lock here; the in-window events are discarded on purpose.
+    let (_events, lock) = parse_and_prune(&content, now, 86_400);
+    let rendered = render(&[], None);
     file.seek(std::io::SeekFrom::Start(0))
         .and_then(|_| file.set_len(0))
         .and_then(|_| file.write_all(rendered.as_bytes()))
@@ -294,6 +295,13 @@ mod tests {
         let cleared = unlock_at(&p).unwrap();
         assert_eq!(cleared, Some(future));
         assert!(active_trip_at(&p, 5, 60).is_none());
+        // Unlock resets the event counter too: a fresh window, not an
+        // instant re-trip from the old burst.
+        let text = std::fs::read_to_string(&p).unwrap();
+        assert!(
+            !text.contains("v "),
+            "unlock must clear in-window events: {text}"
+        );
         // Second unlock: nothing to clear.
         assert_eq!(unlock_at(&p).unwrap(), None);
         // Absent file: also fine.

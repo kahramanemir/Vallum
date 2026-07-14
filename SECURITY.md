@@ -361,7 +361,9 @@ tunable) trip a machine-wide lock: every subsequent command — including ones
 the guardrail would allow — is denied for the cooldown (300s) or until
 `vallum unlock`. The verdict that trips the breaker is returned unchanged;
 lockdown starts with the next command. Trips are logged to the hash-chained
-`policy.log` (`rule_name = circuit_breaker`). `vallum`-headed commands keep
+`policy.log` (`rule_name = circuit_breaker`) — when `[audit] sanitized_enabled`
+is on (the default); with it off the breaker still trips and locks, but writes
+no forensic line. `vallum`-headed commands keep
 their pass-through so `vallum unlock` stays reachable — a wrapped
 `vallum run` still re-enters the policy (and the trip check) in the child
 process.

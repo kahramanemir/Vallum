@@ -184,7 +184,9 @@ Built-in rules (all default to `Ask`):
 When the guardrail returns 5 Ask/Deny verdicts within 60 seconds (a runaway
 agent probing dangerous commands), Vallum trips a circuit breaker: **every**
 command is denied for 5 minutes — or until you run `vallum unlock`. The trip
-itself is recorded in the hash-chained `policy.log`. Tune or disable it under
+itself is recorded in the hash-chained `policy.log` (requires the default
+`[audit] sanitized_enabled = true`; the breaker itself works either way). Tune
+or disable it under
 `[security]`:
 
 ```toml
