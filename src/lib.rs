@@ -28,6 +28,7 @@
 // src/lib.rs — library surface so integration tests can exercise internals.
 pub mod ansi;
 pub mod audit;
+pub mod breaker;
 pub mod cli;
 pub mod config;
 pub mod doctor;
