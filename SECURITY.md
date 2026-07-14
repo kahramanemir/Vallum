@@ -380,6 +380,27 @@ Honest limits:
 - Counting is best-effort: if the state file cannot be written, verdicts
   still stand but the breaker may undercount.
 
+### Approval tokens (hook → `vallum run`)
+
+In hook mode the Claude codec is the single point of policy enforcement: it
+evaluates a command once, and on approval re-wraps it as
+`vallum run --approval-token <hmac> -- bash -c '<original>'`. The token is an
+HMAC-SHA256 over the exact command line, keyed by a machine-local secret
+(`~/.vallum/logs/approval.secret`, mode 0600, generated on first use). `vallum
+run` recomputes the HMAC and skips re-evaluation only when the token matches.
+
+This prevents an agent from asserting its own bypass: a forged or injected
+`vallum run --approval-token … -- …` cannot produce a valid token without the
+secret, so it is re-gated by the guardrail (and the circuit breaker).
+
+**Boundary (honest):** the token defeats an agent that only *observes*
+rewritten commands. A process running as the same user with no sandbox can
+*read* `approval.secret` and mint valid tokens — Vallum does not defend against
+that, because on the same machine there is no cryptographic boundary between
+your files and a process you launched. Confining the agent so it cannot read
+arbitrary files is the operating-system sandbox's job (roadmap item #1), not
+the guardrail's.
+
 ## MCP configuration scanning
 
 `vallum mcp scan` is a **static, read-only** check over MCP server
