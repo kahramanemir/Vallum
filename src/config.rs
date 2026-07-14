@@ -71,6 +71,16 @@ pub struct SecurityConfig {
     /// Auto-approve direct-mode `ask` verdicts (for scripts/CI). Also honored
     /// via the `VALLUM_ASSUME_YES=1` environment variable.
     pub assume_yes: bool,
+    /// Blast-radius circuit breaker: when `breaker_threshold` Ask/Deny
+    /// verdicts land within `breaker_window_secs`, ALL commands are denied
+    /// for `breaker_cooldown_secs` (or until `vallum unlock`). Default on.
+    pub circuit_breaker: bool,
+    /// Ask/Deny events within the window that trip the breaker (≥ 1).
+    pub breaker_threshold: u32,
+    /// Sliding-window length in seconds (≥ 1).
+    pub breaker_window_secs: u64,
+    /// Lock duration in seconds once tripped (≥ 1).
+    pub breaker_cooldown_secs: u64,
 }
 
 impl Default for SecurityConfig {
@@ -79,6 +89,10 @@ impl Default for SecurityConfig {
             strict: false,
             guardrail: true,
             assume_yes: false,
+            circuit_breaker: true,
+            breaker_threshold: 5,
+            breaker_window_secs: 60,
+            breaker_cooldown_secs: 300,
         }
     }
 }
@@ -236,6 +250,15 @@ impl AppConfig {
             }
             Regex::new(&rule.pattern)
                 .map_err(|e| format!("invalid policy regex '{}': {}", rule.pattern, e))?;
+        }
+        if self.security.breaker_threshold == 0 {
+            return Err("breaker_threshold must be at least 1".to_string());
+        }
+        if self.security.breaker_window_secs == 0 {
+            return Err("breaker_window_secs must be at least 1".to_string());
+        }
+        if self.security.breaker_cooldown_secs == 0 {
+            return Err("breaker_cooldown_secs must be at least 1".to_string());
         }
         Ok(())
     }
@@ -453,6 +476,31 @@ extra_secret_patterns = [ { pattern = "token-[0-9]+" } ]
         assert!(!cfg.security.assume_yes);
         assert!(cfg.policy.rules.is_empty());
         assert!(cfg.policy.disabled.is_empty());
+    }
+
+    #[test]
+    fn breaker_defaults_on_with_conservative_thresholds() {
+        let c = SecurityConfig::default();
+        assert!(c.circuit_breaker);
+        assert_eq!(c.breaker_threshold, 5);
+        assert_eq!(c.breaker_window_secs, 60);
+        assert_eq!(c.breaker_cooldown_secs, 300);
+    }
+
+    #[test]
+    fn breaker_zero_threshold_is_config_error() {
+        let mut config = AppConfig::default();
+        config.security.breaker_threshold = 0;
+        let err = config.validate().unwrap_err();
+        assert!(err.contains("breaker_threshold"), "{err}");
+        config.security.breaker_threshold = 5;
+        config.security.breaker_window_secs = 0;
+        let err = config.validate().unwrap_err();
+        assert!(err.contains("breaker_window_secs"), "{err}");
+        config.security.breaker_window_secs = 60;
+        config.security.breaker_cooldown_secs = 0;
+        let err = config.validate().unwrap_err();
+        assert!(err.contains("breaker_cooldown_secs"), "{err}");
     }
 
     #[test]
