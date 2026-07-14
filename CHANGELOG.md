@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.8]
 
 ### Added
 - `vallum mcp scan`: static scanner for MCP server configs — flags embedded
@@ -422,6 +422,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.8]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.8
 [0.8.7]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.7
 [0.8.6]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.6
 [0.8.5]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.5
