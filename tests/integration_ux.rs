@@ -21,9 +21,24 @@ fn hook_rewrites_bash_command() {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
+    // Isolate: the hook now mints a machine approval secret; keep it (and any
+    // logs) out of the developer's real ~/.vallum via a temp HOME + log_dir.
+    let dir = std::env::temp_dir().join(format!(
+        "vallum_hook_rewrite_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("config.toml");
+    std::fs::write(&cfg, format!("[audit]\nlog_dir = \"{}\"\n", dir.display())).unwrap();
+
     let bin = env!("CARGO_BIN_EXE_vallum");
     let mut child = Command::new(bin)
         .arg("hook")
+        .env("VALLUM_CONFIG", &cfg)
+        .env("HOME", &dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -49,10 +64,14 @@ fn hook_rewrites_bash_command() {
         stdout.contains("\"permissionDecision\":\"allow\""),
         "got: {stdout}"
     );
+    // The approved command is re-wrapped through `vallum run` carrying a
+    // per-command HMAC approval token (not the old forgeable --policy-approved).
     assert!(
-        stdout.contains("vallum run --policy-approved -- bash -c 'git status'"),
+        stdout.contains("vallum run --approval-token "),
         "got: {stdout}"
     );
+    assert!(stdout.contains(" -- bash -c 'git status'"), "got: {stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -119,9 +138,24 @@ fn hook_silently_allows_non_bash_tool() {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
+    // Isolate: `vallum hook` mints the approval secret on startup regardless of
+    // tool; redirect HOME + log_dir so it never lands in the real ~/.vallum.
+    let dir = std::env::temp_dir().join(format!(
+        "vallum_hook_nonbash_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("config.toml");
+    std::fs::write(&cfg, format!("[audit]\nlog_dir = \"{}\"\n", dir.display())).unwrap();
+
     let bin = env!("CARGO_BIN_EXE_vallum");
     let mut child = Command::new(bin)
         .arg("hook")
+        .env("VALLUM_CONFIG", &cfg)
+        .env("HOME", &dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -140,6 +174,7 @@ fn hook_silently_allows_non_bash_tool() {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.is_empty(), "expected empty stdout, got: {stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
