@@ -88,7 +88,7 @@ pub fn record_at(
         std::fs::create_dir_all(parent)?;
     }
     let mut file = crate::fsutil::open_rw_private(path)?;
-    lock_exclusive(&file)?;
+    crate::fsutil::lock_exclusive(&file)?;
     let mut content = String::new();
     file.read_to_string(&mut content)?;
     let now = Local::now();
@@ -120,7 +120,7 @@ pub fn unlock_at(path: &Path) -> Result<Option<String>, String> {
     }
     let mut file = crate::fsutil::open_rw_private(path)
         .map_err(|e| format!("open {}: {e}", path.display()))?;
-    lock_exclusive(&file).map_err(|e| format!("lock {}: {e}", path.display()))?;
+    crate::fsutil::lock_exclusive(&file).map_err(|e| format!("lock {}: {e}", path.display()))?;
     let mut content = String::new();
     file.read_to_string(&mut content)
         .map_err(|e| format!("read {}: {e}", path.display()))?;
@@ -185,20 +185,6 @@ pub fn trip_reason(trip: &Trip) -> String {
          commands blocked until {} (run `vallum unlock` to clear now)",
         trip.threshold, trip.window_secs, trip.until
     )
-}
-
-#[cfg(unix)]
-fn lock_exclusive(file: &std::fs::File) -> std::io::Result<()> {
-    use std::os::unix::io::AsRawFd;
-    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn lock_exclusive(_file: &std::fs::File) -> std::io::Result<()> {
-    Ok(())
 }
 
 #[cfg(test)]
