@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a vulnerability privately
+    url: https://github.com/kahramanemir/Vallum/security/advisories/new
+    about: Guardrail bypasses, secret leaks, or anything exploitable — please report privately instead of opening a public issue.
+  - name: Security policy & threat model
+    url: https://github.com/kahramanemir/Vallum/blob/main/SECURITY.md
+    about: What Vallum protects, by which mechanism, and what is explicitly out of scope.

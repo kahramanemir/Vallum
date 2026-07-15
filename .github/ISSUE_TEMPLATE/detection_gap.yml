@@ -1,0 +1,57 @@
+name: Detection gap
+description: A secret that wasn't redacted, an injection that wasn't neutralized, a guardrail miss — or a false positive on benign output.
+title: "detection: "
+labels: ["detection"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Vallum's detection claims are measured over a committed corpus
+        ([evals/report.md](https://github.com/kahramanemir/Vallum/blob/main/evals/report.md)),
+        so real-world misses and false positives are exactly the reports we want.
+
+        **Before posting, defang your example:**
+        - **Never paste a real secret** — replace the value's middle with `XXXX`
+          while keeping the *shape* (prefix, length, charset) intact.
+        - If the finding is **exploitable right now** (e.g. a guardrail bypass that
+          executes a destructive command silently), prefer
+          [private vulnerability reporting](https://github.com/kahramanemir/Vallum/security/advisories/new).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of gap?
+      options:
+        - secret NOT redacted (false negative)
+        - prompt injection NOT neutralized (false negative)
+        - guardrail did not Ask/Deny a dangerous command (false negative)
+        - benign output wrongly redacted / neutralized / gated (false positive)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Vallum version
+      placeholder: vallum 0.8.9
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Defanged sample
+      description: |
+        The input that was mishandled, with sensitive parts replaced by `XXXX`.
+        For guardrail cases, the `vallum policy test "<cmd>"` verdict is ideal.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Where did this output come from (tool, log format, language)? Anything that helps us build a corpus entry.
