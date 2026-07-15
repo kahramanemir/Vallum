@@ -5,7 +5,7 @@
 ## Checklist
 
 CI runs these on Linux and macOS — please run them locally first
-(see [CONTRIBUTING.md](../CONTRIBUTING.md)):
+(see [CONTRIBUTING.md](https://github.com/kahramanemir/Vallum/blob/main/CONTRIBUTING.md)):
 
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --all-targets -- -D warnings`

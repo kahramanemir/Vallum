@@ -36,13 +36,26 @@ body:
         - built from source
     validations:
       required: true
-  - type: input
+  - type: dropdown
     id: platform
     attributes:
-      label: OS and architecture
-      placeholder: macOS 15.5 (Apple Silicon) / Ubuntu 24.04 (x86_64)
+      label: Platform
+      description: Vallum ships for macOS and Linux only (Windows is on the deferred roadmap).
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (aarch64)
+        - other / unsupported platform
     validations:
       required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: macOS 15.5 / Ubuntu 24.04
+    validations:
+      required: false
   - type: dropdown
     id: agent
     attributes:
