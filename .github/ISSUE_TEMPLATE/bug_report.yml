@@ -1,0 +1,77 @@
+name: Bug report
+description: Something is broken — a crash, wrong output, a hook that doesn't fire.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Two things before you start:
+
+        - **Security-sensitive finding** (a guardrail bypass, a secret that leaked
+          through redaction, an injection that got through)? Please use
+          [private vulnerability reporting](https://github.com/kahramanemir/Vallum/security/advisories/new)
+          instead of a public issue — or use the *Detection gap* template with a
+          **defanged** example.
+        - **Never paste real secrets or tokens** anywhere in this form, even
+          "expired" ones. Replace the sensitive part with `XXXX`.
+  - type: input
+    id: version
+    attributes:
+      label: Vallum version
+      description: Output of `vallum --version`.
+      placeholder: vallum 0.8.9
+    validations:
+      required: true
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Install channel
+      options:
+        - shell installer (curl … | sh)
+        - Homebrew
+        - cargo install
+        - npm
+        - prebuilt binary from a GitHub Release
+        - built from source
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: macOS 15.5 (Apple Silicon) / Ubuntu 24.04 (x86_64)
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: How was Vallum invoked?
+      options:
+        - direct `vallum run`
+        - Claude Code hook
+        - Cursor hook
+        - Gemini CLI hook
+        - Codex CLI hook
+        - other / not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include the exact command you ran and the output you got (redact anything sensitive).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest command or config that triggers it.
+      render: shell
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`vallum doctor` output"
+      description: Paste if relevant — it pinpoints config/hook/log problems.
+      render: shell
