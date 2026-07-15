@@ -44,6 +44,22 @@ pub fn open_rw_private(path: &Path) -> std::io::Result<File> {
         .open(path)
 }
 
+/// Take an exclusive advisory lock (`flock(LOCK_EX)`) on an open file. Blocks
+/// until acquired; released when the file is dropped. No-op on non-unix.
+#[cfg(unix)]
+pub(crate) fn lock_exclusive(file: &File) -> std::io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn lock_exclusive(_file: &File) -> std::io::Result<()> {
+    Ok(())
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

@@ -88,7 +88,7 @@ fn main() {
             json,
             strict,
             tee,
-            policy_approved,
+            approval_token,
             cmd,
             args,
         } => {
@@ -101,11 +101,24 @@ fn main() {
             };
 
             // --- Guardrail: evaluate the command before running it. ---
-            // `--policy-approved` means the hook already ruled on this exact
-            // command and re-wrapped it through `vallum run`; re-evaluating here
+            // A valid `--approval-token` means the hook already ruled on this
+            // exact command and re-wrapped it through `vallum run`; re-evaluating
             // would double-gate (and, being non-interactive, fail closed on an
-            // already-approved Ask), so we skip.
-            if config.security.guardrail && !*policy_approved {
+            // already-approved Ask), so we skip. The token is an HMAC over this
+            // command line keyed by the machine secret — an agent that forges
+            // the flag without the secret fails verification and is re-gated.
+            let command_line = if args.is_empty() {
+                cmd.clone()
+            } else {
+                format!("{} {}", cmd, args.join(" "))
+            };
+            let pre_approved = match approval_token.as_deref() {
+                Some(tok) => vallum::approval::load_secret(&config)
+                    .map(|secret| vallum::approval::verify(&command_line, tok, &secret))
+                    .unwrap_or(false),
+                None => false,
+            };
+            if config.security.guardrail && !pre_approved {
                 if let Some(trip) = vallum::breaker::active_trip(&config) {
                     let verdict = vallum::policy::PolicyVerdict {
                         action: vallum::policy::PolicyAction::Deny,
@@ -123,11 +136,6 @@ fn main() {
                         eprintln!("Config Error: policy failed to compile: {}", e);
                         std::process::exit(125);
                     }
-                };
-                let command_line = if args.is_empty() {
-                    cmd.clone()
-                } else {
-                    format!("{} {}", cmd, args.join(" "))
                 };
                 let verdict = policy.evaluate(&command_line);
                 match verdict.action {

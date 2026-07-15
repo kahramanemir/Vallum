@@ -74,19 +74,29 @@ pub fn rewrite_decision(
     command: &str,
     policy: Option<&Policy>,
     cfg: &AppConfig,
+    secret: Option<&[u8]>,
 ) -> HookDecision {
     if !tool_name.eq_ignore_ascii_case("Bash") {
         return HookDecision::PassThrough;
     }
     // The hook is the single point of policy enforcement in hook mode. The
-    // wrapped command carries `--policy-approved` so the inner `vallum run` does
-    // NOT re-evaluate the policy — otherwise an approved Ask would be re-gated
-    // and (non-interactively) fail closed, and a user rule matching the
-    // `bash -c` wrapper could block even Allowed commands.
-    let wrapped = format!(
-        "vallum run --policy-approved -- bash -c {}",
-        super::shell_escape(command)
-    );
+    // wrapped command carries an `--approval-token` bound to this exact command
+    // so the inner `vallum run` skips re-evaluation only for THIS command; an
+    // agent that forges the flag without the machine secret is re-gated.
+    let wrapped = match secret {
+        Some(key) => {
+            let token = crate::approval::token_for(&format!("bash -c {command}"), key);
+            format!(
+                "vallum run --approval-token {} -- bash -c {}",
+                token,
+                super::shell_escape(command)
+            )
+        }
+        // No secret available: wrap without a token so `run` gates normally
+        // (safe degradation — an approved Ask fails closed rather than opening
+        // a bypass).
+        None => format!("vallum run -- bash -c {}", super::shell_escape(command)),
+    };
     match super::gate(command, policy, cfg) {
         Verdict::PassThrough => HookDecision::PassThrough,
         Verdict::Allow => HookDecision::Allow { command: wrapped },
@@ -119,12 +129,14 @@ pub fn run() -> i32 {
     };
 
     let (config, policy) = super::load_config_and_policy();
+    let secret = crate::approval::load_or_create_secret(&config);
 
     let decision = rewrite_decision(
         &input.tool_name,
         &input.tool_input.command,
         policy.as_ref(),
         &config,
+        secret.as_deref(),
     );
 
     let out = match decision {
@@ -208,16 +220,36 @@ mod tests {
         cfg
     }
 
+    const TEST_SECRET: &[u8] = b"unit-test-secret-key-32-bytes!!!";
+
+    /// Assert `wrapped` is `vallum run --approval-token <tok> -- bash -c '<orig>'`
+    /// with a token that verifies for the reconstructed command line.
+    fn assert_valid_wrap(wrapped: &str, orig: &str) {
+        let prefix = "vallum run --approval-token ";
+        let suffix = format!("-- bash -c {}", super::super::shell_escape(orig));
+        assert!(wrapped.starts_with(prefix), "prefix: {wrapped}");
+        assert!(wrapped.ends_with(&suffix), "suffix: {wrapped}");
+        let tok = wrapped[prefix.len()..wrapped.len() - suffix.len()]
+            .trim()
+            .to_string();
+        let command_line = format!("bash -c {orig}");
+        assert!(
+            crate::approval::verify(&command_line, &tok, TEST_SECRET),
+            "token must verify for {command_line:?}"
+        );
+    }
+
     #[test]
     fn allow_rewrites_plain_command() {
-        let d = rewrite_decision("Bash", "git status", Some(&guardrail()), &isolated_cfg());
+        let d = rewrite_decision(
+            "Bash",
+            "git status",
+            Some(&guardrail()),
+            &isolated_cfg(),
+            Some(TEST_SECRET),
+        );
         match d {
-            HookDecision::Allow { command } => {
-                assert_eq!(
-                    command,
-                    "vallum run --policy-approved -- bash -c 'git status'"
-                )
-            }
+            HookDecision::Allow { command } => assert_valid_wrap(&command, "git status"),
             other => panic!("expected Allow, got {other:?}"),
         }
     }
@@ -226,7 +258,13 @@ mod tests {
     fn tool_name_match_is_case_insensitive() {
         // A different casing of the shell tool (e.g. a future rename to `bash`)
         // must still be gated, not silently passed through ungated.
-        match rewrite_decision("bash", "rm -rf /", Some(&guardrail()), &isolated_cfg()) {
+        match rewrite_decision(
+            "bash",
+            "rm -rf /",
+            Some(&guardrail()),
+            &isolated_cfg(),
+            Some(TEST_SECRET),
+        ) {
             HookDecision::Ask { .. } => {}
             other => panic!("expected Ask for lowercase tool name, got {other:?}"),
         }
@@ -234,15 +272,18 @@ mod tests {
 
     #[test]
     fn dangerous_command_asks_with_reason() {
-        let d = rewrite_decision("Bash", "rm -rf /", Some(&guardrail()), &isolated_cfg());
+        let d = rewrite_decision(
+            "Bash",
+            "rm -rf /",
+            Some(&guardrail()),
+            &isolated_cfg(),
+            Some(TEST_SECRET),
+        );
         match d {
             HookDecision::Ask {
                 command, reason, ..
             } => {
-                assert_eq!(
-                    command,
-                    Some("vallum run --policy-approved -- bash -c 'rm -rf /'".to_string())
-                );
+                assert_valid_wrap(command.as_deref().expect("rewrite present"), "rm -rf /");
                 assert!(reason.contains("force-delete"));
             }
             other => panic!("expected Ask, got {other:?}"),
@@ -269,6 +310,7 @@ mod tests {
             "echo SECRETDROP",
             Some(&guardrail_with_deny()),
             &isolated_cfg(),
+            Some(TEST_SECRET),
         );
         match d {
             HookDecision::Deny { reason, .. } => assert!(reason.contains("denied in test")),
@@ -278,13 +320,25 @@ mod tests {
 
     #[test]
     fn guardrail_off_always_allows() {
-        let d = rewrite_decision("Bash", "rm -rf /", None, &isolated_cfg());
+        let d = rewrite_decision("Bash", "rm -rf /", None, &isolated_cfg(), Some(TEST_SECRET));
+        match d {
+            HookDecision::Allow { command } => assert_valid_wrap(&command, "rm -rf /"),
+            other => panic!("expected Allow, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_secret_falls_back_to_tokenless_wrap() {
+        let d = rewrite_decision(
+            "Bash",
+            "git status",
+            Some(&guardrail()),
+            &isolated_cfg(),
+            None,
+        );
         match d {
             HookDecision::Allow { command } => {
-                assert_eq!(
-                    command,
-                    "vallum run --policy-approved -- bash -c 'rm -rf /'"
-                )
+                assert_eq!(command, "vallum run -- bash -c 'git status'");
             }
             other => panic!("expected Allow, got {other:?}"),
         }
@@ -293,19 +347,37 @@ mod tests {
     #[test]
     fn non_bash_and_tui_pass_through() {
         assert!(matches!(
-            rewrite_decision("Edit", "git status", None, &isolated_cfg()),
+            rewrite_decision(
+                "Edit",
+                "git status",
+                None,
+                &isolated_cfg(),
+                Some(TEST_SECRET)
+            ),
             HookDecision::PassThrough
         ));
         assert!(matches!(
-            rewrite_decision("Bash", "vim foo", Some(&guardrail()), &isolated_cfg()),
+            rewrite_decision(
+                "Bash",
+                "vim foo",
+                Some(&guardrail()),
+                &isolated_cfg(),
+                Some(TEST_SECRET)
+            ),
             HookDecision::PassThrough
         ));
         assert!(matches!(
-            rewrite_decision("Bash", "vallum run x", None, &isolated_cfg()),
+            rewrite_decision(
+                "Bash",
+                "vallum run x",
+                None,
+                &isolated_cfg(),
+                Some(TEST_SECRET)
+            ),
             HookDecision::PassThrough
         ));
         assert!(matches!(
-            rewrite_decision("Bash", "", None, &isolated_cfg()),
+            rewrite_decision("Bash", "", None, &isolated_cfg(), Some(TEST_SECRET)),
             HookDecision::PassThrough
         ));
     }
@@ -317,6 +389,7 @@ mod tests {
             "less /etc/shadow",
             Some(&guardrail()),
             &isolated_cfg(),
+            Some(TEST_SECRET),
         );
         match d {
             HookDecision::Ask {
@@ -335,7 +408,13 @@ mod tests {
         let dir = cfg.audit.log_dir.clone().unwrap();
         let until = (chrono::Local::now() + chrono::Duration::seconds(300)).to_rfc3339();
         std::fs::write(dir.join("breaker.state"), format!("locked {until}\n")).unwrap();
-        match rewrite_decision("Bash", "git status", Some(&guardrail()), &cfg) {
+        match rewrite_decision(
+            "Bash",
+            "git status",
+            Some(&guardrail()),
+            &cfg,
+            Some(TEST_SECRET),
+        ) {
             HookDecision::Deny { rule_name, reason } => {
                 assert_eq!(rule_name, "circuit_breaker");
                 assert!(reason.contains("vallum unlock"), "{reason}");

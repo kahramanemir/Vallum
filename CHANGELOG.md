@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the hash-chained `policy.log`; `vallum doctor` shows the breaker state.
   OWASP Agentic Top-10 blast-radius control.
 
+### Security
+- The hook→`vallum run` approval handshake now uses a per-command HMAC token
+  keyed by a machine-local secret instead of a plain `--policy-approved` flag,
+  so an injected or careless agent can no longer self-assert a guardrail
+  (and circuit-breaker) bypass. A forged token is re-gated. See SECURITY.md
+  for the trust boundary.
+
 ## [0.8.8]
 
 ### Added
