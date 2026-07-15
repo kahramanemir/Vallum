@@ -27,11 +27,11 @@ Code, Cursor, Codex, Gemini CLI, or any agent that runs shell commands.
 |---|---|
 | **Guardrail** | Stops `rm -rf /`, `curl … \| sh`, force-push, and other dangerous commands *before they run* — prompts (`Ask`) or blocks (`Deny`), on by default. |
 | **Secret redaction** | Masks known key/token formats (OpenAI, AWS, GitHub, Stripe, and more) plus high-entropy credentials before output ever reaches the model. |
-| **Injection defense** | Neutralizes "ignore previous instructions"-style text in five languages, then wraps the output in untrusted-data markers so it can't hijack the agent. |
+| **Injection defense** | Neutralizes "ignore previous instructions"-style text in fourteen languages, then wraps the output in untrusted-data markers so it can't hijack the agent. |
 | **Token savings** | Strips ANSI noise and compresses large build and test logs — a side benefit of routing output through the security pipeline. |
 
 > **Measured, not claimed.** Over a committed, labeled corpus: injection recall
-> **0.812** · precision **1.000** · benign false-positive rate **0.000**;
+> **0.858** · precision **1.000** · benign false-positive rate **0.000**;
 > known-format secret recall **1.000**. Numbers are evidence, not a guarantee —
 > [full report](evals/report.md).
 
@@ -107,7 +107,7 @@ Each command flows through these stages:
 4. **Optimize** — if a registered `CommandOptimizer` matches (e.g. `git status`, `cargo test`, `pytest`, `npm test`), it produces a compressed view; otherwise the input passes through.
 5. **Whitespace collapse** — runs of three or more blank lines collapse to one; trailing spaces are stripped.
 6. **Truncate** — head/tail windows are preserved; important lines (errors, panics, failures) are kept **in place with surrounding context**, and ordinary gaps are elided.
-7. **Scrub** — API tokens (OpenAI, Anthropic, GitHub, GitLab, Slack, AWS, Google, Stripe, SendGrid, Twilio, npm, PyPI, Hugging Face), bearer/bare JWTs, connection-string passwords, and PEM private keys are redacted; known injection phrases are neutralized.
+7. **Scrub** — API tokens in 30+ known formats (OpenAI, Anthropic, GitHub, GitLab, Slack, AWS, Google, Stripe, Supabase, Doppler, Sentry, Databricks, and more), bearer/bare JWTs, connection-string passwords, and PEM private keys are redacted; known injection phrases are neutralized.
 8. **Wrap** — output is enclosed in `[UNTRUSTED TERMINAL OUTPUT]` markers; any forged markers inside the content are defanged so output can't break out of the wrapper.
 9. **Audit + Metrics** — the sanitized output is written under `~/.vallum/logs/` (raw logging is opt-in), and a per-command stats record is appended to `~/.vallum/stats.jsonl`.
 
@@ -344,11 +344,11 @@ Limitations, stated plainly:
 ## Measured detection
 
 The scrubber is evaluated against a committed, labeled corpus in
-`evals/corpus/` (85 injection payloads, 54 hard benign negatives, and secret
-samples across several languages). Headline figures from the latest run
-(full report: [`evals/report.md`](evals/report.md)):
+`evals/corpus/` (113 injection payloads across 14 languages, 74 hard benign
+negatives, and secret samples across several languages). Headline figures
+from the latest run (full report: [`evals/report.md`](evals/report.md)):
 
-- Injection recall: **0.812** · precision: **1.000** · benign false-positive rate: **0.000**
+- Injection recall: **0.858** · precision: **1.000** · benign false-positive rate: **0.000**
 - Known-format secret recall: **1.000** · entropy secret recall: **1.000**
 
 These are measured over a fixed corpus and are **evidence, not a guarantee** —
@@ -461,7 +461,7 @@ Supported settings:
 - `security.guardrail`: enable the pre-exec policy layer that gates dangerous commands (Allow/Ask/Deny) — **default `true`**; set `false` to bypass entirely
 - `security.assume_yes`: auto-approve direct-mode `ask` verdicts (also via `VALLUM_ASSUME_YES=1`) — **default `false`**
 - `policy.rules`: user policy rules — each has `pattern`, `action` (`ask` or `deny`; `allow` is rejected), and `reason`
-- `policy.disabled`: built-in rule names to disable (rm_rf_root, curl_pipe_shell, shell_download_exec, dd_to_device, redirect_to_device, mkfs_device, fork_bomb, chmod_777_recursive, read_sensitive_creds, git_push_force) — default none
+- `policy.disabled`: built-in rule names to disable (rm_rf_root, curl_pipe_shell, shell_download_exec, dd_to_device, redirect_to_device, mkfs_device, fork_bomb, chmod_777_recursive, read_sensitive_creds, git_push_force, find_delete_root, shred_sensitive, truncate_system, xargs_rm_force, reverse_shell, git_clean_force, chown_recursive_root, write_agent_config) — default none
 
 ## Install
 
@@ -525,6 +525,8 @@ vallum uninstall-hook                # remove hooks (same picker; --agent to scr
 vallum hook                          # internal: invoked by the agent's hook config (don't run directly)
 vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
+vallum policy test "<command>"       # one-shot guardrail verdict (exit 0/10/20)
+vallum update                        # check for a newer release + upgrade command
 vallum mcp scan                      # scan discovered MCP configs for risks
 vallum mcp scan --json <path>...     # structured output / specific files
 vallum log verify                    # verify the policy.log hash chain (tamper evidence)
@@ -572,7 +574,7 @@ Note how a tiny output ends up *larger* after wrapping: the security wrapper has
 
 `vallum install-hook` writes a `PreToolUse` entry into `~/.claude/settings.json` (default, user-level) or `<cwd>/.claude/settings.json` (`--project`). A timestamped `.bak-<unix_ts>` backup of the settings file is written before any modification. The command is idempotent — re-running it without `--force` is a no-op if the entry already exists; `--force` replaces an existing entry. Other agents (Cursor, Codex, Gemini CLI) can always route commands through Vallum by invoking `vallum run` directly, and now also have their own native pre-exec guardrail hooks (`vallum install-hook --agent <cursor|gemini|codex>`) — see [Multi-agent guardrail](#multi-agent-guardrail). Only Claude Code's hook rewrites the command through the full `vallum run` pipeline; the other three gate the command (Allow/Ask/Deny) without rewriting it. Run bare on a terminal, `vallum install-hook` opens an interactive picker (space = toggle, enter = confirm) listing all four agents with their detected/installed status; in non-interactive contexts (pipes, CI) it defaults to Claude Code exactly as before.
 
-Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps simple scripts (no pipes, redirects, quoting, or other shell metacharacters) before optimizer matching, so `bash -c 'git status'` still hits the `git_status` optimizer; complex scripts fall back to generic compression. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are still policy-evaluated, but never rewritten through `vallum run` — capturing their stdout would break the TTY they need, so a clean Allow passes them through untouched and an approved Ask runs the original command directly. Commands already starting with `vallum` are skipped for idempotency.
+Once installed, Claude Code invokes `vallum hook` before every Bash tool call. The hook rewrites the command to `vallum run --approval-token <token> -- bash -c '<original>'` so the full Vallum pipeline (capture, ANSI strip, optimize, scrub, wrap) runs on every shell invocation without any change to how you or the agent writes commands. The approval token is an HMAC over that exact command, keyed by a machine-local secret — it tells the inner `vallum run` the hook already gated this command, so an approved Ask is not re-prompted, while a forged or replayed-onto-a-different-command token is simply re-gated (see [SECURITY.md](SECURITY.md) for the trust boundary). Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps simple scripts (no pipes, redirects, quoting, or other shell metacharacters) before optimizer matching, so `bash -c 'git status'` still hits the `git_status` optimizer; complex scripts fall back to generic compression. Known TUI programs (`vim`, `vi`, `nano`, `less`, `more`, `top`, `htop`, `tmux`, `screen`) are still policy-evaluated, but never rewritten through `vallum run` — capturing their stdout would break the TTY they need, so a clean Allow passes them through untouched and an approved Ask runs the original command directly. Commands already starting with `vallum` are skipped for idempotency.
 
 To remove the hook, run `vallum uninstall-hook` — it removes only the Vallum entry, leaving the rest of your settings file untouched. Run bare on a terminal, it opens the same picker over the agents that currently have a Vallum hook installed.
 
@@ -609,23 +611,33 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 
 | File                          | Responsibility                                       |
 | ----------------------------- | ---------------------------------------------------- |
-| `src/cli.rs`                  | Argument parsing (`run`, `stats`, `hook`, `install-hook`/`uninstall-hook`, `config`, `completions`) |
+| `src/cli.rs`                  | Argument parsing (`run`, `stats`, `hook`, `install-hook`/`uninstall-hook`, `policy`, `mcp`, `log`, `unlock`, `update`, `doctor`, `config`, `completions`) |
 | `src/config.rs`               | Config loading, defaults, and validation             |
 | `src/executor.rs`             | Concurrent capture with byte cap, timeout, stdin; optional tee to `~/.vallum/live.log` |
 | `src/ansi.rs`                 | Stripping ANSI escape sequences                      |
 | `src/whitespace.rs`           | Collapsing blank-line runs, stripping trailing space |
 | `src/optimizer/mod.rs`        | `CommandOptimizer` trait + dispatch registry         |
+| `src/optimizer/apt.rs`        | Summary optimizer for `apt`/`apt-get install` output |
+| `src/optimizer/brew.rs`       | Summary optimizer for `brew` output                  |
 | `src/optimizer/cargo.rs`      | Summary optimizer for noisy `cargo` output           |
+| `src/optimizer/cmake.rs`      | Probe-chatter collapsing optimizer for `cmake` output |
 | `src/optimizer/docker.rs`     | Summary optimizer for `docker build`/`compose` output |
+| `src/optimizer/dotnet.rs`     | Summary optimizer for `dotnet build/restore/test` output |
 | `src/optimizer/file_list.rs`  | Entry-capping optimizer for `ls`/`find`/`fd`/`tree` |
 | `src/optimizer/git_diff.rs`   | Summary optimizer for `git diff` output              |
 | `src/optimizer/git_log.rs`    | Summary optimizer for `git log` output               |
 | `src/optimizer/git_status.rs` | Summary optimizer for `git status` output            |
+| `src/optimizer/go_build.rs`   | Download-chatter collapsing optimizer for `go build/mod/get` |
 | `src/optimizer/go_test.rs`    | Summary optimizer for `go test` output               |
+| `src/optimizer/gradle.rs`     | Summary optimizer for `gradle`/`gradlew` output      |
 | `src/optimizer/grep.rs`       | Match-grouping optimizer for `rg`/`grep` output      |
 | `src/optimizer/kubectl.rs`    | Healthy-row collapsing optimizer for `kubectl get` output |
 | `src/optimizer/make.rs`       | Summary optimizer for `make` output                  |
+| `src/optimizer/maven.rs`      | Summary optimizer for `mvn`/`mvnw` output            |
+| `src/optimizer/ninja.rs`      | Progress-line collapsing optimizer for `ninja` output |
 | `src/optimizer/npm.rs`        | Summary optimizer for noisy `npm` output             |
+| `src/optimizer/pip.rs`        | Summary optimizer for `pip install` output           |
+| `src/optimizer/poetry.rs`     | Summary optimizer for `poetry` output                |
 | `src/optimizer/pytest.rs`     | Summary optimizer for noisy `pytest` output          |
 | `src/optimizer/terraform.rs`  | Summary optimizer for `terraform plan`/`apply` output |
 | `src/truncator.rs`            | Context-preserving head/tail truncation              |
@@ -637,23 +649,36 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/scrubber/markers.rs`     | Untrusted-output marker defang                       |
 | `src/policy/mod.rs`           | Pre-exec Allow/Ask/Deny policy engine + built-in rules |
 | `src/policy/unwrap.rs`        | Bounded precision-safe command views (wrapper/encoding unwrap) |
+| `src/policy/normalize.rs`     | Shell no-op normalization view (dequote/unescape/brace/path) |
 | `src/policy/audit.rs`         | Redacted `policy.log` verdict writer                 |
+| `src/approval.rs`             | Machine-local secret + per-command HMAC approval tokens (hook → `run` handshake) |
+| `src/breaker.rs`              | Blast-radius circuit breaker: sliding-window trip state + unlock |
+| `src/logchain.rs`             | `policy.log` SHA-256 hash chain: chained append + `log verify` |
+| `src/mcp/mod.rs`              | `vallum mcp scan` orchestration                      |
+| `src/mcp/discover.rs`         | Well-known MCP config file locations                 |
+| `src/mcp/model.rs`            | Parsing on-disk MCP config shapes into normalized servers |
+| `src/mcp/scan.rs`             | The three static checks (secrets, risky launch, injection) |
+| `src/mcp/report.rs`           | Human and JSON renderers for scan reports            |
 | `src/tokenizer.rs`            | Pluggable `TokenEstimator` + heuristic default       |
 | `src/fsutil.rs`               | Private (0600) append-file helper                    |
 | `src/audit.rs`                | Append-only log writer                               |
 | `src/metrics.rs`              | Token estimation + JSONL stats writer                |
 | `src/stats.rs`                | `vallum stats` aggregation and reporting             |
+| `src/eval.rs`                 | Detection-eval engine: corpus loader, metrics, report rendering |
 | `src/hook/mod.rs`             | Shared Allow/Ask/Deny decision core + stdin/stdout driver used by every agent codec |
 | `src/hook/claude.rs`          | Claude Code `PreToolUse` codec: rewrites approved Bash calls to `vallum run` |
 | `src/hook/cursor.rs`          | Cursor `beforeShellExecution` codec: native ask, verdicts only |
 | `src/hook/gemini.rs`          | Gemini CLI `BeforeTool` codec: verdicts only, Ask fails closed |
 | `src/hook/codex.rs`           | Codex CLI `PreToolUse` codec: verdicts only, Ask fails closed |
 | `src/install_hook/mod.rs`     | Shared JSON read-modify-write machinery for `install-hook`/`uninstall-hook` |
+| `src/install_hook/select.rs`  | Interactive multi-select agent picker (TTY only)     |
 | `src/install_hook/claude.rs`  | Claude Code installer: `~/.claude/settings.json` (or `--project`) |
 | `src/install_hook/cursor.rs`  | Cursor installer: `~/.cursor/hooks.json` |
 | `src/install_hook/gemini.rs`  | Gemini CLI installer: `~/.gemini/settings.json` |
 | `src/install_hook/codex.rs`   | Codex CLI installer: `~/.codex/hooks.json` |
-| `src/doctor.rs`               | `vallum doctor`: install/health self-checks (config, hook, PATH, log dir) |
+| `src/doctor.rs`               | `vallum doctor`: install/health self-checks (config, hook, hook-audit, guardrail, log-chain, breaker, PATH, log dir) |
+| `src/update.rs`               | `vallum update`: newer-release check + upgrade hint  |
+| `src/welcome.rs`              | Bare-`vallum` branded status banner                  |
 | `src/main.rs`                 | Pipeline wiring                                      |
 | `src/lib.rs`                  | Library surface — re-exports modules so integration tests can exercise internals |
 
@@ -680,6 +705,11 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Guardrail / policy layer — pre-exec Allow/Ask/Deny verdict on every command via the Claude Code hook and direct `vallum run` (deny → exit 125); ten narrow built-in rules for destructive commands, `[[policy.rules]]` config, redacted `policy.log` audit, benign-command precision gate, `vallum doctor` guardrail check
 - [x] Multi-agent hook support — pre-exec guardrail via native hooks for Cursor, Gemini CLI, and Codex CLI
 - [x] Guardrail bypass hardening — multi-view matching that unwraps shell `-c`/`eval` arguments, decodes `base64 -d` payloads, and normalizes `$IFS`/quote/escape and verb obfuscation, so wrapped dangerous commands are caught while benign-command precision stays at false-positive rate 0.000
+- [x] Guardrail hardening rounds 2–3 — shell no-op normalization view (dequote/unescape/brace/path), ANSI-C `$'…'` quoting, path-qualified interpreters, `source`/process-substitution, and eight more destructive-command rules (`find -delete`, `shred`, `truncate`, `xargs rm`, reverse shells, `git clean -f`, recursive `chown`, agent-config writes)
+- [x] Detection + coverage expansion — secret redaction to 30+ known formats, injection detection to 14 languages across eight family axes (recall 0.858 at precision 1.000), 23 output optimizers, `vallum update` self-update check
+- [x] MCP static scanning + agent-config self-protection — `vallum mcp scan` (secrets / risky launch commands / embedded injection) and a doctor hook-audit that flags hooks Vallum did not install
+- [x] Tamper-evident audit log — SHA-256 hash-chained `policy.log` with `vallum log verify [--expect-head]` and a doctor log-chain check
+- [x] Blast-radius containment — rate-based circuit breaker (deny-all lockdown + `vallum unlock`) and a non-forgeable per-command HMAC approval token replacing the plain `--policy-approved` hook flag
 - [ ] Deferred — `cargo-fuzz`/libFuzzer harness, performance regression gating, Windows support (the `0600`/timeout-backed guarantees need a Windows equivalent first)
 
 ## Name
