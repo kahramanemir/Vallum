@@ -393,13 +393,27 @@ This prevents an agent from asserting its own bypass: a forged or injected
 `vallum run --approval-token … -- …` cannot produce a valid token without the
 secret, so it is re-gated by the guardrail (and the circuit breaker).
 
-**Boundary (honest):** the token defeats an agent that only *observes*
-rewritten commands. A process running as the same user with no sandbox can
-*read* `approval.secret` and mint valid tokens — Vallum does not defend against
-that, because on the same machine there is no cryptographic boundary between
-your files and a process you launched. Confining the agent so it cannot read
-arbitrary files is the operating-system sandbox's job (roadmap item #1), not
-the guardrail's.
+**Boundary (honest):** the token stops an agent from *forging* a bypass — it
+cannot compute a valid HMAC for a command without the secret. It is **not** a
+defense against an agent that can *read* the secret: a process running as the
+same user with no sandbox can read `approval.secret` and mint valid tokens, and
+Vallum does not defend against that, because on the same machine there is no
+cryptographic boundary between your files and a process you launched. Confining
+the agent so it cannot read arbitrary files is the operating-system sandbox's
+job (roadmap item #1), not the guardrail's.
+
+The token is bound to one exact command, so observing a rewritten command never
+helps forge a *different* one — but the two rewrite paths differ in what a
+replay of the *same* token buys:
+
+- For an **Allowed** command, replaying its token only re-runs a command that
+  was allowed anyway — harmless.
+- For an **Ask** command, the hook mints the token *before* the user decides
+  (so an approved Ask can run without being double-gated and failing closed).
+  Replaying that token would skip the user's prompt, so this path's safety
+  relies on the agent never seeing the rewritten command: Claude Code does not
+  surface a `PreToolUse` hook's `updatedInput` back to the model. Treat that as
+  defense-in-depth, not a cryptographic guarantee.
 
 ## MCP configuration scanning
 
