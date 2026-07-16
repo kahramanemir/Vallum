@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.10]
 
 ### Fixed
 - The hook's pass-through gate now recognizes a path-qualified invocation of
@@ -449,6 +449,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.10]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.10
 [0.8.9]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.9
 [0.8.8]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.8
 [0.8.7]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.7
