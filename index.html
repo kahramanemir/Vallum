@@ -279,9 +279,12 @@ less vallum-installer.sh &amp;&amp; sh vallum-installer.sh</code></pre>
     <div class="hook-passage">
       <div class="hook-text">
         <h3>Using Claude Code, Cursor, Gemini CLI or Codex?</h3>
-        <p>Register Vallum as a native hook once and every shell command your agent runs is intercepted automatically, zero configuration. <code>vallum install-hook</code> sets up Claude Code; add <code>--agent cursor</code>, <code>--agent gemini</code> or <code>--agent codex</code> for the others.</p>
+        <p>Register Vallum as a native hook once and every shell command your agent runs is intercepted automatically, zero configuration. One command sets up Claude Code; a single flag points it at Cursor, Gemini CLI or Codex.</p>
       </div>
-      <pre class="hook-code"><code><span class="t-prompt">$</span> vallum install-hook</code></pre>
+      <pre class="hook-code"><code><span class="t-prompt">$</span> vallum install-hook  <span class="t-dim"># Claude Code</span>
+<span class="t-prompt">$</span> vallum install-hook --agent cursor
+<span class="t-prompt">$</span> vallum install-hook --agent gemini
+<span class="t-prompt">$</span> vallum install-hook --agent codex</code></pre>
     </div>
 
     <p class="install-note">Works with any agent that runs shell commands: prefix with <code>vallum run &lt;cmd&gt;</code>. Prebuilt binaries for macOS and Linux, SHA-256 checksums and GitHub build attestations included.</p>

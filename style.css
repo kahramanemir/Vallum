@@ -62,13 +62,14 @@
 
 /* code boxes swipe/wheel-scroll horizontally; their commands are fully
    carried by the Copy buttons, so the bars are pure noise on the dark set */
-.term-body, .evidence, .feed-body, .plinth-cmd pre {
+.term-body, .evidence, .feed-body, .plinth-cmd pre, .hook-code {
   scrollbar-width: none;
 }
 .term-body::-webkit-scrollbar,
 .evidence::-webkit-scrollbar,
 .feed-body::-webkit-scrollbar,
-.plinth-cmd pre::-webkit-scrollbar { display: none; }
+.plinth-cmd pre::-webkit-scrollbar,
+.hook-code::-webkit-scrollbar { display: none; }
 
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
@@ -774,12 +775,15 @@ html.gsap .motto-latin:not(.in) { letter-spacing: 0.02em; opacity: 0; }
 .verify-passage .evidence { margin-top: 1.2rem; }
 .hook-passage {
   max-width: 44rem; margin: 4rem auto 0; text-align: left;
-  display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 2.5rem; align-items: center;
   border-top: 1px solid var(--line); padding-top: 2.5rem;
 }
 .hook-text p { color: var(--text2); margin-top: 0.6rem; }
-.hook-code { font-family: var(--mono); font-size: 0.95rem; }
+.hook-code {
+  font-family: var(--mono); font-size: 0.85rem; line-height: 1.9;
+  color: var(--text2); white-space: pre; overflow-x: auto; overflow-y: hidden;
+}
 .install-note { max-width: 44rem; margin: 3rem auto 0; color: var(--text3); font-size: 0.9rem; }
 .install-note code {
   font-size: 0.8rem;
