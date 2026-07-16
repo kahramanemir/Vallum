@@ -30,7 +30,29 @@ pub enum Verdict {
     Deny { reason: String, rule_name: String },
 }
 
-/// Shared pass-through gates (empty command, `vallum` head) plus policy
+/// True when the command's first word is the Vallum binary itself: the
+/// literal `vallum` (PATH-resolved), or a path that canonicalizes to the
+/// same executable running this process (`/usr/bin/vallum`, a Homebrew
+/// symlink, …). A file that merely *shares the name* — `./vallum`, a decoy
+/// `/tmp/x/vallum` — stays gated: pass-through skips the guardrail, so it
+/// must never be grantable by naming alone.
+fn is_vallum_head(head: &str) -> bool {
+    if head == "vallum" {
+        return true;
+    }
+    if !head.contains('/') {
+        return false;
+    }
+    match (
+        std::fs::canonicalize(head),
+        std::env::current_exe().and_then(std::fs::canonicalize),
+    ) {
+        (Ok(h), Ok(me)) => h == me,
+        _ => false,
+    }
+}
+
+/// Shared pass-through gates (empty command, Vallum-binary head) plus policy
 /// evaluation; TUI-headed commands are evaluated but never rewritten.
 /// Every codec funnels through here.
 pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
@@ -39,7 +61,7 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
         return Verdict::PassThrough;
     }
     let head = trimmed.split_whitespace().next().unwrap_or("");
-    if head == "vallum" {
+    if is_vallum_head(head) {
         return Verdict::PassThrough;
     }
     // TUI-headed commands ARE evaluated (a `less /etc/shadow` must be able to
@@ -80,7 +102,7 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
 pub fn gate(command: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Verdict {
     let trimmed = command.trim_start();
     let head = trimmed.split_whitespace().next().unwrap_or("");
-    if trimmed.is_empty() || head == "vallum" {
+    if trimmed.is_empty() || is_vallum_head(head) {
         return decide(command, policy);
     }
     if let Some(trip) = crate::breaker::active_trip(cfg) {
@@ -219,7 +241,7 @@ pub fn test_report(command: &str, policy: Option<&Policy>, guardrail_on: bool) -
         Verdict::PassThrough => {
             let label = if trimmed.is_empty() {
                 "PASS-THROUGH (empty command)"
-            } else if head == "vallum" {
+            } else if is_vallum_head(head) {
                 "PASS-THROUGH (vallum wrapper command)"
             } else {
                 "PASS-THROUGH (TUI command, no policy objection)"
@@ -353,6 +375,71 @@ mod tests {
         assert_eq!(
             decide("vallum run ls", Some(&guardrail())),
             Verdict::PassThrough
+        );
+    }
+
+    /// Temp dir holding a file named `vallum`: either a symlink to THIS
+    /// running executable (the only thing that should count as the real
+    /// binary) or an unrelated decoy file.
+    fn vallum_named_file(tag: &str, link_to_self: bool) -> (std::path::PathBuf, String) {
+        let dir = std::env::temp_dir().join(format!(
+            "vallum_head_{tag}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("vallum");
+        if link_to_self {
+            std::os::unix::fs::symlink(std::env::current_exe().unwrap(), &bin).unwrap();
+        } else {
+            std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
+        }
+        let head = bin.to_string_lossy().into_owned();
+        (dir, head)
+    }
+
+    #[test]
+    fn path_qualified_real_vallum_passes_through_even_while_tripped() {
+        let (bin_dir, head) = vallum_named_file("real", true);
+        assert_eq!(
+            decide(&format!("{head} run ls"), Some(&guardrail())),
+            Verdict::PassThrough
+        );
+        let (cfg, dir) = breaker_cfg("real_head");
+        lock_now(&dir);
+        assert_eq!(
+            gate(&format!("{head} unlock"), Some(&guardrail()), &cfg),
+            Verdict::PassThrough
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&bin_dir);
+    }
+
+    #[test]
+    fn path_named_vallum_but_different_file_is_still_gated() {
+        let (bin_dir, head) = vallum_named_file("decoy", false);
+        assert_eq!(
+            decide(&format!("{head} run ls"), Some(&guardrail())),
+            Verdict::Allow
+        );
+        let (cfg, dir) = breaker_cfg("decoy_head");
+        lock_now(&dir);
+        match gate(&format!("{head} unlock"), Some(&guardrail()), &cfg) {
+            Verdict::Deny { rule_name, .. } => assert_eq!(rule_name, "circuit_breaker"),
+            other => panic!("expected breaker deny for decoy vallum, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&bin_dir);
+    }
+
+    #[test]
+    fn nonexistent_vallum_path_is_still_gated() {
+        assert_eq!(
+            decide("/nonexistent/bin/vallum run ls", Some(&guardrail())),
+            Verdict::Allow
         );
     }
 
