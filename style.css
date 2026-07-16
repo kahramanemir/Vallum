@@ -570,20 +570,20 @@ html.gsap .gate-station { opacity: 0.38; transition: opacity 0.3s; }
 
 /* one-line mutation states. Default markup ships data-step="6" (end state). */
 .gates-stage:not([data-step="0"]) .ansi { opacity: 0; font-size: 0; }
-.gates-stage[data-step="2"] .fl-noise,
 .gates-stage[data-step="3"] .fl-noise,
 .gates-stage[data-step="4"] .fl-noise,
 .gates-stage[data-step="5"] .fl-noise,
 .gates-stage[data-step="6"] .fl-noise { display: none; }
 .gates-stage[data-step="0"] .fl-note-trunc,
-.gates-stage[data-step="1"] .fl-note-trunc { display: none; }
+.gates-stage[data-step="1"] .fl-note-trunc,
+.gates-stage[data-step="2"] .fl-note-trunc { display: none; }
+.gates-stage[data-step="2"] .fl-warn,
 .gates-stage[data-step="3"] .fl-warn,
 .gates-stage[data-step="4"] .fl-warn,
 .gates-stage[data-step="5"] .fl-warn,
 .gates-stage[data-step="6"] .fl-warn { display: none; }
 .gates-stage[data-step="0"] .fl-note-opt,
-.gates-stage[data-step="1"] .fl-note-opt,
-.gates-stage[data-step="2"] .fl-note-opt { display: none; }
+.gates-stage[data-step="1"] .fl-note-opt { display: none; }
 .fl-note-trunc, .fl-note-opt { color: var(--text3); font-style: italic; }
 
 .sec-raw, .inj-raw { transition: opacity 0.3s; }

