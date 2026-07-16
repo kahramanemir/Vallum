@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- The hook's pass-through gate now recognizes a path-qualified invocation of
+  the Vallum binary itself (`/usr/bin/vallum unlock`, a Homebrew symlink
+  path) — previously only the literal `vallum` head passed through, so
+  `vallum unlock` via full path was denied while the circuit breaker was
+  locked. Only a path that canonicalizes to the very executable running the
+  hook qualifies; a decoy file merely *named* `vallum` stays gated.
+
 ## [0.8.9]
 
 ### Added
