@@ -12,6 +12,13 @@ mod secrets;
 
 pub use injection::scrub_injections;
 
+/// True if `s` contains any of the invisible/bidi/zero-width code points the
+/// output normalizer strips. Exposes the existing `normalize` set for reuse by
+/// the skills scanner; detection logic is unchanged.
+pub fn has_invisible(s: &str) -> bool {
+    normalize::strip_invisible(s) != s
+}
+
 /// A config redaction rule with its pattern compiled once. Built from
 /// `RedactionRule` (the deserialized TOML form) via `compile_rules`.
 #[derive(Debug)]

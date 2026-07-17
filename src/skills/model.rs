@@ -1,10 +1,12 @@
 //! The parsed representation of a skill/context Markdown file, plus hand-rolled
 //! fenced-code extraction (no Markdown parser dependency).
 
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 /// Type of documentation file being parsed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DocKind {
     Skill,
     Context,
