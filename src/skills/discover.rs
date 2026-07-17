@@ -210,7 +210,7 @@ mod tests {
         let d = tmp();
         let f = d.join("CLAUDE.md");
         fs::write(&f, "x").unwrap();
-        let (targets, missing) = resolve_explicit(&[f.clone()]);
+        let (targets, missing) = resolve_explicit(std::slice::from_ref(&f));
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].kind, DocKind::Context);
         assert!(missing.is_empty());
@@ -223,7 +223,7 @@ mod tests {
         fs::create_dir_all(d.join("my-skill")).unwrap();
         fs::write(d.join("my-skill").join("SKILL.md"), "x").unwrap();
         fs::write(d.join("noise.txt"), "x").unwrap();
-        let (targets, missing) = resolve_explicit(&[d.clone()]);
+        let (targets, missing) = resolve_explicit(std::slice::from_ref(&d));
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].kind, DocKind::Skill);
         assert!(missing.is_empty());
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn resolve_explicit_empty_dir_is_reported_missing() {
         let d = tmp();
-        let (targets, missing) = resolve_explicit(&[d.clone()]);
+        let (targets, missing) = resolve_explicit(std::slice::from_ref(&d));
         assert!(targets.is_empty());
         assert_eq!(missing, vec![d.clone()]);
         let _ = fs::remove_dir_all(&d);
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn resolve_explicit_absent_path_is_reported_missing() {
         let p = PathBuf::from("/no/such/skills/here-xyz");
-        let (targets, missing) = resolve_explicit(&[p.clone()]);
+        let (targets, missing) = resolve_explicit(std::slice::from_ref(&p));
         assert!(targets.is_empty());
         assert_eq!(missing, vec![p]);
     }
@@ -258,7 +258,7 @@ mod tests {
         let link = d.join("link");
         std::os::unix::fs::symlink(&real, &link).unwrap();
         // resolve_explicit on the symlinked dir must find nothing (root not followed) → missing.
-        let (targets, missing) = resolve_explicit(&[link.clone()]);
+        let (targets, missing) = resolve_explicit(std::slice::from_ref(&link));
         assert!(targets.is_empty(), "symlinked root must not be walked");
         assert_eq!(missing, vec![link]);
         let _ = fs::remove_dir_all(&d);
