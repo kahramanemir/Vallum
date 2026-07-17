@@ -69,6 +69,26 @@ fn missing_explicit_path_exits_125() {
 }
 
 #[test]
+fn unreadable_file_under_explicit_dir_exits_125() {
+    let dir = std::env::temp_dir().join(format!(
+        "vallum_skills_badutf8_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(dir.join("s")).unwrap();
+    // Invalid UTF-8 (0xff is never valid in UTF-8) → read_to_string errors.
+    std::fs::write(dir.join("s").join("SKILL.md"), [0xff, 0xfe, 0x00]).unwrap();
+    let (_o, _e, code) = run(&["skills", "scan", dir.to_str().unwrap()]);
+    assert_eq!(
+        code, 125,
+        "unreadable file under an explicit dir must exit 125"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn clean_repo_docs_scan_clean() {
     // Precision guard: genuinely-clean repo docs must not trip the scanner.
     // NOTE: README.md is deliberately NOT used here — it documents the

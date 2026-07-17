@@ -73,8 +73,11 @@ pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 
             }
             Err(e) => {
                 report.warnings.push(format!("{}: {e}", t.path.display()));
-                // An explicit path that exists but cannot be read is a usage error.
-                if explicit_paths.iter().any(|p| p == &t.path) {
+                // In explicit mode every target came from an explicit arg (a named file
+                // or a file found by walking a named directory), so an unreadable target
+                // is a usage error — CI must not exit green on a file it could not read.
+                // Auto-discover mode (empty explicit_paths) keeps read errors non-fatal.
+                if !explicit_paths.is_empty() {
                     usage_error = true;
                 }
             }
