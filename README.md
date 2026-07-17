@@ -679,6 +679,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/breaker.rs`              | Blast-radius circuit breaker: sliding-window trip state + unlock |
 | `src/logchain.rs`             | `policy.log` SHA-256 hash chain: chained append + `log verify` |
 | `src/mcp/mod.rs`              | `vallum mcp scan` orchestration                      |
+| `src/skills/mod.rs`           | `vallum skills scan` orchestration                   |
 | `src/mcp/discover.rs`         | Well-known MCP config file locations                 |
 | `src/mcp/model.rs`            | Parsing on-disk MCP config shapes into normalized servers |
 | `src/mcp/scan.rs`             | The three static checks (secrets, risky launch, injection) |
@@ -732,6 +733,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Guardrail hardening rounds 2–3 — shell no-op normalization view (dequote/unescape/brace/path), ANSI-C `$'…'` quoting, path-qualified interpreters, `source`/process-substitution, and eight more destructive-command rules (`find -delete`, `shred`, `truncate`, `xargs rm`, reverse shells, `git clean -f`, recursive `chown`, agent-config writes)
 - [x] Detection + coverage expansion — secret redaction to 30+ known formats, injection detection to 14 languages across eight family axes (recall 0.858 at precision 1.000), 23 output optimizers, `vallum update` self-update check
 - [x] MCP static scanning + agent-config self-protection — `vallum mcp scan` (secrets / risky launch commands / embedded injection) and a doctor hook-audit that flags hooks Vallum did not install
+- [x] Skill & context-file scanning — `vallum skills scan` (SKILL.md + CLAUDE.md/AGENTS.md/rules files: secrets / injection / risky fenced commands / invisible Unicode, ToxicSkills composite escalation)
 - [x] Tamper-evident audit log — SHA-256 hash-chained `policy.log` with `vallum log verify [--expect-head]` and a doctor log-chain check
 - [x] Blast-radius containment — rate-based circuit breaker (deny-all lockdown + `vallum unlock`) and a non-forgeable per-command HMAC approval token replacing the plain `--policy-approved` hook flag
 - [ ] Deferred — `cargo-fuzz`/libFuzzer harness, performance regression gating, Windows support (the `0600`/timeout-backed guarantees need a Windows equivalent first)
