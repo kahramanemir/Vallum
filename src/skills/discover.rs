@@ -121,6 +121,15 @@ fn walk_targets(root: &Path) -> Vec<Target> {
 }
 
 fn walk_inner(dir: &Path, depth: usize, out: &mut Vec<Target>) {
+    // Never follow a symlinked walk root (read_dir would transparently
+    // traverse it). Entries discovered *inside* are already symlink-skipped
+    // below; this closes the same hole at the root a caller hands us.
+    if std::fs::symlink_metadata(dir)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return;
+    }
     if depth > MAX_WALK_DEPTH {
         return;
     }
@@ -236,5 +245,22 @@ mod tests {
         let (targets, missing) = resolve_explicit(&[p.clone()]);
         assert!(targets.is_empty());
         assert_eq!(missing, vec![p]);
+    }
+
+    #[test]
+    fn symlinked_walk_root_is_not_followed() {
+        let d = tmp();
+        // Real dir with a recognized file:
+        let real = d.join("real");
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join("SKILL.md"), "x").unwrap();
+        // A symlink pointing at it:
+        let link = d.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        // resolve_explicit on the symlinked dir must find nothing (root not followed) → missing.
+        let (targets, missing) = resolve_explicit(&[link.clone()]);
+        assert!(targets.is_empty(), "symlinked root must not be walked");
+        assert_eq!(missing, vec![link]);
+        let _ = fs::remove_dir_all(&d);
     }
 }
