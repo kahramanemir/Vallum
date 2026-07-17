@@ -377,6 +377,28 @@ descriptions written in the config file; most servers supply tool
 descriptions at runtime via `tools/list`, which a future live-introspection
 mode will cover.
 
+## Skill & context-file scanning
+
+`vallum skills scan` statically checks agent **skill files** (`SKILL.md`) and
+agent **context files** (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursorrules`,
+`*.mdc`, `copilot-instructions.md`) for the supply-chain poisoning patterns
+catalogued in 2026 research (Snyk's ToxicSkills audit, CSA's SKILL.md
+context-poisoning briefing): embedded secrets, prompt injection in the prose,
+risky shell commands in fenced or inline code (`curl … | sh`, base64-decode
+pipes), and invisible-Unicode smuggling. It reuses the same secret, injection,
+and guardrail engines as the rest of Vallum — read-only, connects to nothing.
+
+```bash
+vallum skills scan                  # discovered skills + context files
+vallum skills scan ./downloaded/    # a directory, before you install it
+vallum skills scan --json           # CI / pre-commit
+```
+
+Exit codes: `0` clean, `10` findings, `20` high-severity, `125` usage error.
+A document that carries **both** prompt injection **and** a risky shell
+command — the measured ToxicSkills signature (91% of confirmed-malicious
+skills combine the two) — is escalated to a high-severity finding.
+
 ## Built-in optimizers
 
 - `git status`: summarizes large working-tree sections while keeping branch state and representative file entries
@@ -529,6 +551,8 @@ vallum policy test "<command>"       # one-shot guardrail verdict (exit 0/10/20)
 vallum update                        # check for a newer release + upgrade command
 vallum mcp scan                      # scan discovered MCP configs for risks
 vallum mcp scan --json <path>...     # structured output / specific files
+vallum skills scan                   # scan skills + agent context files for poisoning
+vallum skills scan <dir>             # scan a downloaded skill before installing it
 vallum log verify                    # verify the policy.log hash chain (tamper evidence)
 vallum log verify --expect-head <hex>  # also compare against an externally stored head
 vallum unlock                        # clear a tripped circuit-breaker lock

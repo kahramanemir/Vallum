@@ -5,6 +5,20 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `vallum skills scan`: static scanner for agent skill files (`SKILL.md`) and
+  agent context files (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursorrules`,
+  `*.mdc`, `copilot-instructions.md`). Flags embedded secrets, prompt
+  injection, risky shell commands in fenced/inline code, and invisible-Unicode
+  smuggling, reusing the existing scrubber, guardrail, and injection engines.
+  A document combining injection with a risky command (the ToxicSkills
+  signature) escalates to high severity. Accepts explicit files or a directory
+  (scan a downloaded skill before installing it); read-only; exit codes
+  0/10/20/125 for CI. Static and text-only — does not see runtime or
+  image-embedded instructions.
+
 ## [0.8.10]
 
 ### Fixed
