@@ -9,6 +9,10 @@ pub mod scan;
 
 pub use scan::{CheckKind, Finding, Severity};
 
+use crate::config::AppConfig;
+use crate::policy::Policy;
+use std::path::PathBuf;
+
 /// Accumulated result of a scan across one or more docs.
 pub struct ScanReport {
     pub files_scanned: usize,
@@ -29,6 +33,66 @@ pub fn exit_code(report: &ScanReport, usage_error: bool) -> i32 {
         return 10;
     }
     0
+}
+
+/// Discover (or take explicit) skill/context files, scan each, render, and
+/// return the process exit code.
+pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 {
+    let mut usage_error = false;
+
+    let targets: Vec<discover::Target> = if explicit_paths.is_empty() {
+        discover::existing_targets()
+    } else {
+        let (targets, missing) = discover::resolve_explicit(explicit_paths);
+        for m in &missing {
+            eprintln!("skills scan: {}: no scannable file", m.display());
+            usage_error = true;
+        }
+        targets
+    };
+
+    let policy = if cfg.security.guardrail {
+        Policy::compile(&cfg.policy).ok()
+    } else {
+        None
+    };
+
+    let mut report = ScanReport {
+        files_scanned: 0,
+        docs: 0,
+        findings: Vec::new(),
+        warnings: Vec::new(),
+    };
+
+    let mut docs = Vec::new();
+    for t in &targets {
+        match std::fs::read_to_string(&t.path) {
+            Ok(text) => {
+                report.files_scanned += 1;
+                docs.push(model::parse_doc(&t.path, t.kind, &text));
+            }
+            Err(e) => {
+                report.warnings.push(format!("{}: {e}", t.path.display()));
+                // An explicit path that exists but cannot be read is a usage error.
+                if explicit_paths.iter().any(|p| p == &t.path) {
+                    usage_error = true;
+                }
+            }
+        }
+    }
+    report.docs = docs.len();
+
+    let mut findings = scan::scan_docs(&docs, policy.as_ref(), cfg);
+    scan::add_combined_signatures(&mut findings);
+    report.findings = findings;
+
+    if json {
+        report::render_json(&report, usage_error);
+    } else {
+        report::render_human(&report, usage_error);
+    }
+
+    exit_code(&report, usage_error)
 }
 
 #[cfg(test)]
@@ -72,5 +136,12 @@ mod tests {
     #[test]
     fn usage_error_forces_125() {
         assert_eq!(exit_code(&report(vec![f(Severity::High)]), true), 125);
+    }
+
+    #[test]
+    fn run_scan_on_missing_explicit_path_is_125() {
+        let cfg = AppConfig::default();
+        let code = run_scan(&[PathBuf::from("/no/such/file-xyz.md")], true, &cfg);
+        assert_eq!(code, 125);
     }
 }

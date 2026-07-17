@@ -139,6 +139,11 @@ Examples:
         #[command(subcommand)]
         action: McpAction,
     },
+    /// Scan agent skill files (SKILL.md) and context files (CLAUDE.md, AGENTS.md, …) for poisoning
+    Skills {
+        #[command(subcommand)]
+        action: SkillsAction,
+    },
     /// Inspect the audit logs
     Log {
         #[command(subcommand)]
@@ -212,6 +217,31 @@ Exit codes: 0 clean, 10 warnings, 20 high-severity, 125 usage/read error.")]
         #[arg(long)]
         json: bool,
         /// Specific config file(s) to scan; omit to auto-discover
+        #[arg(value_name = "PATH")]
+        paths: Vec<std::path::PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SkillsAction {
+    /// Statically scan discovered (or given) skill and agent-context files
+    #[command(after_help = "\
+Examples:
+  vallum skills scan                  scan discovered skills + context files
+  vallum skills scan ./SKILL.md       scan a specific file (CI / pre-commit)
+  vallum skills scan ./downloaded/    scan a directory before installing it
+  vallum skills scan --json           structured output
+
+Scans SKILL.md skills and agent context files (CLAUDE.md, AGENTS.md, GEMINI.md,
+.cursorrules, *.mdc) for embedded secrets, prompt injection, risky shell
+commands in code blocks, and invisible-Unicode smuggling. Read-only.
+
+Exit codes: 0 clean, 10 findings, 20 high-severity, 125 usage/read error.")]
+    Scan {
+        /// Emit structured JSON instead of plain text
+        #[arg(long)]
+        json: bool,
+        /// Specific file(s) or directory(ies) to scan; omit to auto-discover
         #[arg(value_name = "PATH")]
         paths: Vec<std::path::PathBuf>,
     },
