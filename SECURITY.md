@@ -456,6 +456,40 @@ rule is `Ask`, i.e. warning-class), and `125` for a usage/read error.
   `~/.claude.json` — are not parsed in this version, so a file can be
   discovered and read yet still have servers the scan does not see.
 
+## Skill & context-file scanning
+
+`vallum skills scan` is the Markdown sibling of the MCP scan: a **static,
+read-only** check over agent skill files (`SKILL.md`) and agent context files
+(`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursorrules`, `*.mdc`,
+`copilot-instructions.md`). It reuses the secret scrubber (per line), the
+injection detector (whole text), the guardrail policy engine (shell-language
+fenced code and inline backtick spans), and the output normalizer's
+invisible-code-point set. A document carrying **both** an injection finding
+**and** a risky-command finding — the pattern Snyk's ToxicSkills audit
+measured in 91% of confirmed-malicious skills — is escalated to one
+high-severity composite finding. **Strength: best-effort**, with the same
+measured detection limits as the underlying engines (see
+[`evals/report.md`](evals/report.md)).
+
+**What it does NOT cover, stated plainly:**
+
+- **Static only.** It scans bytes on disk, not what an agent actually ingests
+  at runtime. A skill that rewrites itself, fetches remote instructions, or is
+  redefined after approval (a "rug pull") is out of scope.
+- **Text only.** Instructions hidden in images or other binary assets are not
+  analyzed (cf. "Seeing Is Not Screening", arXiv 2606.18198).
+- **Markdown is handled heuristically**, not via a spec-complete parser;
+  exotic fence nesting may be over- or under-scanned. The design errs toward
+  over-scanning (an inline-code false positive) rather than missing a command.
+- The invisible-Unicode check covers the same fixed code-point set as the
+  output normalizer, not the full Unicode confusable space.
+- **Security documentation looks malicious.** A document that *quotes* attacks
+  — injection example phrases in prose plus dangerous commands in code blocks,
+  like Vallum's own README — is indistinguishable from a poisoned skill to a
+  static scanner and triggers the composite high-severity finding. This is the
+  measured ToxicSkills signature working as designed; review such findings in
+  context rather than suppressing them.
+
 ## Supply-chain integrity
 
 Release binaries are built in GitHub Actions by the `dist` pipeline. Each

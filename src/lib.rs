@@ -45,6 +45,7 @@ pub mod metrics;
 pub mod optimizer;
 pub mod policy;
 pub mod scrubber;
+pub mod skills;
 pub mod stats;
 pub mod tokenizer;
 pub mod truncator;
