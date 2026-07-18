@@ -204,7 +204,8 @@ pub fn add_aux_targets(targets: &mut Vec<Target>) {
 /// Collect aux files under one skill root. Descent stops at nested skill
 /// packages: a subdirectory that itself contains a `SKILL.md` is a different
 /// skill root whose own walk collects its files, so each aux file belongs to
-/// its nearest ancestor root and is emitted exactly once.
+/// its nearest ancestor root and is emitted exactly once. Depth is bounded
+/// from the skill root (not the CLI arg dir the main walk bounds from).
 fn aux_walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<Target>) {
     if depth > MAX_WALK_DEPTH {
         return;
@@ -231,7 +232,14 @@ fn aux_walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<Target>) {
         if meta.is_dir() {
             // A subdirectory holding its own SKILL.md is a distinct skill root;
             // its files belong to that nearer root, collected by its own walk.
-            if path.join("SKILL.md").is_file() {
+            // Symlink-aware on purpose: a symlinked SKILL.md never makes a
+            // nested root (walk_inner skips symlinks, so no walk would ever
+            // collect that subtree — following the link here would let a
+            // malicious skill hide its payload dir from the scan).
+            if std::fs::symlink_metadata(path.join("SKILL.md"))
+                .map(|m| m.is_file())
+                .unwrap_or(false)
+            {
                 continue;
             }
             aux_walk(root, &path, depth + 1, out);
@@ -445,6 +453,35 @@ mod tests {
         std::os::unix::fs::symlink(d.join("outside.txt"), d.join("s").join("link.txt")).unwrap();
         let (targets, _m) = resolve_explicit(std::slice::from_ref(&d));
         assert!(targets.iter().all(|t| t.kind != DocKind::Aux));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn symlinked_skill_md_does_not_hide_a_subdir_from_aux_scan() {
+        let d = tmp();
+        fs::create_dir_all(d.join("s").join("payload")).unwrap();
+        fs::write(d.join("s").join("SKILL.md"), "x").unwrap();
+        std::os::unix::fs::symlink(
+            d.join("s").join("SKILL.md"),
+            d.join("s").join("payload").join("SKILL.md"),
+        )
+        .unwrap();
+        fs::write(d.join("s").join("payload").join("evil.txt"), "x").unwrap();
+        let (targets, _m) = resolve_explicit(std::slice::from_ref(&d));
+        let aux: Vec<_> = targets.iter().filter(|t| t.kind == DocKind::Aux).collect();
+        assert!(
+            aux.iter().any(|t| t.path.ends_with("evil.txt")),
+            "symlinked SKILL.md must not exclude the payload dir from the outer walk: {:?}",
+            aux.iter().map(|t| &t.path).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            aux.iter()
+                .find(|t| t.path.ends_with("evil.txt"))
+                .unwrap()
+                .skill_root
+                .as_deref(),
+            Some(d.join("s").as_path())
+        );
         let _ = fs::remove_dir_all(&d);
     }
 }
