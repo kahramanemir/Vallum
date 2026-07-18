@@ -472,15 +472,17 @@ pub fn render(checks: &[Check]) -> (String, bool) {
     (out, any_fail)
 }
 
-/// Extract the host from a URL-ish string: strip scheme, cut at first '/',
-/// strip a :port suffix. No new deps — this is a display/triage check, not a
-/// parser.
+/// Extract the host from a URL-ish string: strip scheme, cut the authority at
+/// any RFC-3986 terminator ('/', '?', '#') plus '\' (WHATWG parsers treat it
+/// as '/'), strip a :port suffix. No new deps — this is a display/triage
+/// check, not a parser.
 fn url_host(url: &str) -> String {
+    let url = url.trim();
     let rest = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))
         .unwrap_or(url);
-    let host = rest.split('/').next().unwrap_or("");
+    let host = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
     host.split(':').next().unwrap_or("").to_ascii_lowercase()
 }
 
@@ -522,7 +524,12 @@ pub fn base_url_check(sources: &[(String, String)]) -> Check {
 fn settings_env_value(path: &std::path::Path, key: &str) -> Option<String> {
     let text = std::fs::read_to_string(path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&text).ok()?;
-    json.get("env")?.get(key)?.as_str().map(String::from)
+    let value = json.get("env")?.get(key)?.as_str()?;
+    // An empty/whitespace-only value is "unset" — mirror the env-var path.
+    if value.trim().is_empty() {
+        return None;
+    }
+    Some(value.to_string())
 }
 
 fn gather_base_url() -> Check {
@@ -1012,5 +1019,46 @@ mod tests {
         // evil-anthropic.com must NOT pass the suffix check.
         let c = base_url_check(&[("env".into(), "https://evil-anthropic.com".into())]);
         assert_eq!(c.status, Status::Warn);
+    }
+
+    #[test]
+    fn base_url_fragment_and_query_tricks_still_warn() {
+        for url in [
+            "https://evil.com?.anthropic.com",
+            "https://evil.com#.anthropic.com",
+            "https://evil.com\\.anthropic.com",
+        ] {
+            let c = base_url_check(&[("env".into(), url.to_string())]);
+            assert_eq!(c.status, Status::Warn, "{url} must not pass as anthropic");
+        }
+    }
+
+    #[test]
+    fn base_url_whitespace_padded_anthropic_is_ok() {
+        let c = base_url_check(&[("env".into(), " https://api.anthropic.com\n".into())]);
+        assert_eq!(c.status, Status::Ok);
+    }
+
+    #[test]
+    fn settings_env_value_skips_empty_and_whitespace() {
+        let dir = temp_dir("base_url_empty");
+        let path = dir.join("settings.json");
+
+        std::fs::write(&path, r#"{"env":{"ANTHROPIC_BASE_URL":""}}"#).unwrap();
+        assert_eq!(settings_env_value(&path, "ANTHROPIC_BASE_URL"), None);
+
+        std::fs::write(&path, r#"{"env":{"ANTHROPIC_BASE_URL":"   \n"}}"#).unwrap();
+        assert_eq!(settings_env_value(&path, "ANTHROPIC_BASE_URL"), None);
+
+        std::fs::write(
+            &path,
+            r#"{"env":{"ANTHROPIC_BASE_URL":"https://api.anthropic.com"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            settings_env_value(&path, "ANTHROPIC_BASE_URL").as_deref(),
+            Some("https://api.anthropic.com")
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
