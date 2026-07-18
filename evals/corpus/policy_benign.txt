@@ -76,3 +76,15 @@ jq . .claude/settings.json
 less .cursor/hooks.json
 diff .claude/settings.json /tmp/old.json
 cp .claude/settings.json settings.backup.json
+# --- 0.8.12 persistence-write precision controls (reads/lookalikes stay Allow) ---
+source ~/.zshrc
+cat ~/.bashrc
+grep PATH ~/.profile
+mv temp ~/.profile.bak
+cp app.profile build/app.profile
+cat ~/.ssh/config
+ssh-keygen -t ed25519 -C ci
+ls ~/.ssh
+git config user.name Emir
+git config --global core.editor vim
+ls .git/hooks
