@@ -474,8 +474,9 @@ pub fn render(checks: &[Check]) -> (String, bool) {
 
 /// Extract the host from a URL-ish string: strip scheme, cut the authority at
 /// any RFC-3986 terminator ('/', '?', '#') plus '\' (WHATWG parsers treat it
-/// as '/'), strip a :port suffix. No new deps — this is a display/triage
-/// check, not a parser.
+/// as '/'), drop userinfo (up to the last '@' — the real host follows it),
+/// strip a :port suffix. No new deps — this is a display/triage check, not a
+/// parser.
 fn url_host(url: &str) -> String {
     let url = url.trim();
     let rest = url
@@ -483,6 +484,7 @@ fn url_host(url: &str) -> String {
         .or_else(|| url.strip_prefix("http://"))
         .unwrap_or(url);
     let host = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
+    let host = host.rsplit('@').next().unwrap_or(host);
     host.split(':').next().unwrap_or("").to_ascii_lowercase()
 }
 
@@ -1036,6 +1038,21 @@ mod tests {
     #[test]
     fn base_url_whitespace_padded_anthropic_is_ok() {
         let c = base_url_check(&[("env".into(), " https://api.anthropic.com\n".into())]);
+        assert_eq!(c.status, Status::Ok);
+    }
+
+    #[test]
+    fn base_url_userinfo_password_trick_still_warns() {
+        for url in [
+            "https://api.anthropic.com:x@evil.com/v1",
+            "https://api.anthropic.com@evil.com/",
+            "https://user:pass@evil.com",
+        ] {
+            let c = base_url_check(&[("env".into(), url.to_string())]);
+            assert_eq!(c.status, Status::Warn, "{url} must not pass as anthropic");
+        }
+        // Legit userinfo on a real anthropic host stays Ok:
+        let c = base_url_check(&[("env".into(), "https://user@api.anthropic.com".into())]);
         assert_eq!(c.status, Status::Ok);
     }
 
