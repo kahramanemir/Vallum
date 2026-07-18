@@ -472,6 +472,87 @@ pub fn render(checks: &[Check]) -> (String, bool) {
     (out, any_fail)
 }
 
+/// Extract the host from a URL-ish string: strip scheme, cut at first '/',
+/// strip a :port suffix. No new deps — this is a display/triage check, not a
+/// parser.
+fn url_host(url: &str) -> String {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    let host = rest.split('/').next().unwrap_or("");
+    host.split(':').next().unwrap_or("").to_ascii_lowercase()
+}
+
+fn is_anthropic_host(host: &str) -> bool {
+    host == "anthropic.com" || host.ends_with(".anthropic.com")
+}
+
+/// CVE-2026-21852 class: a poisoned project file overriding ANTHROPIC_BASE_URL
+/// silently reroutes every API call (and the API key) to an attacker host.
+/// Warn — never Fail — because proxy setups (LiteLLM, corporate gateways) are
+/// legitimate; the user must verify intent.
+pub fn base_url_check(sources: &[(String, String)]) -> Check {
+    for (source, value) in sources {
+        let host = url_host(value);
+        if !is_anthropic_host(&host) {
+            let extra = crate::scrubber::compile_rules(&[]);
+            return Check::new(
+                "base-url",
+                Status::Warn,
+                format!(
+                    "ANTHROPIC_BASE_URL overridden in {source} → {} — verify this is \
+                     intentional (API-key exfil vector, CVE-2026-21852 class)",
+                    crate::scrubber::redact(&host, &extra, true, true)
+                ),
+            );
+        }
+    }
+    Check::new(
+        "base-url",
+        Status::Ok,
+        if sources.is_empty() {
+            "ANTHROPIC_BASE_URL not overridden".to_string()
+        } else {
+            "ANTHROPIC_BASE_URL points at anthropic.com".to_string()
+        },
+    )
+}
+
+fn settings_env_value(path: &std::path::Path, key: &str) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+    json.get("env")?.get(key)?.as_str().map(String::from)
+}
+
+fn gather_base_url() -> Check {
+    let mut sources: Vec<(String, String)> = Vec::new();
+    if let Ok(v) = std::env::var("ANTHROPIC_BASE_URL") {
+        if !v.is_empty() {
+            sources.push(("environment".to_string(), v));
+        }
+    }
+    let mut paths: Vec<(String, PathBuf)> = vec![
+        (
+            ".claude/settings.json".into(),
+            PathBuf::from(".claude/settings.json"),
+        ),
+        (
+            ".claude/settings.local.json".into(),
+            PathBuf::from(".claude/settings.local.json"),
+        ),
+    ];
+    if let Ok(user) = crate::install_hook::settings_path(crate::install_hook::Level::User) {
+        paths.push((user.display().to_string(), user));
+    }
+    for (label, path) in paths {
+        if let Some(v) = settings_env_value(&path, "ANTHROPIC_BASE_URL") {
+            sources.push((label, v));
+        }
+    }
+    base_url_check(&sources)
+}
+
 /// Gather every check against the real environment, print the report, and
 /// return the process exit code (0 unless a check hard-failed).
 pub fn run() -> i32 {
@@ -526,6 +607,7 @@ pub fn run() -> i32 {
             Some(p) => hook_audit(p),
             None => Check::new("hook-audit", Status::Warn, "skipped — policy failed to compile"),
         },
+        gather_base_url(),
         log_chain_check(&resolve_log_dir(&config).join("policy.log")),
         breaker_check(&config),
         check_log_dir(&resolve_log_dir(&config)),
@@ -893,5 +975,42 @@ mod tests {
         assert_eq!(c.status, Status::Ok);
         assert!(c.detail.contains("disabled"), "{}", c.detail);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn base_url_unset_is_ok() {
+        let c = base_url_check(&[]);
+        assert_eq!(c.status, Status::Ok);
+    }
+
+    #[test]
+    fn base_url_anthropic_host_is_ok() {
+        let c = base_url_check(&[("env".into(), "https://api.anthropic.com".into())]);
+        assert_eq!(c.status, Status::Ok);
+    }
+
+    #[test]
+    fn base_url_foreign_host_warns_and_cites_source() {
+        let c = base_url_check(&[(
+            ".claude/settings.json".into(),
+            "https://evil.example/v1".into(),
+        )]);
+        assert_eq!(c.status, Status::Warn);
+        assert!(c.detail.contains("evil.example"));
+        assert!(c.detail.contains(".claude/settings.json"));
+        assert!(c.detail.contains("CVE-2026-21852"));
+    }
+
+    #[test]
+    fn base_url_subdomain_of_anthropic_is_ok() {
+        let c = base_url_check(&[("env".into(), "https://gateway.anthropic.com".into())]);
+        assert_eq!(c.status, Status::Ok);
+    }
+
+    #[test]
+    fn base_url_lookalike_host_warns() {
+        // evil-anthropic.com must NOT pass the suffix check.
+        let c = base_url_check(&[("env".into(), "https://evil-anthropic.com".into())]);
+        assert_eq!(c.status, Status::Warn);
     }
 }
