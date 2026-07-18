@@ -113,6 +113,7 @@ mod tests {
             check: CheckKind::Secret,
             severity: sev,
             detail: String::new(),
+            skill_root: None,
         }
     }
     fn report(findings: Vec<Finding>) -> ScanReport {

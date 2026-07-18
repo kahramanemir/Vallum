@@ -33,6 +33,7 @@ pub struct Finding {
     pub check: CheckKind,
     pub severity: Severity,
     pub detail: String,
+    pub skill_root: Option<PathBuf>,
 }
 
 /// Shell-ish fence languages whose lines we evaluate through the guardrail.
@@ -95,6 +96,7 @@ pub fn scan_docs(docs: &[SkillDoc], policy: Option<&Policy>, cfg: &AppConfig) ->
             check,
             severity,
             detail,
+            skill_root: d.skill_root.clone(),
         };
 
         // 1. Secrets — line by line so the report can point at the leak.
@@ -242,6 +244,7 @@ pub fn add_combined_signatures(findings: &mut Vec<Finding>) {
                     detail: "prompt injection combined with a risky shell command \
                              (ToxicSkills pattern)"
                         .to_string(),
+                    skill_root: f.skill_root.clone(),
                 });
                 done.insert(f.file.clone());
             }
