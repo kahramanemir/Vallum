@@ -72,6 +72,9 @@ pub fn render_human(report: &ScanReport, usage_error: bool) {
             use_color
         )
     );
+    if report.binary_skipped > 0 {
+        println!("  ({} binary file(s) skipped)", report.binary_skipped);
+    }
     for f in &report.findings {
         println!(
             "  [{}] {} ({}): {}",
@@ -87,6 +90,7 @@ pub fn render_human(report: &ScanReport, usage_error: bool) {
 struct JsonFinding<'a> {
     file: String,
     doc: &'a str,
+    doc_kind: &'a crate::skills::model::DocKind,
     check: &'a crate::skills::CheckKind,
     severity: &'a Severity,
     detail: &'a str,
@@ -97,6 +101,7 @@ struct JsonReport<'a> {
     files_scanned: usize,
     docs: usize,
     usage_error: bool,
+    binary_skipped: usize,
     findings: Vec<JsonFinding<'a>>,
     warnings: &'a [String],
 }
@@ -108,6 +113,7 @@ pub fn render_json(report: &ScanReport, usage_error: bool) {
         .map(|f| JsonFinding {
             file: f.file.display().to_string(),
             doc: &f.doc,
+            doc_kind: &f.doc_kind,
             check: &f.check,
             severity: &f.severity,
             detail: &f.detail,
@@ -117,6 +123,7 @@ pub fn render_json(report: &ScanReport, usage_error: bool) {
         files_scanned: report.files_scanned,
         docs: report.docs,
         usage_error,
+        binary_skipped: report.binary_skipped,
         findings,
         warnings: &report.warnings,
     };

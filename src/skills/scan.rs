@@ -16,6 +16,8 @@ pub enum CheckKind {
     FenceCommand,
     InvisibleUnicode,
     CombinedSignature,
+    AuxUnreadable,
+    AuxTooLarge,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
