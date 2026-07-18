@@ -201,6 +201,10 @@ pub fn add_aux_targets(targets: &mut Vec<Target>) {
     }
 }
 
+/// Collect aux files under one skill root. Descent stops at nested skill
+/// packages: a subdirectory that itself contains a `SKILL.md` is a different
+/// skill root whose own walk collects its files, so each aux file belongs to
+/// its nearest ancestor root and is emitted exactly once.
 fn aux_walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<Target>) {
     if depth > MAX_WALK_DEPTH {
         return;
@@ -225,6 +229,11 @@ fn aux_walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<Target>) {
             continue;
         }
         if meta.is_dir() {
+            // A subdirectory holding its own SKILL.md is a distinct skill root;
+            // its files belong to that nearer root, collected by its own walk.
+            if path.join("SKILL.md").is_file() {
+                continue;
+            }
             aux_walk(root, &path, depth + 1, out);
         } else if meta.is_file() && classify(&path).is_none() {
             out.push(Target {
@@ -391,6 +400,39 @@ mod tests {
         let (targets, _m) = resolve_explicit(std::slice::from_ref(&f));
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].kind, DocKind::Skill);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn nested_skill_root_files_belong_to_nearest_root_only() {
+        let d = tmp();
+        fs::create_dir_all(d.join("outer").join("inner")).unwrap();
+        fs::write(d.join("outer").join("SKILL.md"), "x").unwrap();
+        fs::write(d.join("outer").join("a.txt"), "x").unwrap();
+        fs::write(d.join("outer").join("inner").join("SKILL.md"), "x").unwrap();
+        fs::write(d.join("outer").join("inner").join("b.txt"), "x").unwrap();
+        let (targets, _m) = resolve_explicit(std::slice::from_ref(&d));
+        let aux: Vec<_> = targets.iter().filter(|t| t.kind == DocKind::Aux).collect();
+        assert_eq!(
+            aux.len(),
+            2,
+            "each file exactly once: {:?}",
+            aux.iter().map(|t| &t.path).collect::<Vec<_>>()
+        );
+        let b = aux
+            .iter()
+            .find(|t| t.path.ends_with("b.txt"))
+            .expect("b.txt collected");
+        assert_eq!(
+            b.skill_root.as_deref(),
+            Some(d.join("outer").join("inner").as_path()),
+            "b.txt owned by nearest root"
+        );
+        let a = aux
+            .iter()
+            .find(|t| t.path.ends_with("a.txt"))
+            .expect("a.txt collected");
+        assert_eq!(a.skill_root.as_deref(), Some(d.join("outer").as_path()));
         let _ = fs::remove_dir_all(&d);
     }
 
