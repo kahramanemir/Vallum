@@ -49,27 +49,53 @@ fn backup_suffix() -> String {
 }
 
 /// Backup, atomic-write replacement. Returns the backup path if one was made.
+///
+/// The rename lands on the symlink *target* (a stow/chezmoi-managed dotfile
+/// keeps its link), the temp file is fsynced before the rename (a crash can't
+/// leave a truncated config), and an existing file's permission bits carry
+/// over (a 0600 settings file holding tokens must not loosen to the default).
 pub(crate) fn write_atomic_with_backup(
     path: &Path,
     contents: &str,
 ) -> Result<Option<PathBuf>, String> {
+    use std::io::Write as _;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
     }
-    let backup = if path.exists() {
+    let target = if path.exists() {
+        fs::canonicalize(path).map_err(|e| format!("resolve {}: {e}", path.display()))?
+    } else {
+        path.to_path_buf()
+    };
+    let backup = if target.exists() {
         let mut bk = path.as_os_str().to_owned();
         bk.push(backup_suffix());
         let bk_path = PathBuf::from(bk);
-        fs::copy(path, &bk_path).map_err(|e| format!("backup {}: {e}", path.display()))?;
+        fs::copy(&target, &bk_path).map_err(|e| format!("backup {}: {e}", path.display()))?;
         Some(bk_path)
     } else {
         None
     };
-    let mut tmp = path.as_os_str().to_owned();
+    let mut tmp = target.as_os_str().to_owned();
     tmp.push(format!(".tmp-{}", std::process::id()));
     let tmp_path = PathBuf::from(tmp);
-    fs::write(&tmp_path, contents).map_err(|e| format!("write {}: {e}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path).map_err(|e| format!("rename {}: {e}", path.display()))?;
+    let write_result = (|| {
+        let mut f = fs::File::create(&tmp_path)
+            .map_err(|e| format!("write {}: {e}", tmp_path.display()))?;
+        f.write_all(contents.as_bytes())
+            .map_err(|e| format!("write {}: {e}", tmp_path.display()))?;
+        f.sync_all()
+            .map_err(|e| format!("fsync {}: {e}", tmp_path.display()))?;
+        if let Ok(meta) = fs::metadata(&target) {
+            fs::set_permissions(&tmp_path, meta.permissions())
+                .map_err(|e| format!("chmod {}: {e}", tmp_path.display()))?;
+        }
+        fs::rename(&tmp_path, &target).map_err(|e| format!("rename {}: {e}", target.display()))
+    })();
+    if let Err(e) = write_result {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e);
+    }
     Ok(backup)
 }
 
@@ -303,6 +329,44 @@ mod tests {
         assert!(backup_contents.contains("\"old\""));
         let current = fs::read_to_string(&path).unwrap();
         assert!(current.contains("\"new\""));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_preserves_0600_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("atomicperms");
+        let path = dir.join("settings.json");
+        fs::write(&path, r#"{"token":"secret"}"#).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        write_atomic_with_backup(&path, r#"{"token":"rotated"}"#).unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "0600 must not loosen on rewrite");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_follows_symlink_instead_of_replacing_it() {
+        let dir = temp_dir("atomicsymlink");
+        let real = dir.join("dotfiles").join("settings.json");
+        fs::create_dir_all(real.parent().unwrap()).unwrap();
+        fs::write(&real, r#"{"theme":"old"}"#).unwrap();
+        let link = dir.join("settings.json");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        write_atomic_with_backup(&link, r#"{"theme":"new"}"#).unwrap();
+
+        let meta = fs::symlink_metadata(&link).unwrap();
+        assert!(
+            meta.file_type().is_symlink(),
+            "stow-style link must survive"
+        );
+        assert!(
+            fs::read_to_string(&real).unwrap().contains("\"new\""),
+            "content must land on the link target"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

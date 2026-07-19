@@ -24,7 +24,12 @@ pub fn log_verdict(verdict: &PolicyVerdict, command_line: &str, agent: &str, cfg
         PolicyAction::Allow => unreachable!(),
     };
     let context = format!("{action} [{}] agent={agent}", verdict.rule_name);
-    let path = crate::audit::resolve_log_path("policy.log", cfg.audit.log_dir.as_deref());
+    // No resolvable log dir (no home, no override): skip — best-effort logging
+    // must not fall back to a cwd-relative policy.log.
+    let Some(path) = crate::audit::resolve_log_path("policy.log", cfg.audit.log_dir.as_deref())
+    else {
+        return;
+    };
     let _ = crate::logchain::append_chained(&path, &context, &safe);
 }
 

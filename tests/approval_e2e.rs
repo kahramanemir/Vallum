@@ -147,3 +147,51 @@ fn hook_minted_token_runs_forged_token_denied() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn honored_token_is_still_blocked_while_breaker_is_tripped() {
+    let dir = temp_dir("breaker_trip");
+    let cfg = config_for(&dir);
+
+    // A real hook-minted token for the Ask-matched command.
+    let rewritten = hook_rewrite(&cfg, &dir, "echo need-approval");
+    assert!(
+        rewritten.starts_with("vallum run --approval-token "),
+        "rewrite: {rewritten}"
+    );
+
+    // Trip the breaker AFTER the token was minted — the emergency lockdown
+    // must beat a token issued moments earlier.
+    std::fs::write(
+        dir.join("breaker.state"),
+        "locked 2999-01-01T00:00:00+00:00\n",
+    )
+    .unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_vallum");
+    let bin_dir = Path::new(bin).parent().unwrap().to_str().unwrap();
+    let path_env = format!("{bin_dir}:{}", std::env::var("PATH").unwrap_or_default());
+    let out = Command::new("bash")
+        .arg("-c")
+        .arg(&rewritten)
+        .env("VALLUM_CONFIG", &cfg)
+        .env("VALLUM_ASSUME_YES", "0")
+        .env("HOME", &dir)
+        .env("PATH", &path_env)
+        .output()
+        .expect("run rewrite while tripped");
+    assert_eq!(
+        out.status.code(),
+        Some(125),
+        "tripped breaker must block even a valid token; stdout: {} stderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("circuit breaker"),
+        "block must come from the breaker; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -23,6 +23,7 @@ fn spawn_reader<R: Read + Send + 'static>(
     total_bytes: Arc<AtomicUsize>,
     max_output_bytes: usize,
     tee: Option<Arc<Mutex<File>>>,
+    done: Arc<AtomicUsize>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let mut reader = BufReader::new(stream);
@@ -54,6 +55,7 @@ fn spawn_reader<R: Read + Send + 'static>(
                 Err(_) => break,
             }
         }
+        done.fetch_add(1, Ordering::SeqCst);
     })
 }
 
@@ -125,6 +127,7 @@ pub fn execute_command(
     let collected: Collected = Arc::new(Mutex::new(Vec::new()));
     let seq = Arc::new(AtomicUsize::new(0));
     let total_bytes = Arc::new(AtomicUsize::new(0));
+    let readers_done = Arc::new(AtomicUsize::new(0));
 
     let h_out = spawn_reader(
         stdout,
@@ -133,6 +136,7 @@ pub fn execute_command(
         Arc::clone(&total_bytes),
         max_output_bytes,
         tee_file.as_ref().map(Arc::clone),
+        Arc::clone(&readers_done),
     );
     let h_err = spawn_reader(
         stderr,
@@ -141,6 +145,7 @@ pub fn execute_command(
         Arc::clone(&total_bytes),
         max_output_bytes,
         tee_file.as_ref().map(Arc::clone),
+        Arc::clone(&readers_done),
     );
 
     let timeout = if timeout_secs == 0 {
@@ -154,7 +159,21 @@ pub fn execute_command(
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                exit_code = status.code().unwrap_or(1);
+                // A signal death maps to 128+N (shell convention) so a
+                // SIGSEGV/SIGKILL is distinguishable from a normal exit 1
+                // in the audit trail and the propagated exit code.
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    exit_code = status
+                        .code()
+                        .or_else(|| status.signal().map(|s| 128 + s))
+                        .unwrap_or(1);
+                }
+                #[cfg(not(unix))]
+                {
+                    exit_code = status.code().unwrap_or(1);
+                }
                 break;
             }
             Ok(None) => {
@@ -172,9 +191,21 @@ pub fn execute_command(
         }
     }
 
-    // Reader threads finish once the pipes hit EOF (the kill above closes them).
-    let _ = h_out.join();
-    let _ = h_err.join();
+    // Reader threads finish once the pipes hit EOF (the kill above closes
+    // them). After a timeout kill that guarantee is weaker: a grandchild that
+    // escaped the process group (setsid) — or any grandchild on non-unix,
+    // where only the direct child is killed — can hold the pipes open
+    // indefinitely, so the wait is bounded. Leaked readers exit with the
+    // process; partial output is recovered below via the Arc fallback.
+    if timed_out {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while readers_done.load(Ordering::SeqCst) < 2 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+    } else {
+        let _ = h_out.join();
+        let _ = h_err.join();
+    }
 
     let mut lines = Arc::try_unwrap(collected)
         .map(|m| m.into_inner().unwrap())
@@ -238,6 +269,21 @@ mod tests {
         assert!(out.contains("[output capped at 100 bytes]"));
         // Stored body stays bounded near the cap (allow slack for the marker).
         assert!(out.len() < 400);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn signal_death_maps_to_128_plus_signal() {
+        // A SIGKILL'd child must not masquerade as a normal `exit 1`.
+        let (_out, code) = execute_command(
+            "sh",
+            &["-c".to_string(), "kill -KILL $$".to_string()],
+            10 * 1024 * 1024,
+            0,
+            None,
+        )
+        .unwrap();
+        assert_eq!(code, 128 + libc::SIGKILL);
     }
 
     #[test]
