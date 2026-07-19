@@ -552,6 +552,9 @@ fn gather_base_url() -> Check {
         ),
     ];
     if let Ok(user) = crate::install_hook::settings_path(crate::install_hook::Level::User) {
+        if let Some(local) = user.parent().map(|p| p.join("settings.local.json")) {
+            paths.push((local.display().to_string(), local));
+        }
         paths.push((user.display().to_string(), user));
     }
     for (label, path) in paths {
