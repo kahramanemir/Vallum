@@ -347,6 +347,21 @@ pub struct HookFinding {
     pub dangerous: Option<String>,
 }
 
+/// Escape control characters (ESC, CR, etc.) in attacker-influenced hook text
+/// before it reaches the doctor report — a crafted event key or command must
+/// not emit terminal escape sequences and forge an on-screen verdict.
+fn escape_ctrl(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_control() {
+            out.push_str(&format!("\\x{:02x}", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Classify each hook command from one agent: drop Vallum's own, redact the
 /// rest, and mark any the guardrail Asks/Denies as dangerous. Pure — no I/O.
 pub fn audit_hook_commands(
@@ -366,8 +381,8 @@ pub fn audit_hook_commands(
             _ => Some(verdict.rule_name),
         };
         findings.push(HookFinding {
-            agent: format!("{label} ({event})"),
-            command: crate::scrubber::redact(cmd, &extra, true, true),
+            agent: escape_ctrl(&format!("{label} ({event})")),
+            command: escape_ctrl(&crate::scrubber::redact(cmd, &extra, true, true)),
             dangerous,
         });
     }
@@ -929,6 +944,26 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].agent, "claude (SessionStart)");
         assert!(findings[0].dangerous.is_some());
+    }
+
+    #[test]
+    fn hook_audit_escapes_control_chars_in_event_and_command() {
+        let policy =
+            crate::policy::Policy::compile(&crate::config::PolicyConfig::default()).unwrap();
+        let cmds = vec![(
+            "Session\x1b[2KStart".to_string(),
+            "echo \x1b[2Kok".to_string(),
+        )];
+        let findings = audit_hook_commands("claude", &cmds, &policy);
+        assert_eq!(findings.len(), 1);
+        assert!(
+            !findings[0].agent.contains('\x1b'),
+            "event label must be escaped"
+        );
+        assert!(
+            !findings[0].command.contains('\x1b'),
+            "command must be escaped"
+        );
     }
 
     #[test]
