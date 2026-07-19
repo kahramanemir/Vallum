@@ -26,20 +26,6 @@ pub fn has_hook(settings: &Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Every hook command under hooks.beforeShellExecution[].command (flat shape).
-pub fn list_hook_commands(settings: &Value) -> Vec<String> {
-    settings
-        .get("hooks")
-        .and_then(|h| h.get("beforeShellExecution"))
-        .and_then(|p| p.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|e| e.get("command").and_then(|c| c.as_str()).map(String::from))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 pub fn add(settings: &mut Value, force: bool) -> Result<bool, String> {
     if has_hook(settings) {
         if !force {
@@ -161,23 +147,5 @@ mod tests {
         let mut v = serde_json::json!({ "hooks": "not an object" });
         let err = add(&mut v, false).unwrap_err();
         assert!(err.contains("hooks"), "{err}");
-    }
-
-    #[test]
-    fn list_hook_commands_reads_flat_entries() {
-        let settings = serde_json::json!({
-            "hooks": { "beforeShellExecution": [
-                { "command": "vallum hook --agent cursor" },
-                { "command": "echo hi" }
-            ]}
-        });
-        let cmds = list_hook_commands(&settings);
-        assert_eq!(
-            cmds,
-            vec![
-                "vallum hook --agent cursor".to_string(),
-                "echo hi".to_string()
-            ]
-        );
     }
 }

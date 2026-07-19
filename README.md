@@ -156,7 +156,7 @@ as command separators. See [SECURITY.md](SECURITY.md) for the residual known
 limitations (variable indirection, command substitution, non-shell
 interpreters).
 
-Built-in rules (all default to `Ask`):
+The 24 built-in rules (all default to `Ask`):
 
 | Rule | Catches |
 |---|---|
@@ -178,6 +178,16 @@ Built-in rules (all default to `Ask`):
 | `git_clean_force` | `git clean -f` permanently deletes untracked files |
 | `chown_recursive_root` | Recursive `chown` on a root/home/system path |
 | `write_agent_config` | A shell command writing to an agent config/hook file (`.claude/settings.json` and friends) — possible hook injection |
+| `write_shell_profile` | A shell command writing to a startup file (`.zshenv`, `.zshrc`, `.zprofile`, `.bashrc`, `.bash_profile`, `.profile`) — login-shell persistence (CVE-2026-55607 class) |
+| `write_ssh_config` | Writing to `~/.ssh/authorized_keys` or `~/.ssh/config` — persistent remote access |
+| `write_git_hooks` | Writing a `.git/hooks/` script or redirecting `git config core.hooksPath` — repo-triggered persistence |
+| `write_crontab` | Installing, editing, or removing a crontab (`crontab -l` stays `Allow`) |
+| `write_launch_agents` | Writing or loading a macOS LaunchAgent/LaunchDaemon (`~/Library/LaunchAgents\|LaunchDaemons`, `launchctl load`/`bootstrap`) |
+| `write_systemd_user` | Writing or enabling a systemd **user** unit (`~/.config/systemd/user/`, `systemctl --user enable`) |
+
+The six persistence rules gate **writes** only — *reading* a startup file
+(`source ~/.zshrc`, `cat ~/.ssh/config`, `git config user.name`,
+`crontab -l`) stays `Allow`.
 
 ### Circuit breaker (blast radius)
 
@@ -279,10 +289,18 @@ removes exactly the entry the installer added, and `vallum doctor` reports
 per-agent status (`hook (claude)`, `hook (cursor)`, `hook (gemini)`,
 `hook (codex)`), showing "agent not detected — skipped" for agents that
 aren't installed on the machine. `vallum doctor` also audits the hook
-commands installed in each agent's config and flags any it did not install
-(a foreign hook is a review prompt; one matching a dangerous guardrail
-pattern fails the check). Every Ask/Deny verdict, on any agent, is
-still recorded to `policy.log` with `agent=<claude|cursor|gemini|codex|direct>`.
+commands installed under **every** hook event of each agent's config — not just
+`PreToolUse`, so an injected `SessionStart` hook (CVE-2026-25725 class) is
+caught too — and flags any command it did not install (a foreign hook is a
+review prompt, labeled `agent (Event)`; one matching a dangerous guardrail
+pattern fails the check). Separately, doctor **warns** when `ANTHROPIC_BASE_URL`
+is overridden to a non-`*.anthropic.com` host — in the process environment or a
+project/user `settings.json` `env` block (`settings.local.json` included) —
+because that silently reroutes every API call and your key to another endpoint
+(CVE-2026-21852 class); it only warns, never fails, since proxy gateways
+(LiteLLM, corporate) are legitimate and only you can confirm intent. Every
+Ask/Deny verdict, on any agent, is still recorded to `policy.log` with
+`agent=<claude|cursor|gemini|codex|direct>`.
 
 Limitations, stated plainly:
 
@@ -388,16 +406,34 @@ risky shell commands in fenced or inline code (`curl … | sh`, base64-decode
 pipes), and invisible-Unicode smuggling. It reuses the same secret, injection,
 and guardrail engines as the rest of Vallum — read-only, connects to nothing.
 
+Scanning a skill goes past its `SKILL.md`: **every UTF-8 file bundled in the
+skill package** (the directory that holds the `SKILL.md`) is scanned, because a
+poisoned payload hides just as easily in a helper script or a `README` as in the
+entry file (the PhantomSkill class). The walk is depth-bounded (6 levels from
+the skill root) and never follows symlinks; a nested `SKILL.md` owns its own
+package (a symlinked one never creates a nested root). Markdown-named aux files
+keep the fence-aware parsing; every other aux file is scanned line-by-line as
+commands plus a full-text injection/secret/invisible-character check. Files with
+a known binary extension are skipped by extension and **counted**
+(`(n binary file(s) skipped)`), never content-scanned; an aux file larger than
+5 MiB, or one that is unreadable / non-UTF-8, is reported as a **Warning** —
+never silently dropped, and never truncated-then-scanned (a partial read is
+exactly how a payload past the cutoff would slip by).
+
 ```bash
 vallum skills scan                  # discovered skills + context files
 vallum skills scan ./downloaded/    # a directory, before you install it
-vallum skills scan --json           # CI / pre-commit
+vallum skills scan --json           # CI / pre-commit (findings carry doc_kind)
 ```
 
 Exit codes: `0` clean, `10` findings, `20` high-severity, `125` usage error.
 A document that carries **both** prompt injection **and** a risky shell
 command — the measured ToxicSkills signature (91% of confirmed-malicious
-skills combine the two) — is escalated to a high-severity finding.
+skills combine the two) — is escalated to a high-severity finding, and the same
+escalation fires **across files of one skill**: an injection in one bundled file
+plus a risky command in another surfaces as a single high-severity
+`combined_signature` at the skill's `SKILL.md` (the cross-file PhantomSkill
+pattern).
 
 ## Built-in optimizers
 
@@ -483,7 +519,7 @@ Supported settings:
 - `security.guardrail`: enable the pre-exec policy layer that gates dangerous commands (Allow/Ask/Deny) — **default `true`**; set `false` to bypass entirely
 - `security.assume_yes`: auto-approve direct-mode `ask` verdicts (also via `VALLUM_ASSUME_YES=1`) — **default `false`**
 - `policy.rules`: user policy rules — each has `pattern`, `action` (`ask` or `deny`; `allow` is rejected), and `reason`
-- `policy.disabled`: built-in rule names to disable (rm_rf_root, curl_pipe_shell, shell_download_exec, dd_to_device, redirect_to_device, mkfs_device, fork_bomb, chmod_777_recursive, read_sensitive_creds, git_push_force, find_delete_root, shred_sensitive, truncate_system, xargs_rm_force, reverse_shell, git_clean_force, chown_recursive_root, write_agent_config) — default none
+- `policy.disabled`: built-in rule names to disable (rm_rf_root, curl_pipe_shell, shell_download_exec, dd_to_device, redirect_to_device, mkfs_device, fork_bomb, chmod_777_recursive, read_sensitive_creds, git_push_force, find_delete_root, shred_sensitive, truncate_system, xargs_rm_force, reverse_shell, git_clean_force, chown_recursive_root, write_agent_config, write_shell_profile, write_ssh_config, write_git_hooks, write_crontab, write_launch_agents, write_systemd_user) — default none
 
 ## Install
 
@@ -556,7 +592,7 @@ vallum skills scan <dir>             # scan a downloaded skill before installing
 vallum log verify                    # verify the policy.log hash chain (tamper evidence)
 vallum log verify --expect-head <hex>  # also compare against an externally stored head
 vallum unlock                        # clear a tripped circuit-breaker lock
-vallum doctor                        # self-check: config, hook, guardrail, hook-audit, log-chain, breaker, PATH, log dir
+vallum doctor                        # self-check: config, hook, guardrail, hook-audit, base-url, log-chain, breaker, PATH, log dir
 vallum completions <bash|zsh|fish|elvish|powershell> > completions/_vallum
 ```
 
@@ -679,7 +715,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/breaker.rs`              | Blast-radius circuit breaker: sliding-window trip state + unlock |
 | `src/logchain.rs`             | `policy.log` SHA-256 hash chain: chained append + `log verify` |
 | `src/mcp/mod.rs`              | `vallum mcp scan` orchestration                      |
-| `src/skills/mod.rs`           | `vallum skills scan` orchestration                   |
+| `src/skills/mod.rs`           | `vallum skills scan` orchestration (skill/context docs + bundled aux files: binary-skip, size/UTF-8 gating) |
 | `src/mcp/discover.rs`         | Well-known MCP config file locations                 |
 | `src/mcp/model.rs`            | Parsing on-disk MCP config shapes into normalized servers |
 | `src/mcp/scan.rs`             | The three static checks (secrets, risky launch, injection) |
@@ -701,7 +737,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 | `src/install_hook/cursor.rs`  | Cursor installer: `~/.cursor/hooks.json` |
 | `src/install_hook/gemini.rs`  | Gemini CLI installer: `~/.gemini/settings.json` |
 | `src/install_hook/codex.rs`   | Codex CLI installer: `~/.codex/hooks.json` |
-| `src/doctor.rs`               | `vallum doctor`: install/health self-checks (config, hook, hook-audit, guardrail, log-chain, breaker, PATH, log dir) |
+| `src/doctor.rs`               | `vallum doctor`: install/health self-checks (config, hook, hook-audit across all events, guardrail, `ANTHROPIC_BASE_URL`, log-chain, breaker, PATH, log dir) |
 | `src/update.rs`               | `vallum update`: newer-release check + upgrade hint  |
 | `src/welcome.rs`              | Bare-`vallum` branded status banner                  |
 | `src/main.rs`                 | Pipeline wiring                                      |
@@ -736,6 +772,7 @@ Run `cargo bench` to time the full pipeline against seven committed fixtures (`g
 - [x] Skill & context-file scanning — `vallum skills scan` (SKILL.md + CLAUDE.md/AGENTS.md/rules files: secrets / injection / risky fenced commands / invisible Unicode, ToxicSkills composite escalation)
 - [x] Tamper-evident audit log — SHA-256 hash-chained `policy.log` with `vallum log verify [--expect-head]` and a doctor log-chain check
 - [x] Blast-radius containment — rate-based circuit breaker (deny-all lockdown + `vallum unlock`) and a non-forgeable per-command HMAC approval token replacing the plain `--policy-approved` hook flag
+- [x] Skill aux-file scanning + persistence guardrails — every UTF-8 file in a skill package scanned (cross-file PhantomSkill composite, anti-truncation read rules), six persistence-vector Ask rules (shell profiles, git hooks, crontab, SSH, LaunchAgents, systemd user), doctor audits all hook events and flags `ANTHROPIC_BASE_URL` overrides
 - [ ] Deferred — `cargo-fuzz`/libFuzzer harness, performance regression gating, Windows support (the `0600`/timeout-backed guarantees need a Windows equivalent first)
 
 ## Name

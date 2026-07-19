@@ -5,6 +5,21 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `vallum skills scan` scans every UTF-8 auxiliary file bundled in a skill
+  package (PhantomSkill-class payload hiding); cross-file injection+command
+  composite escalates to High; oversized/unreadable aux files are Warnings,
+  never silently skipped or truncated-then-scanned.
+- Six persistence-vector guardrail rules (all Ask): `write_shell_profile`
+  (CVE-2026-55607 class), `write_git_hooks`, `write_crontab`,
+  `write_ssh_config`, `write_launch_agents`, `write_systemd_user`.
+- `vallum doctor`: hook audit now covers every hook event (injected
+  SessionStart hooks, CVE-2026-25725 class); new `base-url` check warns when
+  `ANTHROPIC_BASE_URL` is overridden to a non-Anthropic host
+  (CVE-2026-21852 class).
+
 ## [0.8.11]
 
 ### Added

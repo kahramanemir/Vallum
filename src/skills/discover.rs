@@ -9,6 +9,7 @@ const MAX_WALK_DEPTH: usize = 6;
 pub struct Target {
     pub path: PathBuf,
     pub kind: DocKind,
+    pub skill_root: Option<PathBuf>,
 }
 
 /// Recognize a file by name. Returns None for anything not a scan target.
@@ -31,22 +32,27 @@ pub fn known_targets() -> Vec<Target> {
         Target {
             path: PathBuf::from("CLAUDE.md"),
             kind: DocKind::Context,
+            skill_root: None,
         },
         Target {
             path: PathBuf::from("AGENTS.md"),
             kind: DocKind::Context,
+            skill_root: None,
         },
         Target {
             path: PathBuf::from("GEMINI.md"),
             kind: DocKind::Context,
+            skill_root: None,
         },
         Target {
             path: PathBuf::from(".cursorrules"),
             kind: DocKind::Rules,
+            skill_root: None,
         },
         Target {
             path: PathBuf::from(".github").join("copilot-instructions.md"),
             kind: DocKind::Context,
+            skill_root: None,
         },
     ];
 
@@ -62,10 +68,12 @@ pub fn known_targets() -> Vec<Target> {
         out.push(Target {
             path: home.join(".claude").join("CLAUDE.md"),
             kind: DocKind::Context,
+            skill_root: None,
         });
         out.push(Target {
             path: home.join(".codex").join("AGENTS.md"),
             kind: DocKind::Context,
+            skill_root: None,
         });
         for t in walk_targets(&home.join(".claude").join("skills")) {
             out.push(t);
@@ -79,10 +87,12 @@ pub fn known_targets() -> Vec<Target> {
 
 /// Known targets that currently exist on disk.
 pub fn existing_targets() -> Vec<Target> {
-    known_targets()
+    let mut targets: Vec<Target> = known_targets()
         .into_iter()
         .filter(|t| t.path.is_file())
-        .collect()
+        .collect();
+    add_aux_targets(&mut targets);
+    targets
 }
 
 /// Resolve explicit CLI args. Each is a file (classified by name; unrecognized
@@ -95,15 +105,24 @@ pub fn resolve_explicit(paths: &[PathBuf]) -> (Vec<Target>, Vec<PathBuf>) {
     for p in paths {
         if p.is_file() {
             let kind = classify(p).unwrap_or(DocKind::Context);
+            // A directly-named SKILL.md still groups for the per-file composite,
+            // but never triggers aux collection of its siblings.
+            let skill_root = if kind == DocKind::Skill {
+                p.parent().map(Path::to_path_buf)
+            } else {
+                None
+            };
             targets.push(Target {
                 path: p.clone(),
                 kind,
+                skill_root,
             });
         } else if p.is_dir() {
-            let walked = walk_targets(p);
+            let mut walked = walk_targets(p);
             if walked.is_empty() {
                 missing.push(p.clone());
             } else {
+                add_aux_targets(&mut walked);
                 targets.extend(walked);
             }
         } else {
@@ -150,8 +169,103 @@ fn walk_inner(dir: &Path, depth: usize, out: &mut Vec<Target>) {
             walk_inner(&path, depth + 1, out);
         } else if meta.is_file() {
             if let Some(kind) = classify(&path) {
-                out.push(Target { path, kind });
+                let skill_root = if kind == DocKind::Skill {
+                    path.parent().map(Path::to_path_buf)
+                } else {
+                    None
+                };
+                out.push(Target {
+                    path,
+                    kind,
+                    skill_root,
+                });
             }
+        }
+    }
+}
+
+/// For every unique skill root among `targets`, walk the root and append every
+/// regular, non-symlink file that classify() does not recognize as an Aux
+/// target. SKILL.md siblings named CLAUDE.md etc. stay their classified kind.
+pub fn add_aux_targets(targets: &mut Vec<Target>) {
+    use std::collections::BTreeSet;
+    let roots: BTreeSet<PathBuf> = targets
+        .iter()
+        .filter(|t| t.kind == DocKind::Skill)
+        .filter_map(|t| t.skill_root.clone())
+        .collect();
+    // Back-fill skill_root on context/rules files that live *inside* a skill
+    // package, so a payload split as {injection in SKILL.md, command in a
+    // sibling AGENTS.md/CLAUDE.md} still groups into the cross-file composite.
+    // Owner = NEAREST ancestor skill root (longest prefix); genuine top-level
+    // context files match no root and keep skill_root = None.
+    for t in targets.iter_mut() {
+        if t.skill_root.is_some() || !matches!(t.kind, DocKind::Context | DocKind::Rules) {
+            continue;
+        }
+        if let Some(owner) = roots
+            .iter()
+            .filter(|r| t.path.starts_with(r))
+            .max_by_key(|r| r.as_os_str().len())
+        {
+            t.skill_root = Some(owner.clone());
+        }
+    }
+    for root in roots {
+        let mut aux = Vec::new();
+        aux_walk(&root, &root, 0, &mut aux);
+        targets.extend(aux);
+    }
+}
+
+/// Collect aux files under one skill root. Descent stops at nested skill
+/// packages: a subdirectory that itself contains a `SKILL.md` is a different
+/// skill root whose own walk collects its files, so each aux file belongs to
+/// its nearest ancestor root and is emitted exactly once. Depth is bounded
+/// from the skill root (not the CLI arg dir the main walk bounds from).
+fn aux_walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<Target>) {
+    if depth > MAX_WALK_DEPTH {
+        return;
+    }
+    if std::fs::symlink_metadata(dir)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        if meta.is_dir() {
+            // A subdirectory holding its own SKILL.md is a distinct skill root;
+            // its files belong to that nearer root, collected by its own walk.
+            // Symlink-aware on purpose: a symlinked SKILL.md never makes a
+            // nested root (walk_inner skips symlinks, so no walk would ever
+            // collect that subtree — following the link here would let a
+            // malicious skill hide its payload dir from the scan).
+            if std::fs::symlink_metadata(path.join("SKILL.md"))
+                .map(|m| m.is_file())
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            aux_walk(root, &path, depth + 1, out);
+        } else if meta.is_file() && classify(&path).is_none() {
+            out.push(Target {
+                path,
+                kind: DocKind::Aux,
+                skill_root: Some(root.to_path_buf()),
+            });
         }
     }
 }
@@ -261,6 +375,155 @@ mod tests {
         let (targets, missing) = resolve_explicit(std::slice::from_ref(&link));
         assert!(targets.is_empty(), "symlinked root must not be walked");
         assert_eq!(missing, vec![link]);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn aux_targets_collected_under_skill_root() {
+        let d = tmp();
+        fs::create_dir_all(d.join("my-skill").join("scripts")).unwrap();
+        fs::write(d.join("my-skill").join("SKILL.md"), "x").unwrap();
+        fs::write(d.join("my-skill").join("payload.txt"), "x").unwrap();
+        fs::write(d.join("my-skill").join("scripts").join("run.py"), "x").unwrap();
+        let (targets, missing) = resolve_explicit(std::slice::from_ref(&d));
+        assert!(missing.is_empty());
+        let aux: Vec<_> = targets.iter().filter(|t| t.kind == DocKind::Aux).collect();
+        assert_eq!(aux.len(), 2, "payload.txt + scripts/run.py");
+        for t in &aux {
+            assert_eq!(t.skill_root.as_deref(), Some(d.join("my-skill").as_path()));
+        }
+        // SKILL.md itself is a Skill target with skill_root set, not an Aux one.
+        let skill: Vec<_> = targets
+            .iter()
+            .filter(|t| t.kind == DocKind::Skill)
+            .collect();
+        assert_eq!(skill.len(), 1);
+        assert_eq!(
+            skill[0].skill_root.as_deref(),
+            Some(d.join("my-skill").as_path())
+        );
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn no_aux_collection_without_skill_md() {
+        let d = tmp();
+        fs::write(d.join("CLAUDE.md"), "x").unwrap();
+        fs::write(d.join("random.txt"), "x").unwrap();
+        let (targets, _missing) = resolve_explicit(std::slice::from_ref(&d));
+        assert!(targets.iter().all(|t| t.kind != DocKind::Aux));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn explicit_skill_md_file_does_not_pull_aux_siblings() {
+        let d = tmp();
+        fs::create_dir_all(d.join("s")).unwrap();
+        let f = d.join("s").join("SKILL.md");
+        fs::write(&f, "x").unwrap();
+        fs::write(d.join("s").join("payload.txt"), "x").unwrap();
+        let (targets, _m) = resolve_explicit(std::slice::from_ref(&f));
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].kind, DocKind::Skill);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn nested_skill_root_files_belong_to_nearest_root_only() {
+        let d = tmp();
+        fs::create_dir_all(d.join("outer").join("inner")).unwrap();
+        fs::write(d.join("outer").join("SKILL.md"), "x").unwrap();
+        fs::write(d.join("outer").join("a.txt"), "x").unwrap();
+        fs::write(d.join("outer").join("inner").join("SKILL.md"), "x").unwrap();
+        fs::write(d.join("outer").join("inner").join("b.txt"), "x").unwrap();
+        let (targets, _m) = resolve_explicit(std::slice::from_ref(&d));
+        let aux: Vec<_> = targets.iter().filter(|t| t.kind == DocKind::Aux).collect();
+        assert_eq!(
+            aux.len(),
+            2,
+            "each file exactly once: {:?}",
+            aux.iter().map(|t| &t.path).collect::<Vec<_>>()
+        );
+        let b = aux
+            .iter()
+            .find(|t| t.path.ends_with("b.txt"))
+            .expect("b.txt collected");
+        assert_eq!(
+            b.skill_root.as_deref(),
+            Some(d.join("outer").join("inner").as_path()),
+            "b.txt owned by nearest root"
+        );
+        let a = aux
+            .iter()
+            .find(|t| t.path.ends_with("a.txt"))
+            .expect("a.txt collected");
+        assert_eq!(a.skill_root.as_deref(), Some(d.join("outer").as_path()));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn context_file_inside_skill_package_gets_skill_root() {
+        let d = tmp();
+        fs::create_dir_all(d.join("pkg")).unwrap();
+        fs::write(d.join("pkg").join("SKILL.md"), "x").unwrap();
+        fs::write(d.join("pkg").join("AGENTS.md"), "x").unwrap();
+        fs::write(d.join("CLAUDE.md"), "x").unwrap(); // top-level, outside any package
+        let (targets, _m) = resolve_explicit(std::slice::from_ref(&d));
+        let agents = targets
+            .iter()
+            .find(|t| t.path.ends_with("AGENTS.md"))
+            .expect("AGENTS.md found");
+        assert_eq!(
+            agents.skill_root.as_deref(),
+            Some(d.join("pkg").as_path()),
+            "in-package context file joins its skill"
+        );
+        let top = targets
+            .iter()
+            .find(|t| t.path.ends_with("CLAUDE.md"))
+            .expect("CLAUDE.md found");
+        assert_eq!(top.skill_root, None, "top-level context file stays unowned");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn aux_walk_skips_symlinked_files() {
+        let d = tmp();
+        fs::create_dir_all(d.join("s")).unwrap();
+        fs::write(d.join("s").join("SKILL.md"), "x").unwrap();
+        fs::write(d.join("outside.txt"), "x").unwrap();
+        std::os::unix::fs::symlink(d.join("outside.txt"), d.join("s").join("link.txt")).unwrap();
+        let (targets, _m) = resolve_explicit(std::slice::from_ref(&d));
+        assert!(targets.iter().all(|t| t.kind != DocKind::Aux));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn symlinked_skill_md_does_not_hide_a_subdir_from_aux_scan() {
+        let d = tmp();
+        fs::create_dir_all(d.join("s").join("payload")).unwrap();
+        fs::write(d.join("s").join("SKILL.md"), "x").unwrap();
+        std::os::unix::fs::symlink(
+            d.join("s").join("SKILL.md"),
+            d.join("s").join("payload").join("SKILL.md"),
+        )
+        .unwrap();
+        fs::write(d.join("s").join("payload").join("evil.txt"), "x").unwrap();
+        let (targets, _m) = resolve_explicit(std::slice::from_ref(&d));
+        let aux: Vec<_> = targets.iter().filter(|t| t.kind == DocKind::Aux).collect();
+        assert!(
+            aux.iter().any(|t| t.path.ends_with("evil.txt")),
+            "symlinked SKILL.md must not exclude the payload dir from the outer walk: {:?}",
+            aux.iter().map(|t| &t.path).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            aux.iter()
+                .find(|t| t.path.ends_with("evil.txt"))
+                .unwrap()
+                .skill_root
+                .as_deref(),
+            Some(d.join("s").as_path())
+        );
         let _ = fs::remove_dir_all(&d);
     }
 }
