@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.12]
 
 ### Added
 - `vallum skills scan` scans every UTF-8 auxiliary file bundled in a skill
@@ -19,6 +19,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SessionStart hooks, CVE-2026-25725 class); new `base-url` check warns when
   `ANTHROPIC_BASE_URL` is overridden to a non-Anthropic host
   (CVE-2026-21852 class).
+
+### Security
+- A valid `--approval-token` no longer bypasses an active circuit-breaker
+  trip: the emergency lockdown gates pre-approved commands too, so a token
+  minted moments before a trip stops working after it.
+- Log, stats, breaker-state, and approval-secret paths never fall back to
+  the current working directory when the home directory is unknown and no
+  `[audit] log_dir` is set — a repo-committed `approval.secret` could
+  otherwise supply the token-minting key. The affected write fails or is
+  skipped instead.
+
+### Fixed
+- A timed-out command can no longer hang `vallum run` indefinitely: after
+  the timeout kill, output-reader threads are waited with a bounded grace,
+  so a grandchild that escaped the process group (or survived the
+  direct-child-only kill on non-unix) holding the pipes open cannot block
+  the run forever.
+- A child killed by a signal now propagates `128+N` (shell convention,
+  SIGSEGV → 139) instead of a fake exit 1, so signal deaths are
+  distinguishable in the audit trail.
+- `install-hook`/`uninstall-hook` settings writes follow symlinks
+  (stow/chezmoi-managed configs keep their link), fsync before the atomic
+  rename, and preserve existing permission bits (a `0600` settings file no
+  longer loosens to `0644`).
+- Hook TUI detection looks through `sudo`/`doas`/`env` wrappers and leading
+  `VAR=val` assignments, so `sudo vim x` or `env LESS= less x` passes
+  through instead of being wrapped and breaking its interactive TTY.
+- Raw/sanitized audit-log entries append under an exclusive `flock`
+  (concurrent runs cannot interleave mid-entry); the `Command:` field is
+  control-char escaped and payload lines can no longer forge an entry
+  boundary.
+
+### Changed
+- README restructured into a lean landing page with linked topic docs under
+  `docs/` (guardrail, agents, CLI, configuration, optimizers, scanning,
+  architecture, roadmap); product docs at `docs/*.md` are now tracked.
 
 ## [0.8.11]
 
@@ -478,6 +514,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.12]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.12
 [0.8.11]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.11
 [0.8.10]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.10
 [0.8.9]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.9
