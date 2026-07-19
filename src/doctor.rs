@@ -522,7 +522,10 @@ pub fn base_url_check(sources: &[(String, String)]) -> Check {
                 format!(
                     "ANTHROPIC_BASE_URL overridden in {source} → {} — verify this is \
                      intentional (API-key exfil vector, CVE-2026-21852 class)",
-                    crate::scrubber::redact(&host, &extra, true, true)
+                    // The host comes from an attacker-influenceable settings value;
+                    // escape control chars so a crafted URL can't paint over the
+                    // warning (same hardening as the hook-audit report output).
+                    escape_ctrl(&crate::scrubber::redact(&host, &extra, true, true))
                 ),
             );
         }
@@ -1052,6 +1055,15 @@ mod tests {
     fn base_url_subdomain_of_anthropic_is_ok() {
         let c = base_url_check(&[("env".into(), "https://gateway.anthropic.com".into())]);
         assert_eq!(c.status, Status::Ok);
+    }
+
+    #[test]
+    fn base_url_warning_escapes_control_chars_in_host() {
+        // A poisoned settings value can put an ESC into the parsed host; the
+        // Warn detail must not emit raw terminal escapes and forge a clean line.
+        let c = base_url_check(&[("env".into(), "https://evil\u{1b}[2Jx.com".into())]);
+        assert_eq!(c.status, Status::Warn);
+        assert!(!c.detail.contains('\u{1b}'), "detail: {}", c.detail);
     }
 
     #[test]
