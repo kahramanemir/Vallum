@@ -164,8 +164,14 @@ cover `rm -rf` on a root/home/system path, `curl … | sh`, remote-fetch-and-exe
 `chmod 777`, reading private keys / credential files / `/etc/shadow`,
 `git push --force`, `find -delete`/`shred`/`truncate`/`xargs rm` on sensitive
 targets, reverse shells (`/dev/tcp`, `nc -e`, `socat exec:`), `git clean -f`,
-and recursive `chown` on a system path. Users can add `ask`/`deny` rules under
-`[policy]`.
+recursive `chown` on a system path, and — new in this line — six
+persistence-vector **writes**: shell startup files
+(`.zshrc`/`.bashrc`/`.profile` and friends, CVE-2026-55607 class),
+`~/.ssh/authorized_keys`/`config`, `.git/hooks/` scripts and `core.hooksPath`,
+crontab installs/edits, macOS LaunchAgents/LaunchDaemons, and systemd **user**
+units. Those six gate writes only — *reading* a startup file (`source ~/.zshrc`,
+`cat`, `git config user.name`, `crontab -l`) stays `Allow`. Users can add
+`ask`/`deny` rules under `[policy]`.
 
 **Enforcement points.** The same Allow/Ask/Deny decision core is reached from
 five call sites: direct `vallum run`, and four native pre-exec hooks — Claude
@@ -213,6 +219,15 @@ sandbox**.
   dangerous commands.
 - **Path-aware matching is deferred:** the guardrail cannot tell
   `rm -rf ./build` from `rm -rf /` beyond the literal patterns encoded today.
+- **The persistence-write rules gate the *shell*, not every writer.** The six
+  persistence rules (shell profiles, SSH config, git hooks, crontab,
+  LaunchAgents, systemd user units) match shell write-verbs — redirects, `tee`,
+  `dd of=`, `sed -i`, `cp`/`mv`/`install`, and the tool-specific installers
+  (`crontab`, `launchctl load`, `systemctl --user enable`, `git config
+  core.hooksPath`). A write performed by a **non-shell interpreter**
+  (`python -c 'open(...,"w")'`, a Node script) or through a variable-assembled
+  path is a documented non-goal — the same fail-safe scope the rest of the
+  guardrail carries.
 - **Codex CLI does not intercept every shell call.** Per Codex's own hooks
   documentation: "This doesn't intercept all shell calls yet, only the simple
   ones. The newer `unified_exec` mechanism allows richer streaming
@@ -318,13 +333,26 @@ checks, both reusing the existing engines (no new detection logic):
   the guardrail. Vallum's own `install-hook` writes via Rust `std::fs`, so it
   never triggers.
 - **Doctor hook-audit:** `vallum doctor` inspects the four JSON agent hook
-  configs (user-level), lists foreign hook commands — any it did not install —
+  configs (user-level) across **every hook event**, not just `PreToolUse` — an
+  injected `SessionStart` hook (CVE-2026-25725 class) is audited the same way —
+  lists foreign hook commands (any it did not install, labeled `agent (Event)`)
   as a Warn, and fails (`✗`, non-zero exit) on one matching a dangerous
   guardrail pattern (curl-pipe-shell, reverse shell, …). Displayed commands
   are redacted through the secret scrubber first. It is a static,
   pattern-based, pull check (the user must run `vallum doctor`); it does not
   watch files, cover project-level Claude settings, or audit `.mcp.json`
   server definitions (that is `vallum mcp scan`).
+- **Doctor `base-url` check:** `vallum doctor` **warns** (never fails) when
+  `ANTHROPIC_BASE_URL` is overridden to a non-`*.anthropic.com` host — read
+  from the process environment or the `env` block of a project/user
+  `settings.json` (`settings.local.json` included). A poisoned override
+  silently reroutes every API call and the API key to an attacker endpoint
+  (CVE-2026-21852 class); the host parse is hardened against evasions (all
+  authority terminators `/?#\`, embedded userinfo, port, case, whitespace,
+  look-alike suffixes like `evil-anthropic.com`). It is Warn-only, and does
+  **not** forbid proxies: LiteLLM and corporate gateways are legitimate
+  overrides, so only the operator can confirm intent — the check surfaces the
+  override rather than blocking it.
 
 ### Tamper-evident audit log (policy.log hash chain)
 
@@ -471,13 +499,38 @@ high-severity composite finding. **Strength: best-effort**, with the same
 measured detection limits as the underlying engines (see
 [`evals/report.md`](evals/report.md)).
 
+Scanning a skill is not limited to its `SKILL.md`: **every UTF-8 file bundled
+in the skill package** (the directory holding the `SKILL.md`) is scanned, since
+a PhantomSkill-class payload hides just as well in a helper script or a
+`README`. The walk is depth-bounded (6 levels from the skill root) and never
+follows symlinks; a nested `SKILL.md` owns its own package (a symlinked one
+never creates a nested root). Because coverage is by *content* (any UTF-8 file),
+not an extension allowlist, **renaming a payload to dodge a filter does not evade
+the scan** — the file is still read and checked. The same composite escalation
+fires **across files of one skill**: an injection in one bundled file plus a
+risky command in another surfaces as a single high-severity `combined_signature`
+at the `SKILL.md`.
+
 **What it does NOT cover, stated plainly:**
 
 - **Static only.** It scans bytes on disk, not what an agent actually ingests
   at runtime. A skill that rewrites itself, fetches remote instructions, or is
   redefined after approval (a "rug pull") is out of scope.
-- **Text only.** Instructions hidden in images or other binary assets are not
-  analyzed (cf. "Seeing Is Not Screening", arXiv 2606.18198).
+- **No cross-skill / compositional view.** Each skill package is scanned in
+  isolation. An attack split across *multiple* skills — each individually
+  benign, malicious only in combination (the SCR-Bench class) — is not
+  correlated; the composite escalation is within a single skill only.
+- **Text only; binaries are skipped, not searched.** Instructions hidden in
+  images or other binary assets are not analyzed (cf. "Seeing Is Not
+  Screening", arXiv 2606.18198). Files with a known binary extension are
+  skipped by extension and **counted** in the report (`binary_skipped`), never
+  content-scanned — so a payload buried in a `.png` or `.zip` is out of scope
+  by construction.
+- **Oversized/unreadable aux files are flagged, not force-read.** An aux file
+  over 5 MiB, or one that is unreadable / non-UTF-8, becomes a **Warning**
+  (`aux_too_large` / `aux_unreadable`) — it is never truncated-then-scanned
+  (a partial read is exactly the bypass a size cutoff invites) and never
+  silently dropped.
 - **Markdown is handled heuristically**, not via a spec-complete parser;
   exotic fence nesting may be over- or under-scanned. The design errs toward
   over-scanning (an inline-code false positive) rather than missing a command.
