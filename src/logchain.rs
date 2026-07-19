@@ -7,8 +7,8 @@ use sha2::{Digest, Sha256};
 use std::io::Write;
 use std::path::Path;
 
-/// Block delimiter — must byte-match the one in `audit::write_log_to_path`.
-pub const DELIM: &str = "---------------------------";
+/// Block delimiter — aliased from the audit writer so both formats byte-match.
+pub const DELIM: &str = crate::audit::ENTRY_DELIMITER;
 /// `prev` hash for the first chained entry.
 pub const GENESIS: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -242,7 +242,11 @@ pub fn run_verify(expect_head: Option<&str>, cfg: &crate::config::AppConfig) -> 
             return 125;
         }
     }
-    let path = crate::audit::resolve_log_path("policy.log", cfg.audit.log_dir.as_deref());
+    let Some(path) = crate::audit::resolve_log_path("policy.log", cfg.audit.log_dir.as_deref())
+    else {
+        eprintln!("log verify: no home directory and no [audit] log_dir configured");
+        return 125;
+    };
     match verify_file(&path) {
         Err(e) => {
             eprintln!("log verify: {e}");

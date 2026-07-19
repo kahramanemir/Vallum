@@ -32,12 +32,10 @@ pub struct StatEntry {
     pub exit_code: i32,
 }
 
-pub fn stats_path() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
-        home.join(".vallum").join("stats.jsonl")
-    } else {
-        PathBuf::from("vallum-stats.jsonl")
-    }
+/// None when the home directory is unknown — stats must not silently land in
+/// the working directory.
+pub fn stats_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".vallum").join("stats.jsonl"))
 }
 
 pub fn append_stat_to(path: &Path, entry: &StatEntry) -> std::io::Result<()> {
@@ -50,7 +48,9 @@ pub fn append_stat_to(path: &Path, entry: &StatEntry) -> std::io::Result<()> {
 }
 
 pub fn append_stat(entry: &StatEntry) {
-    let _ = append_stat_to(&stats_path(), entry);
+    if let Some(path) = stats_path() {
+        let _ = append_stat_to(&path, entry);
+    }
 }
 
 #[cfg(test)]

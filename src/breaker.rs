@@ -15,8 +15,10 @@ pub struct Trip {
 }
 
 /// Resolve the state file the same way every other Vallum state/log file
-/// resolves: `[audit] log_dir` override, else ~/.vallum/logs.
-pub fn state_path(cfg: &crate::config::AppConfig) -> PathBuf {
+/// resolves: `[audit] log_dir` override, else ~/.vallum/logs. None when
+/// neither exists — state must never land in the working directory, where a
+/// checked-in file could pose as breaker state.
+pub fn state_path(cfg: &crate::config::AppConfig) -> Option<PathBuf> {
     crate::audit::resolve_log_path("breaker.state", cfg.audit.log_dir.as_deref())
 }
 
@@ -143,7 +145,7 @@ pub fn active_trip(cfg: &crate::config::AppConfig) -> Option<Trip> {
         return None;
     }
     active_trip_at(
-        &state_path(cfg),
+        &state_path(cfg)?,
         cfg.security.breaker_threshold,
         cfg.security.breaker_window_secs,
     )
@@ -155,8 +157,11 @@ pub fn record_and_check(cfg: &crate::config::AppConfig) {
     if !cfg.security.circuit_breaker {
         return;
     }
+    let Some(path) = state_path(cfg) else {
+        return;
+    };
     let tripped = record_at(
-        &state_path(cfg),
+        &path,
         cfg.security.breaker_threshold,
         cfg.security.breaker_window_secs,
         cfg.security.breaker_cooldown_secs,
@@ -175,7 +180,10 @@ pub fn record_and_check(cfg: &crate::config::AppConfig) {
 
 /// Cfg-level unlock used by `vallum unlock`.
 pub fn unlock(cfg: &crate::config::AppConfig) -> Result<Option<String>, String> {
-    unlock_at(&state_path(cfg))
+    match state_path(cfg) {
+        Some(path) => unlock_at(&path),
+        None => Ok(None), // no resolvable state file → nothing can be locked
+    }
 }
 
 /// The deny reason shown for every command while locked.

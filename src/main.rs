@@ -118,7 +118,11 @@ fn main() {
                     .unwrap_or(false),
                 None => false,
             };
-            if config.security.guardrail && !pre_approved {
+            if config.security.guardrail {
+                // The breaker gates pre-approved commands too: an approval
+                // token minted moments before a trip must not keep working
+                // after it — the lockdown is an emergency stop, not a policy
+                // verdict the token already covers.
                 if let Some(trip) = vallum::breaker::active_trip(&config) {
                     let verdict = vallum::policy::PolicyVerdict {
                         action: vallum::policy::PolicyAction::Deny,
@@ -127,6 +131,8 @@ fn main() {
                     };
                     emit_block(*json, &verdict, cmd, args);
                 }
+            }
+            if config.security.guardrail && !pre_approved {
                 // Unreachable Err: AppConfig::load() -> validate() already
                 // compiled every user regex, so a failure here means config
                 // drift. Fail closed rather than silently running ungated.
@@ -301,7 +307,10 @@ fn main() {
             std::process::exit(exit_code);
         }
         Commands::Stats { reset } => {
-            let path = metrics::stats_path();
+            let Some(path) = metrics::stats_path() else {
+                eprintln!("stats: no home directory — ~/.vallum/stats.jsonl is unavailable");
+                std::process::exit(125);
+            };
             if *reset {
                 if let Err(e) = stats::reset(&path) {
                     eprintln!("Stats reset failed: {}", e);

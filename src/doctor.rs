@@ -317,11 +317,14 @@ pub fn breaker_check(cfg: &crate::config::AppConfig) -> Check {
         );
     }
     let s = &cfg.security;
-    match crate::breaker::active_trip_at(
-        &crate::breaker::state_path(cfg),
-        s.breaker_threshold,
-        s.breaker_window_secs,
-    ) {
+    let Some(state) = crate::breaker::state_path(cfg) else {
+        return Check::new(
+            "breaker",
+            Status::Warn,
+            "no home directory and no [audit] log_dir — breaker state unavailable",
+        );
+    };
+    match crate::breaker::active_trip_at(&state, s.breaker_threshold, s.breaker_window_secs) {
         Some(trip) => Check::new(
             "breaker",
             Status::Warn,

@@ -17,7 +17,9 @@ type HmacSha256 = Hmac<Sha256>;
 const SECRET_LEN: usize = 32;
 
 /// `<log_dir>/approval.secret` (default `~/.vallum/logs/approval.secret`).
-pub fn secret_path(cfg: &AppConfig) -> PathBuf {
+/// None when neither resolves — the secret must never live in the working
+/// directory, where a checked-in file would hand out the HMAC key.
+pub fn secret_path(cfg: &AppConfig) -> Option<PathBuf> {
     crate::audit::resolve_log_path("approval.secret", cfg.audit.log_dir.as_deref())
 }
 
@@ -54,7 +56,7 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 
 /// Read the secret without creating it. None if absent/unreadable/too short.
 pub fn load_secret(cfg: &AppConfig) -> Option<Vec<u8>> {
-    let buf = std::fs::read(secret_path(cfg)).ok()?;
+    let buf = std::fs::read(secret_path(cfg)?).ok()?;
     (buf.len() >= SECRET_LEN).then_some(buf)
 }
 
@@ -63,7 +65,7 @@ pub fn load_secret(cfg: &AppConfig) -> Option<Vec<u8>> {
 /// any I/O failure or on non-unix (no `/dev/urandom`).
 pub fn load_or_create_secret(cfg: &AppConfig) -> Option<Vec<u8>> {
     use std::io::{Read, Seek, SeekFrom, Write};
-    let path = secret_path(cfg);
+    let path = secret_path(cfg)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).ok()?;
     }
@@ -74,10 +76,14 @@ pub fn load_or_create_secret(cfg: &AppConfig) -> Option<Vec<u8>> {
     if buf.len() >= SECRET_LEN {
         return Some(buf);
     }
-    // Empty or truncated → mint and persist under the held lock.
+    // Empty or truncated → mint and persist under the held lock. Truncate
+    // first so the on-disk key is exactly the fresh bytes — the short-read
+    // branch already guarantees old < new, but keep the invariant local
+    // rather than dependent on that condition.
     let secret = random_secret()?;
     let mut f = &file;
     f.seek(SeekFrom::Start(0)).ok()?;
+    file.set_len(0).ok()?;
     f.write_all(&secret).ok()?;
     f.flush().ok()?;
     Some(secret)
@@ -164,12 +170,26 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(secret_path(&cfg))
+            let mode = std::fs::metadata(secret_path(&cfg).unwrap())
                 .unwrap()
                 .permissions()
                 .mode();
             assert_eq!(mode & 0o777, 0o600);
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn short_corrupt_file_is_replaced_by_exact_fresh_secret() {
+        let dir = temp_dir("corrupt");
+        let cfg = cfg_with_dir(&dir);
+        let path = secret_path(&cfg).unwrap();
+        std::fs::write(&path, b"short-garbage").unwrap();
+        let secret = load_or_create_secret(&cfg).expect("re-mint");
+        assert_eq!(secret.len(), SECRET_LEN);
+        let on_disk = std::fs::read(&path).unwrap();
+        assert_eq!(on_disk, secret, "on-disk key is exactly the fresh bytes");
+        assert_eq!(on_disk.len(), SECRET_LEN, "no residue past the new secret");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

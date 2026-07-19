@@ -30,6 +30,49 @@ pub enum Verdict {
     Deny { reason: String, rule_name: String },
 }
 
+/// `NAME=value` shell-prefix assignment (also what `env` takes as args).
+fn is_env_assignment(word: &str) -> bool {
+    match word.split_once('=') {
+        Some((name, _)) => {
+            !name.is_empty()
+                && !name.starts_with(|c: char| c.is_ascii_digit())
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        }
+        None => false,
+    }
+}
+
+/// The word TUI detection keys on: the first word after leading `NAME=value`
+/// assignments and `sudo`/`doas`/`env` wrappers (with their flags). Without
+/// this, `sudo vim x` or `env LESS= less x` would be rewritten into the
+/// output-capturing executor and break the interactive TTY the command needs.
+/// Wrapper flags that take a separate value (`sudo -u alice`, `env -u NAME`)
+/// consume the next word; anything more exotic falls through to the wrapped
+/// (non-TUI) path, which is the pre-existing behavior.
+fn tui_head(trimmed: &str) -> Option<&str> {
+    let mut words = trimmed.split_whitespace().peekable();
+    while let Some(w) = words.next() {
+        if is_env_assignment(w) {
+            continue;
+        }
+        match w {
+            "sudo" | "doas" | "env" => {
+                while let Some(f) = words.peek().copied() {
+                    if !f.starts_with('-') {
+                        break;
+                    }
+                    words.next();
+                    if matches!(f, "-u" | "-g" | "--unset") {
+                        words.next();
+                    }
+                }
+            }
+            _ => return Some(w),
+        }
+    }
+    None
+}
+
 /// True when the command's first word is the Vallum binary itself: the
 /// literal `vallum` (PATH-resolved), or a path that canonicalizes to the
 /// same executable running this process (`/usr/bin/vallum`, a Homebrew
@@ -67,8 +110,9 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
     // TUI-headed commands ARE evaluated (a `less /etc/shadow` must be able to
     // ask/deny); the TUI list only suppresses the rewrite on a clean Allow,
     // because wrapping these commands in the output-capturing executor would
-    // break the interactive TTY they need.
-    let is_tui = TUI_SKIP.contains(&head);
+    // break the interactive TTY they need. Detection looks through leading
+    // assignments and sudo/doas/env wrappers (`sudo vim x` is vim-headed).
+    let is_tui = tui_head(trimmed).is_some_and(|h| TUI_SKIP.contains(&h));
     if let Some(p) = policy {
         let v = p.evaluate(command);
         match v.action {
@@ -499,6 +543,57 @@ mod tests {
             Verdict::Deny { reason, .. } => assert!(reason.contains("denied in test")),
             other => panic!("expected Deny, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn decide_wrapped_tui_passes_through() {
+        // Wrapper-prefixed TUI commands would break their TTY if rewritten.
+        assert_eq!(
+            decide("sudo vim /etc/hosts", Some(&guardrail())),
+            Verdict::PassThrough
+        );
+        assert_eq!(
+            decide("sudo -u alice vim notes.txt", Some(&guardrail())),
+            Verdict::PassThrough
+        );
+        assert_eq!(
+            decide("env LESS= less notes.txt", Some(&guardrail())),
+            Verdict::PassThrough
+        );
+        assert_eq!(
+            decide("LESS=-R less notes.txt", Some(&guardrail())),
+            Verdict::PassThrough
+        );
+    }
+
+    #[test]
+    fn decide_wrapped_tui_still_policy_gated() {
+        match decide("sudo less /etc/shadow", Some(&guardrail())) {
+            Verdict::Ask { rule_name, .. } => assert_eq!(rule_name, "read_sensitive_creds"),
+            other => panic!("expected Ask, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decide_wrapped_non_tui_stays_wrapped() {
+        // `sudo git status` is not TUI-headed; the normal rewrite path applies.
+        assert_eq!(
+            decide("sudo git status", Some(&guardrail())),
+            Verdict::Allow
+        );
+    }
+
+    #[test]
+    fn tui_head_resolves_through_wrappers() {
+        assert_eq!(tui_head("vim x"), Some("vim"));
+        assert_eq!(tui_head("sudo vim x"), Some("vim"));
+        assert_eq!(tui_head("sudo -E -u alice vim x"), Some("vim"));
+        assert_eq!(tui_head("env LESS= less x"), Some("less"));
+        assert_eq!(tui_head("env -i FOO=1 less x"), Some("less"));
+        assert_eq!(tui_head("A=1 B=2 top"), Some("top"));
+        // Not an assignment: '=' with a non-identifier prefix is a command word.
+        assert_eq!(tui_head("./weird=name x"), Some("./weird=name"));
+        assert_eq!(tui_head("sudo"), None);
     }
 
     #[test]
