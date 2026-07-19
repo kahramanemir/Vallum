@@ -194,6 +194,23 @@ pub fn add_aux_targets(targets: &mut Vec<Target>) {
         .filter(|t| t.kind == DocKind::Skill)
         .filter_map(|t| t.skill_root.clone())
         .collect();
+    // Back-fill skill_root on context/rules files that live *inside* a skill
+    // package, so a payload split as {injection in SKILL.md, command in a
+    // sibling AGENTS.md/CLAUDE.md} still groups into the cross-file composite.
+    // Owner = NEAREST ancestor skill root (longest prefix); genuine top-level
+    // context files match no root and keep skill_root = None.
+    for t in targets.iter_mut() {
+        if t.skill_root.is_some() || !matches!(t.kind, DocKind::Context | DocKind::Rules) {
+            continue;
+        }
+        if let Some(owner) = roots
+            .iter()
+            .filter(|r| t.path.starts_with(r))
+            .max_by_key(|r| r.as_os_str().len())
+        {
+            t.skill_root = Some(owner.clone());
+        }
+    }
     for root in roots {
         let mut aux = Vec::new();
         aux_walk(&root, &root, 0, &mut aux);
@@ -441,6 +458,31 @@ mod tests {
             .find(|t| t.path.ends_with("a.txt"))
             .expect("a.txt collected");
         assert_eq!(a.skill_root.as_deref(), Some(d.join("outer").as_path()));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn context_file_inside_skill_package_gets_skill_root() {
+        let d = tmp();
+        fs::create_dir_all(d.join("pkg")).unwrap();
+        fs::write(d.join("pkg").join("SKILL.md"), "x").unwrap();
+        fs::write(d.join("pkg").join("AGENTS.md"), "x").unwrap();
+        fs::write(d.join("CLAUDE.md"), "x").unwrap(); // top-level, outside any package
+        let (targets, _m) = resolve_explicit(std::slice::from_ref(&d));
+        let agents = targets
+            .iter()
+            .find(|t| t.path.ends_with("AGENTS.md"))
+            .expect("AGENTS.md found");
+        assert_eq!(
+            agents.skill_root.as_deref(),
+            Some(d.join("pkg").as_path()),
+            "in-package context file joins its skill"
+        );
+        let top = targets
+            .iter()
+            .find(|t| t.path.ends_with("CLAUDE.md"))
+            .expect("CLAUDE.md found");
+        assert_eq!(top.skill_root, None, "top-level context file stays unowned");
         let _ = fs::remove_dir_all(&d);
     }
 
