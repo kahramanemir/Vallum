@@ -234,8 +234,8 @@ sandbox**.
   stdin/stdout handling of shell, but interception is incomplete. Similarly,
   this doesn't intercept `WebSearch` or other non-shell, non-MCP tool calls."
   A command Codex never routes through the hook reaches the shell with no
-  Vallum verdict at all — logged or otherwise. See the README's
-  [Multi-agent guardrail](README.md#multi-agent-guardrail) section for the
+  Vallum verdict at all — logged or otherwise. See
+  [Agent integrations](docs/agents.md#limitations-stated-plainly) for the
   source link.
 - **Codex CLI skips untrusted hooks silently (fail-open until trusted).**
   Codex only runs a hook after its exact definition has been reviewed and

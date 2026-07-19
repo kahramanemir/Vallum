@@ -18,5 +18,7 @@ vallum-stats.jsonl
 # Superpowers internal state
 .superpowers/
 
-# Local-only design docs and plans
-docs/
+# Local-only design docs and plans (subdirectories); product docs
+# directly under docs/ are tracked.
+docs/*
+!docs/*.md
