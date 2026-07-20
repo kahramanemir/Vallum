@@ -81,6 +81,11 @@ pub struct SecurityConfig {
     pub breaker_window_secs: u64,
     /// Lock duration in seconds once tripped (≥ 1).
     pub breaker_cooldown_secs: u64,
+    /// Remember human-approved Asks (exact command + cwd) for a narrow,
+    /// hard-coded rule set, for `approval_cache_ttl_days`. Default on.
+    pub approval_cache: bool,
+    /// Days a cached approval stays valid (1–90).
+    pub approval_cache_ttl_days: u64,
 }
 
 impl Default for SecurityConfig {
@@ -93,6 +98,8 @@ impl Default for SecurityConfig {
             breaker_threshold: 5,
             breaker_window_secs: 60,
             breaker_cooldown_secs: 300,
+            approval_cache: true,
+            approval_cache_ttl_days: 14,
         }
     }
 }
@@ -298,6 +305,9 @@ impl AppConfig {
         }
         if self.security.breaker_cooldown_secs == 0 {
             return Err("breaker_cooldown_secs must be at least 1".to_string());
+        }
+        if !(1..=90).contains(&self.security.approval_cache_ttl_days) {
+            return Err("approval_cache_ttl_days must be between 1 and 90".to_string());
         }
         Ok(())
     }
@@ -644,5 +654,29 @@ extra_secret_patterns = [ { pattern = "token-[0-9]+" } ]
         );
         let err = AppConfig::from_path(&p).unwrap_err();
         assert!(err.contains("policy.allow"), "got: {err}");
+    }
+
+    #[test]
+    fn approval_cache_defaults_on_14_days() {
+        let c = SecurityConfig::default();
+        assert!(c.approval_cache);
+        assert_eq!(c.approval_cache_ttl_days, 14);
+    }
+
+    #[test]
+    fn approval_cache_ttl_bounds_are_config_errors() {
+        let mut config = AppConfig::default();
+        config.security.approval_cache_ttl_days = 0;
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .contains("approval_cache_ttl_days"));
+        config.security.approval_cache_ttl_days = 91;
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .contains("approval_cache_ttl_days"));
+        config.security.approval_cache_ttl_days = 90;
+        assert!(config.validate().is_ok());
     }
 }
