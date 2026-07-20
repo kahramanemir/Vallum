@@ -104,3 +104,4 @@ echo "vallum unlock"
 grep -rn "vallum unlock" docs/
 cat ~/.vallum/config.toml
 ls ~/.vallum/logs
+cat ~/.config/vallum-notes/unlock.md

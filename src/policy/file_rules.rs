@@ -75,10 +75,12 @@ fn rules() -> &'static [FileRule] {
             name: "file_write_launch_agents",
             op: FileOp::Write,
             reason: "Writing a LaunchAgent/LaunchDaemon (persistence)",
+            // Literals are lowercase: `evaluate` case-folds the path before
+            // matching (macOS APFS is case-insensitive).
             matches: |path, home, _| {
-                under(path, &format!("{home}/Library/LaunchAgents"))
-                    || under(path, "/Library/LaunchAgents")
-                    || under(path, "/Library/LaunchDaemons")
+                under(path, &format!("{home}/library/launchagents"))
+                    || under(path, "/library/launchagents")
+                    || under(path, "/library/launchdaemons")
             },
         },
         FileRule {
@@ -161,7 +163,11 @@ pub fn evaluate(op: FileOp, raw_path: &str, disabled: &[String]) -> Option<FileR
     let home = dirs::home_dir()
         .map(|h| h.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let path = normalize(raw_path, &home);
+    // Fold ASCII case before matching. macOS APFS is case-insensitive, so a
+    // byte-exact comparison would miss `~/.SSH/id_rsa`, `~/.Zshenv`, etc. This
+    // restores parity with the shell rules these paths shadow, all `(?i)`.
+    let path = normalize(raw_path, &home).to_ascii_lowercase();
+    let home = home.to_ascii_lowercase();
     let file_name = path.rsplit('/').next().unwrap_or("");
     rules()
         .iter()
@@ -193,6 +199,26 @@ mod tests {
 
     fn read_hit(path: &str) -> Option<&'static str> {
         evaluate(FileOp::Read, path, &[]).map(|m| m.rule_name)
+    }
+
+    #[test]
+    fn matching_is_ascii_case_insensitive() {
+        assert_eq!(read_hit("~/.SSH/id_rsa"), Some("file_read_sensitive"));
+        assert_eq!(write_hit("~/.Zshenv"), Some("file_write_shell_profile"));
+        assert_eq!(
+            write_hit("~/.SSH/authorized_keys"),
+            Some("file_write_ssh_config")
+        );
+        assert_eq!(
+            write_hit("~/.VALLUM/config.toml"),
+            Some("file_write_vallum")
+        );
+        assert_eq!(
+            write_hit("/Users/x/proj/.GIT/hooks/pre-commit"),
+            Some("file_write_git_hooks")
+        );
+        // .pub exemption must survive case-folding
+        assert_eq!(read_hit("~/.ssh/id_rsa.PUB"), None);
     }
 
     #[test]

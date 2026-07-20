@@ -325,7 +325,7 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 ),
                 "Writing to an AI agent config/hook file (possible hook injection)"),
             ask("vallum_self_disable",
-                r"(?i)(?:^|[\s;&|`$(])vallum\s+(?:unlock|uninstall-hook)\b",
+                r"(?i)(?:^|[\s;&|`$(/])vallum\s+(?:unlock|uninstall-hook)\b",
                 "Clearing Vallum's lockdown or uninstalling its hook (guardrail self-disable)"),
             ask("write_vallum_config",
                 &format!(
@@ -879,6 +879,7 @@ mod tests {
             "vallum uninstall-hook --agent claude",
             "bash -c 'vallum unlock'",
             "sh -c \"vallum uninstall-hook\"",
+            "bash -c '/usr/local/bin/vallum uninstall-hook'",
         ] {
             let v = p.evaluate(cmd);
             assert_eq!(v.action, PolicyAction::Ask, "{cmd}");

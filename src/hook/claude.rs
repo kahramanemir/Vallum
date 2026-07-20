@@ -138,6 +138,7 @@ pub(crate) fn file_decision(
         "read" => (FileOp::Read, file_path),
         _ => return HookDecision::PassThrough,
     };
+    let path = path.trim();
     if !cfg.security.guardrail || path.is_empty() {
         return HookDecision::PassThrough;
     }

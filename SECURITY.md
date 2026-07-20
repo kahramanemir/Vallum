@@ -298,6 +298,8 @@ otherwise).
   are expanded and `.`/`..` are resolved textually, but the filesystem is never
   touched. A symlink at an innocent path that points into `~/.ssh` is **not**
   caught: the rule sees only the literal path string the tool was handed.
+  Lexical expansion covers `~/` and `$HOME/` prefixes only; `${HOME}` and
+  `~user` forms are not expanded (Claude Code normally sends absolute paths).
 - **File-tool gating is Claude Code only in v1.** Cursor, Gemini CLI, and Codex
   CLI native file tools remain ungated — their *shell* guardrail is unchanged,
   but a write or read those agents perform through a native file tool bypasses
