@@ -145,11 +145,20 @@ pub fn check_hook(settings_path: &Path) -> Check {
     match crate::install_hook::read_settings(settings_path) {
         Ok(settings) => {
             if crate::install_hook::has_vallum_hook(&settings) {
-                Check::new(
-                    "hook (claude)",
-                    Status::Ok,
-                    format!("installed in {}", settings_path.display()),
-                )
+                if !crate::install_hook::claude::vallum_matcher_current(&settings) {
+                    Check::new(
+                        "hook (claude)",
+                        Status::Warn,
+                        "installed with a pre-file-tool matcher (Bash only) — \
+                         re-run `vallum install-hook` to gate Write/Edit/Read",
+                    )
+                } else {
+                    Check::new(
+                        "hook (claude)",
+                        Status::Ok,
+                        format!("installed in {}", settings_path.display()),
+                    )
+                }
             } else {
                 Check::new(
                     "hook (claude)",
@@ -611,7 +620,11 @@ pub fn run() -> i32 {
             config.security.guardrail,
             &config.policy.disabled,
             config.policy.rules.len(),
-            &crate::policy::builtin_names(),
+            &{
+                let mut names = crate::policy::builtin_names();
+                names.extend(crate::policy::file_rules::rule_names());
+                names
+            },
         ),
         check_hook(&settings_path),
         check_agent_hook_at(
@@ -712,10 +725,10 @@ mod tests {
         let missing = dir.join("settings.json");
         assert_eq!(check_hook(&missing).status, Status::Warn);
 
-        // Installed → Ok.
+        // Installed with the current file-tool matcher → Ok.
         std::fs::write(
             &missing,
-            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"vallum hook"}]}]}}"#,
+            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash|Write|Edit|MultiEdit|NotebookEdit|Read","hooks":[{"type":"command","command":"vallum hook"}]}]}}"#,
         )
         .unwrap();
         assert_eq!(check_hook(&missing).status, Status::Ok);
@@ -723,6 +736,21 @@ mod tests {
         // Malformed → Fail.
         std::fs::write(&missing, "{not json").unwrap();
         assert_eq!(check_hook(&missing).status, Status::Fail);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn hook_with_old_matcher_warns() {
+        let dir = temp_dir("doctor_old_matcher");
+        let path = dir.join("settings.json");
+        std::fs::write(
+            &path,
+            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"vallum hook"}]}]}}"#,
+        )
+        .unwrap();
+        let c = check_hook(&path);
+        assert!(matches!(c.status, Status::Warn), "{:?}", c.status);
+        assert!(c.detail.contains("install-hook"), "{}", c.detail);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

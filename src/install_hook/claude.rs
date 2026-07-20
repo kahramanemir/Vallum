@@ -40,24 +40,44 @@ fn entry_is_vallum(entry: &Value) -> bool {
     })
 }
 
+/// Tool-name matcher for the PreToolUse entry: Bash plus the native file
+/// tools gated by `file_decision`. Regex-alternation per Claude Code's
+/// matcher semantics.
+pub(crate) const MATCHER: &str = "Bash|Write|Edit|MultiEdit|NotebookEdit|Read";
+
 /// The exact JSON entry we add to hooks.PreToolUse.
 fn vallum_entry() -> Value {
     json!({
-        "matcher": "Bash",
+        "matcher": MATCHER,
         "hooks": [
             { "type": "command", "command": "vallum hook" }
         ]
     })
 }
 
-/// Add the Vallum entry. If `force`, replace existing Vallum entries; else
-/// no-op when one is already present.
+/// True when a Vallum entry exists AND already carries the current matcher.
+pub fn vallum_matcher_current(settings: &Value) -> bool {
+    settings
+        .get("hooks")
+        .and_then(|h| h.get("PreToolUse"))
+        .and_then(|p| p.as_array())
+        .map(|arr| {
+            arr.iter().any(|e| {
+                entry_is_vallum(e) && e.get("matcher").and_then(|m| m.as_str()) == Some(MATCHER)
+            })
+        })
+        .unwrap_or(false)
+}
+
+/// Add the Vallum entry. If `force`, replace existing Vallum entries. Without
+/// `force`, no-op when a current entry is present, but migrate (replace) an
+/// entry whose matcher is outdated.
 pub fn add_vallum(settings: &mut Value, force: bool) -> Result<bool, String> {
     if has_vallum_hook(settings) {
-        if !force {
+        if !force && vallum_matcher_current(settings) {
             return Ok(false);
         }
-        // Remove existing vallum entries first.
+        // Outdated matcher (or force): migrate by replace.
         remove_vallum(settings);
     }
     let hooks = settings
@@ -150,7 +170,7 @@ mod tests {
         let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 2);
         assert!(arr.iter().any(|e| e["matcher"] == "Edit"));
-        assert!(arr.iter().any(|e| e["matcher"] == "Bash"));
+        assert!(arr.iter().any(|e| e["matcher"] == MATCHER));
         assert_eq!(settings["theme"], "dark");
         let _ = fs::remove_dir_all(&dir);
     }
@@ -194,5 +214,45 @@ mod tests {
         let mut v = serde_json::json!({ "hooks": "not an object" });
         let err = add_vallum(&mut v, false).unwrap_err();
         assert!(err.contains("hooks"), "{err}");
+    }
+
+    #[test]
+    fn entry_uses_file_tool_matcher() {
+        let e = vallum_entry();
+        assert_eq!(e["matcher"], "Bash|Write|Edit|MultiEdit|NotebookEdit|Read");
+    }
+
+    #[test]
+    fn old_bash_only_entry_is_migrated_without_force() {
+        let mut settings = json!({
+            "hooks": { "PreToolUse": [
+                { "matcher": "Bash",
+                  "hooks": [{ "type": "command", "command": "vallum hook" }] }
+            ]}
+        });
+        assert!(!vallum_matcher_current(&settings));
+        let changed = add_vallum(&mut settings, false).unwrap();
+        assert!(
+            changed,
+            "outdated matcher must migrate on plain install-hook"
+        );
+        let arr = settings["hooks"]["PreToolUse"].as_array().unwrap();
+        let ours: Vec<_> = arr
+            .iter()
+            .filter(|e| e["hooks"][0]["command"] == "vallum hook")
+            .collect();
+        assert_eq!(ours.len(), 1, "no duplicate vallum entries");
+        assert_eq!(ours[0]["matcher"], MATCHER);
+    }
+
+    #[test]
+    fn current_entry_is_idempotent_without_force() {
+        let mut settings = json!({ "hooks": { "PreToolUse": [] } });
+        assert!(add_vallum(&mut settings, false).unwrap());
+        assert!(vallum_matcher_current(&settings));
+        assert!(
+            !add_vallum(&mut settings, false).unwrap(),
+            "second run is a no-op"
+        );
     }
 }
