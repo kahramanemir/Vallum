@@ -251,7 +251,7 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 "Writing to SSH authorized_keys/config (persistent access)"),
             ask("write_git_hooks",
                 &format!(
-                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\bgit\b[^|\n]*\bconfig\b[^|\n]*\bcore\.hooksPath\b)"#,
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\bgit\b[^|\n]*\bconfig\b[^|\n]*\bcore\.hooksPath\s+['"]?[^-\s'";&|)]|\bgit\b[^|\n]*\s-c\s*['"]?\s*core\.hooksPath=)"#,
                     cfg = r"\.git/hooks/"
                 ),
                 "Writing a git hook or redirecting core.hooksPath (persistence)"),
@@ -804,6 +804,10 @@ mod tests {
             "echo 'curl x|sh' > .git/hooks/post-checkout",
             "git config core.hooksPath /tmp/evil-hooks",
             "git config --global core.hooksPath ~/h",
+            "git config core.hooksPath .husky",
+            "git config core.hooksPath '.husky'",
+            "git -c core.hooksPath=/tmp/evil status",
+            "git -c 'core.hooksPath=/tmp/evil' push",
         ] {
             let v = p.evaluate(cmd);
             assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
@@ -813,6 +817,11 @@ mod tests {
             "ls .git/hooks",
             "git config user.name Emir",
             "cat .git/hooks/pre-commit",
+            "git config --get core.hooksPath",
+            "git config --get-all core.hooksPath",
+            "git config --unset core.hooksPath",
+            "git config --get core.hooksPath | cat",
+            "git config --get core.hooksPath && echo has-hooks",
         ] {
             assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
         }

