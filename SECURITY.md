@@ -170,8 +170,12 @@ persistence-vector **writes**: shell startup files
 `~/.ssh/authorized_keys`/`config`, `.git/hooks/` scripts and `core.hooksPath`,
 crontab installs/edits, macOS LaunchAgents/LaunchDaemons, and systemd **user**
 units. Those six gate writes only — *reading* a startup file (`source ~/.zshrc`,
-`cat`, `git config user.name`, `crontab -l`) stays `Allow`. Users can add
-`ask`/`deny` rules under `[policy]`.
+`cat`, `git config user.name`, `crontab -l`) stays `Allow`. Two further
+self-protection rules `Ask` on any attempt to disable Vallum itself:
+`vallum unlock`/`uninstall-hook` (`vallum_self_disable`, including
+`bash -c`-nested forms) and a shell write into `~/.vallum/`
+(`write_vallum_config`); reading `approval.secret` now `Ask`s under
+`read_sensitive_creds` too. Users can add `ask`/`deny` rules under `[policy]`.
 
 **Enforcement points.** The same Allow/Ask/Deny decision core is reached from
 five call sites: direct `vallum run`, and four native pre-exec hooks — Claude
@@ -270,6 +274,42 @@ sandbox**.
   passed-through command). Direct `vallum run` is unaffected.
 - Setting `security.guardrail = false` disables the layer entirely (Vallum then
   behaves exactly as it did before it existed).
+
+### File-tool gating (Claude Code, v1)
+
+The shell guardrail above only sees commands. An agent can reach the same
+sensitive files without a command — by calling its editor's native file tool.
+On **Claude Code**, the `PreToolUse` hook therefore also gates the native
+`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, and `Read` tools: nine lexical
+path rules (all `Ask`) cover the same persistence and credential surfaces as
+the shell rules — shell startup files, `~/.ssh/`, `.git/hooks/`, crontab
+directories, LaunchAgents/Daemons, systemd user units, agent config/hook files,
+`~/.vallum/` (self-disable), and reads of private keys / `~/.aws/credentials` /
+`/etc/shadow` / `approval.secret`. An `Ask` carries no rewrite (the tool call
+runs unchanged on approval), the circuit breaker gates file tools too, and
+verdicts are logged to `policy.log` as `Write ~/.zshenv`-style entries. The
+rules share the `[policy] disabled` suppression list; an existing install must
+re-run `vallum install-hook` to widen the hook matcher (`vallum doctor` warns
+otherwise).
+
+**Known gaps**
+
+- **Path matching is lexical only — symlinks are not resolved.** `~`/`$HOME`
+  are expanded and `.`/`..` are resolved textually, but the filesystem is never
+  touched. A symlink at an innocent path that points into `~/.ssh` is **not**
+  caught: the rule sees only the literal path string the tool was handed.
+  Lexical expansion covers `~/` and `$HOME/` prefixes only; `${HOME}` and
+  `~user` forms are not expanded (Claude Code normally sends absolute paths).
+- **File-tool gating is Claude Code only in v1.** Cursor, Gemini CLI, and Codex
+  CLI native file tools remain ungated — their *shell* guardrail is unchanged,
+  but a write or read those agents perform through a native file tool bypasses
+  Vallum entirely.
+- **`approval.secret` stays readable by any same-user process.** The
+  `file_read_sensitive` / `read_sensitive_creds` rules gate the *agent's*
+  channels (its file tool and its shell), not the OS. A same-user process
+  outside the hook can still read `~/.vallum/logs/approval.secret` — the same
+  trust boundary the approval-token section below already documents. There is no
+  cryptographic boundary between your files and a process you launched.
 
 ### Guardrail wrapper coverage
 
@@ -391,10 +431,12 @@ the guardrail would allow — is denied for the cooldown (300s) or until
 lockdown starts with the next command. Trips are logged to the hash-chained
 `policy.log` (`rule_name = circuit_breaker`) — when `[audit] sanitized_enabled`
 is on (the default); with it off the breaker still trips and locks, but writes
-no forensic line. `vallum`-headed commands keep
-their pass-through so `vallum unlock` stays reachable — a wrapped
-`vallum run` still re-enters the policy (and the trip check) in the child
-process.
+no forensic line. `vallum`-headed commands keep their pass-through so
+`vallum unlock` stays reachable while locked — though `vallum unlock` and
+`vallum uninstall-hook` now surface as an `Ask` (the `vallum_self_disable`
+self-protection carve-out) rather than a silent pass-through, so disabling the
+guardrail takes an explicit confirmation. A wrapped `vallum run` still re-enters
+the policy (and the trip check) in the child process.
 
 Honest limits:
 
@@ -571,11 +613,13 @@ unaffected). Code signing / notarization is deferred.
 - **It cannot make the model obey.** Treating wrapped output as untrusted is
   prompt-side discipline; keep your agent instructed accordingly.
 - **It covers only what flows through it.** The Claude Code hook rewrites
-  Bash tool calls through the full output pipeline; the Cursor, Gemini CLI,
-  and Codex CLI hooks gate commands but never see or rewrite their output.
-  On every agent, file reads, web fetches, and other non-shell tools bypass
-  Vallum entirely — and on Codex CLI specifically, even some shell calls do
-  (see the guardrail's known gaps above).
+  Bash tool calls through the full output pipeline and additionally gates
+  Claude's native file tools (`Write`/`Edit`/`MultiEdit`/`NotebookEdit`/`Read`)
+  against sensitive paths (`Ask`, no rewrite); the Cursor, Gemini CLI, and
+  Codex CLI hooks gate shell commands but never see or rewrite their output,
+  and their native file tools are ungated. On every agent, web fetches and
+  other non-shell, non-file tools bypass Vallum entirely — and on Codex CLI
+  specifically, even some shell calls do (see the guardrail's known gaps above).
 - **TUI commands bypass the output pipeline.** The hook does not rewrite
   `vim`/`vi`/`nano`/`less`/`more`/`top`/`htop`/`tmux`/`screen` (to preserve
   their TTY interaction), but they are still policy-gated beforehand.

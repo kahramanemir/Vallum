@@ -105,6 +105,24 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
     }
     let head = trimmed.split_whitespace().next().unwrap_or("");
     if is_vallum_head(head) {
+        // Self-protection carve-out: the blanket pass-through must not cover
+        // the subcommands that disable Vallum itself. Everything else stays
+        // pass-through (`vallum run` re-gates in the child; scan/stats/doctor
+        // are read-only).
+        let sub = trimmed
+            .split_whitespace()
+            .skip(1)
+            .find(|w| !w.starts_with('-'));
+        if let Some(sub) = sub {
+            if sub == "unlock" || sub == "uninstall-hook" {
+                return Verdict::Ask {
+                    reason: "Clearing Vallum's lockdown or uninstalling its hook \
+                             (guardrail self-disable)"
+                        .to_string(),
+                    rule_name: "vallum_self_disable".to_string(),
+                };
+            }
+        }
         return Verdict::PassThrough;
     }
     // TUI-headed commands ARE evaluated (a `less /etc/shadow` must be able to
@@ -358,8 +376,17 @@ mod tests {
     fn gate_passes_vallum_and_empty_through_while_tripped() {
         let (cfg, dir) = breaker_cfg("passthrough");
         lock_now(&dir);
+        // `vallum unlock` still bypasses the breaker (stays reachable while
+        // locked) but now surfaces as the self-disable Ask instead of a silent
+        // pass-through — the user confirms, and the unwrapped binary runs.
+        match gate("vallum unlock", Some(&guardrail()), &cfg) {
+            Verdict::Ask { rule_name, .. } => assert_eq!(rule_name, "vallum_self_disable"),
+            other => panic!("expected self-disable Ask, got {other:?}"),
+        }
+        // Other vallum subcommands and empty commands still pass straight
+        // through, breaker or not.
         assert_eq!(
-            gate("vallum unlock", Some(&guardrail()), &cfg),
+            gate("vallum run ls", Some(&guardrail()), &cfg),
             Verdict::PassThrough
         );
         assert_eq!(gate("   ", Some(&guardrail()), &cfg), Verdict::PassThrough);
@@ -454,10 +481,13 @@ mod tests {
         );
         let (cfg, dir) = breaker_cfg("real_head");
         lock_now(&dir);
-        assert_eq!(
-            gate(&format!("{head} unlock"), Some(&guardrail()), &cfg),
-            Verdict::PassThrough
-        );
+        // A path-qualified REAL vallum is recognized as vallum-head, so it
+        // bypasses the breaker; `unlock` reaches the user as the self-disable
+        // Ask (contrast the decoy below, which the breaker denies).
+        match gate(&format!("{head} unlock"), Some(&guardrail()), &cfg) {
+            Verdict::Ask { rule_name, .. } => assert_eq!(rule_name, "vallum_self_disable"),
+            other => panic!("expected self-disable Ask, got {other:?}"),
+        }
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&bin_dir);
     }
@@ -604,6 +634,25 @@ mod tests {
         );
         // Guardrail off: byte-identical to v0.7.0 — TUI passes through.
         assert_eq!(decide("less /etc/shadow", None), Verdict::PassThrough);
+    }
+
+    #[test]
+    fn vallum_head_self_disable_asks_other_subcommands_pass() {
+        let p = Policy::compile(&crate::config::PolicyConfig::default()).unwrap();
+        for cmd in ["vallum unlock", "vallum uninstall-hook --agent codex"] {
+            match decide(cmd, Some(&p)) {
+                Verdict::Ask { rule_name, .. } => {
+                    assert_eq!(rule_name, "vallum_self_disable", "{cmd}")
+                }
+                other => panic!("{cmd}: expected Ask, got {other:?}"),
+            }
+        }
+        for cmd in ["vallum stats", "vallum run -- ls", "vallum doctor"] {
+            assert!(
+                matches!(decide(cmd, Some(&p)), Verdict::PassThrough),
+                "{cmd}"
+            );
+        }
     }
 
     #[test]

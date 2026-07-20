@@ -33,7 +33,7 @@ interpreters).
 
 ## Built-in rules
 
-The 24 built-in rules (all default to `Ask`):
+The 26 built-in rules (all default to `Ask`):
 
 | Rule | Catches |
 |---|---|
@@ -45,7 +45,7 @@ The 24 built-in rules (all default to `Ask`):
 | `mkfs_device` | Creating a filesystem on a device (destroys existing data) |
 | `fork_bomb` | Classic `:(){ :\|:& };:` fork bomb |
 | `chmod_777_recursive` | Recursively granting world-writable permissions |
-| `read_sensitive_creds` | Reading a private key, credential file, or `/etc/shadow` |
+| `read_sensitive_creds` | Reading a private key, credential file, `/etc/shadow`, or Vallum's `approval.secret` |
 | `git_push_force` | Force-push that can overwrite remote history |
 | `find_delete_root` | `find -delete` rooted at a root/home/system path |
 | `shred_sensitive` | Shredding a key, credential, or system password file |
@@ -61,10 +61,52 @@ The 24 built-in rules (all default to `Ask`):
 | `write_crontab` | Installing, editing, or removing a crontab (`crontab -l` stays `Allow`) |
 | `write_launch_agents` | Writing or loading a macOS LaunchAgent/LaunchDaemon (`~/Library/LaunchAgents\|LaunchDaemons`, `launchctl load`/`bootstrap`) |
 | `write_systemd_user` | Writing or enabling a systemd **user** unit (`~/.config/systemd/user/`, `systemctl --user enable`) |
+| `vallum_self_disable` | A shell command running `vallum unlock` or `vallum uninstall-hook` (including `bash -c`-nested forms) — clearing lockdown or removing the guardrail |
+| `write_vallum_config` | A shell command writing under `~/.vallum/` — Vallum's own config/state (guardrail self-disable) |
 
 The six persistence rules gate **writes** only — *reading* a startup file
 (`source ~/.zshrc`, `cat ~/.ssh/config`, `git config user.name`,
-`crontab -l`) stays `Allow`.
+`crontab -l`) stays `Allow`. The two `vallum`/`~/.vallum` rules close the gap
+where an agent turns the guardrail off before doing something dangerous.
+
+## File-tool gating (Claude Code)
+
+The rules above match **shell commands**. An agent can also touch sensitive
+files without ever running a command — by calling its editor's native
+`Write`/`Edit`/`Read` tool directly. On **Claude Code**, the `PreToolUse` hook
+now gates those native file tools (`Write`, `Edit`, `MultiEdit`,
+`NotebookEdit`, `Read`) against a set of path rules, so writing `~/.zshrc` or
+reading `~/.ssh/id_rsa` through a file tool is caught the same as doing it in
+the shell. This is **Claude Code only** in this first version — the other
+agents' native file tools are not gated (their shell guardrail is unchanged).
+
+The nine file rules (all `Ask`, like the shell built-ins):
+
+| Rule | Op | Catches |
+|---|---|---|
+| `file_write_shell_profile` | Write | A login-shell startup file in `$HOME` (`.zshenv`, `.zshrc`, `.zprofile`, `.bashrc`, `.bash_profile`, `.profile`) |
+| `file_write_ssh_config` | Write | Anything under `~/.ssh/` (`authorized_keys`, `config`, …) |
+| `file_write_git_hooks` | Write | Any path with a `.git/hooks/` component |
+| `file_write_crontab_dir` | Write | `/etc/crontab`, `/etc/cron.*/…`, or under `/var/spool/cron/` |
+| `file_write_launch_agents` | Write | `~/Library/LaunchAgents/`, `/Library/LaunchAgents/`, or `/Library/LaunchDaemons/` |
+| `file_write_systemd_user` | Write | Under `~/.config/systemd/user/` |
+| `file_write_agent_config` | Write | An agent config/hook file (`.claude/settings(.local).json`, `.cursor/hooks.json`, `.codex/hooks.json`/`config.toml`, `.gemini/settings.json`, `.mcp.json`) |
+| `file_write_vallum` | Write | Anything under `~/.vallum/` — Vallum's own config/state (guardrail self-disable) |
+| `file_read_sensitive` | Read | A private key (`~/.ssh/id_*`, not `.pub`), `~/.aws/credentials`, `/etc/shadow`, or an `approval.secret` |
+
+Path matching is **lexical**: `~`/`$HOME` are expanded and `.`/`..` are
+resolved textually, but the filesystem is never touched — symlinks are **not**
+resolved (see [SECURITY.md](../SECURITY.md)). An `Ask` here carries no command
+rewrite (the tool call runs unchanged on approval); the circuit breaker counts
+and can deny file-tool calls too; and each verdict lands in `policy.log` as a
+`Write ~/.zshenv`-style entry.
+
+These rules share the `[policy] disabled` suppression list with the shell
+built-ins (e.g. `disabled = ["file_read_sensitive"]`). Because they ride the
+Claude Code hook entry's tool matcher, an **existing install must re-run
+`vallum install-hook`** to widen the matcher from `Bash` to the file tools;
+`vallum install-hook` migrates the old entry in place, and `vallum doctor`
+warns when the matcher is outdated.
 
 ## Circuit breaker (blast radius)
 

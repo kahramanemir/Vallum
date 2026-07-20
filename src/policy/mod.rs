@@ -3,6 +3,7 @@
 //! joined command line — no shell parsing (same posture as the scrubber).
 
 pub mod audit;
+pub mod file_rules;
 mod normalize;
 mod unwrap;
 
@@ -291,7 +292,7 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 r"(?i)\bchmod\s+(?:-\S+\s+)*(?:-R|--recursive)\s+(?:-\S+\s+)*0?777\b|\bchmod\s+(?:-\S+\s+)*0?777\s+(?:-\S+\s+)*(?:-R|--recursive)\b|\bchmod\s+(?:-R|--recursive)\s+a\+rwx\b",
                 "Recursively granting world-writable permissions on a broad path"),
             ask("read_sensitive_creds",
-                r#"(?i)\b(?:cat|less|more|head|tail|bat|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials(?:[\s'";]|$)|/etc/shadow(?:[\s'";]|$))"#,
+                r#"(?i)\b(?:cat|less|more|head|tail|bat|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials(?:[\s'";]|$)|/etc/shadow(?:[\s'";]|$)|approval\.secret(?:[\s'";]|$))"#,
                 "Reading a private key, credential file, or shadow password file"),
             ask("git_push_force",
                 r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:[\s;&|)`]|$)|\s-f(?:[\s;&|)`]|$)|\s\+\w)",
@@ -323,6 +324,15 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                     cfg = AGENT_CFG
                 ),
                 "Writing to an AI agent config/hook file (possible hook injection)"),
+            ask("vallum_self_disable",
+                r"(?i)(?:^|[\s;&|`$(/])vallum\s+(?:unlock|uninstall-hook)\b",
+                "Clearing Vallum's lockdown or uninstalling its hook (guardrail self-disable)"),
+            ask("write_vallum_config",
+                &format!(
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}['"]?\s*(?:[;&|)]|$))"#,
+                    cfg = r#"\.vallum/[^\s'";&|)]*"#
+                ),
+                "Writing to Vallum's own config/state directory (guardrail self-disable)"),
         ]
     })
 }
@@ -348,6 +358,8 @@ pub fn builtin_names() -> Vec<&'static str> {
         "git_clean_force",
         "chown_recursive_root",
         "write_agent_config",
+        "vallum_self_disable",
+        "write_vallum_config",
         "write_shell_profile",
         "write_ssh_config",
         "write_git_hooks",
@@ -472,7 +484,7 @@ mod tests {
     #[test]
     fn builtins_all_ask_and_named() {
         let names = builtin_names();
-        assert_eq!(names.len(), 24);
+        assert_eq!(names.len(), 26);
         assert_eq!(names.len(), builtin_rules().len(), "names must track rules");
         for r in builtin_rules() {
             assert_eq!(
@@ -860,7 +872,63 @@ mod tests {
     }
 
     #[test]
-    fn builtin_names_has_24_rules() {
-        assert_eq!(builtin_names().len(), 24);
+    fn vallum_self_disable_rule_fires_on_nested_and_direct_forms() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "vallum unlock",
+            "vallum uninstall-hook --agent claude",
+            "bash -c 'vallum unlock'",
+            "sh -c \"vallum uninstall-hook\"",
+            "bash -c '/usr/local/bin/vallum uninstall-hook'",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "vallum_self_disable", "{cmd}");
+        }
+    }
+
+    #[test]
+    fn vallum_self_disable_ignores_other_subcommands_and_quoted_mentions() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "vallum stats",
+            "vallum doctor",
+            "vallum log verify",
+            "echo \"vallum unlock\"",
+            "git commit -m 'vallum unlock docs'",
+        ] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_vallum_config_asks_on_writes_not_reads() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "echo 'guardrail = false' >> ~/.vallum/config.toml",
+            "tee ~/.vallum/config.toml < evil.toml",
+            "cp evil.toml ~/.vallum/config.toml",
+            "sed -i 's/true/false/' ~/.vallum/config.toml",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
+            assert_eq!(v.rule_name, "write_vallum_config", "{cmd}");
+        }
+        for cmd in ["cat ~/.vallum/config.toml", "ls ~/.vallum/logs"] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn approval_secret_read_asks() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        let v = p.evaluate("cat ~/.vallum/logs/approval.secret");
+        assert_eq!(v.action, PolicyAction::Ask);
+        assert_eq!(v.rule_name, "read_sensitive_creds");
+    }
+
+    #[test]
+    fn builtin_names_has_26_rules() {
+        assert_eq!(builtin_names().len(), 26);
     }
 }

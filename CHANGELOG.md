@@ -5,6 +5,33 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **File-tool gating (Claude Code).** The `PreToolUse` hook now also gates
+  Claude Code's native `Write`/`Edit`/`MultiEdit`/`NotebookEdit`/`Read` tools
+  through nine lexical path rules (all `Ask`): shell startup files, `~/.ssh/`,
+  `.git/hooks/`, crontab directories, macOS LaunchAgents/Daemons, systemd user
+  units, agent config/hook files, `~/.vallum/` (self-disable), and reads of
+  private keys / `~/.aws/credentials` / `/etc/shadow` / `approval.secret`.
+  Matching is lexical (`~`/`$HOME` expansion + textual `.`/`..` resolution) —
+  symlinks are not resolved — and Claude Code only in this first version; the
+  other agents' native file tools stay ungated. Suppressible per rule via
+  `[policy] disabled`.
+- **Guardrail self-protection.** Two new shell built-in rules (24 → 26, all
+  `Ask`): `vallum_self_disable` fires on `vallum unlock`/`uninstall-hook`
+  (including `bash -c`-nested forms), and `write_vallum_config` fires on a shell
+  write into `~/.vallum/`. `read_sensitive_creds` now also covers reads of
+  `approval.secret`. Stops a careless or injected agent from turning the
+  guardrail off before doing something dangerous.
+
+### Changed
+- The Claude Code hook's tool matcher widens from `Bash` to
+  `Bash|Write|Edit|MultiEdit|NotebookEdit|Read` so the native file tools reach
+  the hook. Re-running `vallum install-hook` migrates an old Bash-only entry in
+  place, and `vallum doctor` warns ("re-run `vallum install-hook`") when an
+  installed hook still carries the outdated matcher.
+
 ## [0.8.12]
 
 ### Added
