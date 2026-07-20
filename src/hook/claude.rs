@@ -18,6 +18,10 @@ struct HookInput {
 struct HookToolInput {
     #[serde(default)]
     command: String,
+    #[serde(default)]
+    file_path: String,
+    #[serde(default)]
+    notebook_path: String,
 }
 
 #[derive(Serialize)]
@@ -117,6 +121,45 @@ pub fn rewrite_decision(
     }
 }
 
+/// Verdict-only decision for Claude's native file tools. There is no shell
+/// command to wrap, so Allow means "emit nothing" (P1: never bypass the
+/// agent's own approval) and Ask carries no rewrite.
+pub(crate) fn file_decision(
+    tool_name: &str,
+    file_path: &str,
+    notebook_path: &str,
+    cfg: &AppConfig,
+) -> HookDecision {
+    use crate::policy::file_rules::FileOp;
+    let lower = tool_name.to_ascii_lowercase();
+    let (op, path) = match lower.as_str() {
+        "write" | "edit" | "multiedit" => (FileOp::Write, file_path),
+        "notebookedit" => (FileOp::Write, notebook_path),
+        "read" => (FileOp::Read, file_path),
+        _ => return HookDecision::PassThrough,
+    };
+    if !cfg.security.guardrail || path.is_empty() {
+        return HookDecision::PassThrough;
+    }
+    if let Some(trip) = crate::breaker::active_trip(cfg) {
+        return HookDecision::Deny {
+            reason: crate::breaker::trip_reason(&trip),
+            rule_name: "circuit_breaker".to_string(),
+        };
+    }
+    match crate::policy::file_rules::evaluate(op, path, &cfg.policy.disabled) {
+        Some(m) => {
+            crate::breaker::record_and_check(cfg);
+            HookDecision::Ask {
+                command: None,
+                reason: m.reason.to_string(),
+                rule_name: m.rule_name.to_string(),
+            }
+        }
+        None => HookDecision::PassThrough,
+    }
+}
+
 /// Entry point invoked from main: read stdin JSON, decide, write stdout JSON,
 /// return the exit code (always 0 — even malformed input is silently allowed).
 pub fn run() -> i32 {
@@ -131,13 +174,30 @@ pub fn run() -> i32 {
     let (config, policy) = super::load_config_and_policy();
     let secret = crate::approval::load_or_create_secret(&config);
 
-    let decision = rewrite_decision(
-        &input.tool_name,
-        &input.tool_input.command,
-        policy.as_ref(),
-        &config,
-        secret.as_deref(),
-    );
+    let is_bash = input.tool_name.eq_ignore_ascii_case("Bash");
+    let decision = if is_bash {
+        rewrite_decision(
+            &input.tool_name,
+            &input.tool_input.command,
+            policy.as_ref(),
+            &config,
+            secret.as_deref(),
+        )
+    } else {
+        file_decision(
+            &input.tool_name,
+            &input.tool_input.file_path,
+            &input.tool_input.notebook_path,
+            &config,
+        )
+    };
+    let audit_target = if is_bash {
+        input.tool_input.command.clone()
+    } else if input.tool_name.eq_ignore_ascii_case("NotebookEdit") {
+        format!("{} {}", input.tool_name, input.tool_input.notebook_path)
+    } else {
+        format!("{} {}", input.tool_name, input.tool_input.file_path)
+    };
 
     let out = match decision {
         HookDecision::PassThrough => return 0,
@@ -156,7 +216,7 @@ pub fn run() -> i32 {
                 PolicyAction::Ask,
                 reason.clone(),
                 rule_name,
-                &input.tool_input.command,
+                &audit_target,
                 "claude",
                 &config,
             );
@@ -172,7 +232,7 @@ pub fn run() -> i32 {
                 PolicyAction::Deny,
                 reason.clone(),
                 rule_name,
-                &input.tool_input.command,
+                &audit_target,
                 "claude",
                 &config,
             );
@@ -422,5 +482,83 @@ mod tests {
             other => panic!("expected deny, got {other:?}"),
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn file_tools_bash_untouched() {
+        // Bash still goes through rewrite_decision, not the file branch.
+        let d = file_decision("Bash", "", "", &isolated_cfg());
+        assert!(matches!(d, HookDecision::PassThrough));
+    }
+
+    #[test]
+    fn write_tool_on_shell_profile_asks_without_rewrite() {
+        let d = file_decision("Write", "~/.zshenv", "", &isolated_cfg());
+        match d {
+            HookDecision::Ask {
+                command, rule_name, ..
+            } => {
+                assert!(command.is_none(), "file tools have nothing to wrap");
+                assert_eq!(rule_name, "file_write_shell_profile");
+            }
+            other => panic!("expected Ask, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn edit_and_multiedit_and_notebook_are_write_gated() {
+        for tool in ["Edit", "MultiEdit", "edit"] {
+            let d = file_decision(tool, "~/.ssh/authorized_keys", "", &isolated_cfg());
+            assert!(matches!(d, HookDecision::Ask { .. }), "{tool}");
+        }
+        // NotebookEdit uses notebook_path, not file_path.
+        let d = file_decision("NotebookEdit", "", "~/.vallum/config.toml", &isolated_cfg());
+        assert!(matches!(d, HookDecision::Ask { .. }));
+    }
+
+    #[test]
+    fn read_tool_gates_sensitive_but_not_normal_files() {
+        let d = file_decision("Read", "~/.ssh/id_rsa", "", &isolated_cfg());
+        assert!(matches!(d, HookDecision::Ask { .. }));
+        let d = file_decision("Read", "/tmp/notes.txt", "", &isolated_cfg());
+        assert!(matches!(d, HookDecision::PassThrough));
+        // Read is not gated by write rules.
+        let d = file_decision("Read", "~/.zshenv", "", &isolated_cfg());
+        assert!(matches!(d, HookDecision::PassThrough));
+    }
+
+    #[test]
+    fn unknown_tools_and_empty_paths_pass_through() {
+        assert!(matches!(
+            file_decision("Glob", "~/.zshenv", "", &isolated_cfg()),
+            HookDecision::PassThrough
+        ));
+        assert!(matches!(
+            file_decision("Write", "", "", &isolated_cfg()),
+            HookDecision::PassThrough
+        ));
+    }
+
+    #[test]
+    fn guardrail_off_emits_nothing_for_file_tools() {
+        let mut cfg = isolated_cfg();
+        cfg.security.guardrail = false;
+        let d = file_decision("Write", "~/.zshenv", "", &cfg);
+        assert!(matches!(d, HookDecision::PassThrough));
+    }
+
+    #[test]
+    fn file_tool_denied_while_breaker_tripped() {
+        let mut cfg = isolated_cfg();
+        cfg.security.circuit_breaker = true;
+        cfg.security.breaker_threshold = 1;
+        crate::breaker::record_and_check(&cfg); // trip immediately
+                                                // If threshold semantics turn out to be "strictly exceeds", mirror
+                                                // breaker.rs's own trip test (call record_and_check once more).
+        let d = file_decision("Write", "/tmp/anything.txt", "", &cfg);
+        match d {
+            HookDecision::Deny { rule_name, .. } => assert_eq!(rule_name, "circuit_breaker"),
+            other => panic!("expected Deny, got {other:?}"),
+        }
     }
 }
