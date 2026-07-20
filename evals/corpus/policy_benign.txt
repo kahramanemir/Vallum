@@ -95,3 +95,12 @@ ls ~/Library/LaunchAgents
 systemctl --user status syncthing
 systemctl --user list-units
 systemctl status nginx
+# --- vallum self-protection precision controls (mentions/reads stay Allow) ---
+vallum stats
+vallum doctor
+vallum log verify
+man vallum
+echo "vallum unlock"
+grep -rn "vallum unlock" docs/
+cat ~/.vallum/config.toml
+ls ~/.vallum/logs

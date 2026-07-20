@@ -106,7 +106,7 @@ pub fn rewrite_decision(
         Verdict::Allow => HookDecision::Allow { command: wrapped },
         Verdict::Ask { reason, rule_name } => {
             let head = command.split_whitespace().next().unwrap_or("");
-            let rewrite = if super::TUI_SKIP.contains(&head) {
+            let rewrite = if super::TUI_SKIP.contains(&head) || super::is_vallum_head(head) {
                 None
             } else {
                 Some(wrapped)
@@ -457,6 +457,28 @@ mod tests {
             } => {
                 assert_eq!(command, None, "TUI ask must not rewrite (TTY)");
                 assert!(reason.contains("shadow") || !reason.is_empty());
+            }
+            other => panic!("expected Ask, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn vallum_self_disable_ask_has_no_rewrite() {
+        // On approval the command must run unwrapped: while the breaker is
+        // tripped, a wrapped `vallum run` child would deny the unlock itself.
+        let d = rewrite_decision(
+            "Bash",
+            "vallum unlock",
+            Some(&guardrail()),
+            &isolated_cfg(),
+            Some(TEST_SECRET),
+        );
+        match d {
+            HookDecision::Ask {
+                command, rule_name, ..
+            } => {
+                assert!(command.is_none());
+                assert_eq!(rule_name, "vallum_self_disable");
             }
             other => panic!("expected Ask, got {other:?}"),
         }
