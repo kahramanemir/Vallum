@@ -3,6 +3,7 @@
 //! joined command line — no shell parsing (same posture as the scrubber).
 
 pub mod audit;
+pub mod file_rules;
 mod normalize;
 mod unwrap;
 
