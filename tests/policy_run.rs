@@ -224,3 +224,110 @@ fn policy_test_tui_command_matching_rule_asks() {
     assert_eq!(out.status.code(), Some(10));
     assert!(String::from_utf8_lossy(&out.stdout).contains("read_sensitive_creds"));
 }
+
+#[test]
+fn tty_less_run_records_nothing_but_assume_yes_does_not_cache() {
+    // assume-yes proceeds must NOT create cache entries: a blanket flag is
+    // not a per-command human decision.
+    let dir = std::env::temp_dir().join(format!("vallum_polrun_nocache_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("config.toml");
+    std::fs::write(&cfg, format!("[audit]\nlog_dir = \"{}\"\n", dir.display())).unwrap();
+    let out = std::process::Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .env("VALLUM_ASSUME_YES", "1")
+        .args(["run", "--", "git", "clean", "-fdn"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "assume-yes proceeds; dry-run is harmless"
+    );
+    assert!(
+        !dir.join("approvals.jsonl").exists(),
+        "assume-yes proceed must not mint a cache entry"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cached_approval_lets_direct_run_proceed_without_tty() {
+    // Seed a valid entry via the library, then a non-TTY `vallum run` of the
+    // identical command in the same cwd proceeds instead of failing closed.
+    let dir = std::env::temp_dir().join(format!("vallum_polrun_cache_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg_path = dir.join("config.toml");
+    std::fs::write(
+        &cfg_path,
+        format!("[audit]\nlog_dir = \"{}\"\n", dir.display()),
+    )
+    .unwrap();
+    let mut cfg = vallum::config::AppConfig::default();
+    cfg.audit.log_dir = Some(dir.clone());
+    let cwd = std::env::current_dir().unwrap().display().to_string();
+    // `git clean -fdn` fires git_clean_force (eligible) but is a dry-run.
+    vallum::approvals::record(&cfg, "git clean -fdn", &cwd, "git_clean_force");
+    let out = std::process::Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg_path)
+        .env("VALLUM_ASSUME_YES", "0")
+        .args(["run", "--", "git", "clean", "-fdn"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "cache hit must proceed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Without the entry the same invocation fails closed (no TTY);
+    // blocked commands exit 125 (see `emit_block` in src/main.rs).
+    vallum::approvals::clear(&cfg).unwrap();
+    let out = std::process::Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg_path)
+        .env("VALLUM_ASSUME_YES", "0")
+        .args(["run", "--", "git", "clean", "-fdn"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(125), "no cache, no TTY → blocked");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn token_approved_run_records_eligible_command() {
+    // A hook-shaped `vallum run --approval-token … -- bash -c '<cmd>'` with a
+    // valid token writes a cache entry for the inner command.
+    let dir = std::env::temp_dir().join(format!("vallum_polrun_mint_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg_path = dir.join("config.toml");
+    std::fs::write(
+        &cfg_path,
+        format!("[audit]\nlog_dir = \"{}\"\n", dir.display()),
+    )
+    .unwrap();
+    let mut cfg = vallum::config::AppConfig::default();
+    cfg.audit.log_dir = Some(dir.clone());
+    let secret = vallum::approval::load_or_create_secret(&cfg).unwrap();
+    let inner = "git clean -fdn";
+    let token = vallum::approval::token_for(&format!("bash -c {inner}"), &secret);
+    let out = std::process::Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg_path)
+        .args(["run", "--approval-token", &token, "--", "bash", "-c", inner])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let cwd = std::env::current_dir().unwrap().display().to_string();
+    assert!(
+        vallum::approvals::lookup(&cfg, inner, &cwd, "git_clean_force"),
+        "token-approved eligible command must be cached"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

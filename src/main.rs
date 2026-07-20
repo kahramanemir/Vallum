@@ -132,6 +132,26 @@ fn main() {
                     emit_block(*json, &verdict, cmd, args);
                 }
             }
+            // A verified token proves the hook asked and the human approved
+            // this exact command moments ago. Evaluate (not enforce) to learn
+            // which rule fired and remember eligible ones — the approval
+            // cache's only hook-side write point.
+            if pre_approved && config.security.guardrail && config.security.approval_cache {
+                if let Ok(policy) = vallum::policy::Policy::compile(&config.policy) {
+                    let inner = if cmd == "bash" && args.len() == 2 && args[0] == "-c" {
+                        args[1].clone()
+                    } else {
+                        command_line.clone()
+                    };
+                    let v = policy.evaluate(&inner);
+                    if v.action == vallum::policy::PolicyAction::Ask {
+                        let cwd = std::env::current_dir()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_default();
+                        vallum::approvals::record(&config, &inner, &cwd, &v.rule_name);
+                    }
+                }
+            }
             if config.security.guardrail && !pre_approved {
                 // Unreachable Err: AppConfig::load() -> validate() already
                 // compiled every user regex, so a failure here means config
@@ -145,7 +165,16 @@ fn main() {
                 };
                 let verdict = policy.evaluate(&command_line);
                 match verdict.action {
-                    vallum::policy::PolicyAction::Allow => {}
+                    vallum::policy::PolicyAction::Allow => {
+                        if !verdict.rule_name.is_empty() {
+                            vallum::policy::audit::log_allow_downgrade(
+                                &verdict.rule_name,
+                                &command_line,
+                                "direct",
+                                &config,
+                            );
+                        }
+                    }
                     vallum::policy::PolicyAction::Deny => {
                         vallum::policy::audit::log_verdict(
                             &verdict,
@@ -157,28 +186,62 @@ fn main() {
                         emit_block(*json, &verdict, cmd, args);
                     }
                     vallum::policy::PolicyAction::Ask => {
-                        // Record the Ask once, whether it proceeds or blocks.
-                        vallum::policy::audit::log_verdict(
-                            &verdict,
-                            &command_line,
-                            "direct",
+                        let cwd = std::env::current_dir()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_default();
+                        if vallum::approvals::lookup(
                             &config,
-                        );
-                        vallum::breaker::record_and_check(&config);
-                        let assume_yes = config.security.assume_yes
-                            || std::env::var("VALLUM_ASSUME_YES")
-                                .map(|v| v == "1")
-                                .unwrap_or(false);
-                        let decision = if assume_yes {
-                            vallum::policy::AskDecision::Proceed
-                        } else if !*json && atty_stdin() {
-                            let resp = prompt_tty(&verdict.reason);
-                            vallum::policy::resolve_ask(false, true, resp.as_deref())
+                            &command_line,
+                            &cwd,
+                            &verdict.rule_name,
+                        ) {
+                            // Cached human approval: proceed without prompting;
+                            // the downgrade is audited, and it does NOT count
+                            // toward the circuit breaker (it is an Allow).
+                            vallum::policy::audit::log_allow_downgrade(
+                                &format!("approval_cache:{}", verdict.rule_name),
+                                &command_line,
+                                "direct",
+                                &config,
+                            );
                         } else {
-                            vallum::policy::resolve_ask(false, false, None)
-                        };
-                        if decision == vallum::policy::AskDecision::Blocked {
-                            emit_block(*json, &verdict, cmd, args);
+                            // Record the Ask once, whether it proceeds or blocks.
+                            vallum::policy::audit::log_verdict(
+                                &verdict,
+                                &command_line,
+                                "direct",
+                                &config,
+                            );
+                            vallum::breaker::record_and_check(&config);
+                            let assume_yes = config.security.assume_yes
+                                || std::env::var("VALLUM_ASSUME_YES")
+                                    .map(|v| v == "1")
+                                    .unwrap_or(false);
+                            let (decision, via_tty) = if assume_yes {
+                                (vallum::policy::AskDecision::Proceed, false)
+                            } else if !*json && atty_stdin() {
+                                let resp = prompt_tty(&verdict.reason);
+                                (
+                                    vallum::policy::resolve_ask(false, true, resp.as_deref()),
+                                    true,
+                                )
+                            } else {
+                                (vallum::policy::resolve_ask(false, false, None), false)
+                            };
+                            if decision == vallum::policy::AskDecision::Blocked {
+                                emit_block(*json, &verdict, cmd, args);
+                            } else if via_tty {
+                                // A real per-command human "y" — the only
+                                // direct-mode approval worth remembering
+                                // (assume-yes is a blanket flag, not a
+                                // decision).
+                                vallum::approvals::record(
+                                    &config,
+                                    &command_line,
+                                    &cwd,
+                                    &verdict.rule_name,
+                                );
+                            }
                         }
                     }
                 }
