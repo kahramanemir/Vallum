@@ -24,6 +24,10 @@ pub enum Verdict {
     PassThrough,
     /// Vallum has no objection.
     Allow,
+    /// Allow produced by downgrading a matched rule (scoped allow exception or
+    /// approval cache). `marker` — `allow_exception:<rule>` /
+    /// `approval_cache:<rule>` — feeds the audit trail; behavior is Allow.
+    AllowDowngraded { marker: String, reason: String },
     /// Policy wants explicit user confirmation.
     Ask { reason: String, rule_name: String },
     /// Policy refuses the command.
@@ -146,7 +150,19 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
                     rule_name: v.rule_name,
                 }
             }
-            PolicyAction::Allow => {}
+            PolicyAction::Allow => {
+                if !v.rule_name.is_empty() {
+                    // A scoped allow exception fired. TUI heads keep their
+                    // PassThrough shape (no rewrite either way; the downgrade
+                    // note is dropped for them).
+                    if !is_tui {
+                        return Verdict::AllowDowngraded {
+                            marker: v.rule_name,
+                            reason: v.reason,
+                        };
+                    }
+                }
+            }
         }
     }
     if is_tui {
@@ -311,6 +327,10 @@ pub fn test_report(command: &str, policy: Option<&Policy>, guardrail_on: bool) -
             (format!("{label}{suffix}\n"), 0)
         }
         Verdict::Allow => (format!("ALLOW{suffix}\n"), 0),
+        Verdict::AllowDowngraded { marker, reason } => (
+            format!("ALLOW [{marker}]{suffix}\n  downgraded: {reason}\n"),
+            0,
+        ),
         Verdict::Ask { reason, rule_name } => (
             format!(
                 "ASK [{rule_name}] ({})\n  {reason}\n",
@@ -697,6 +717,49 @@ mod tests {
         assert_eq!(
             (s.as_str(), c),
             ("ALLOW (guardrail off — security.guardrail = false)\n", 0)
+        );
+    }
+
+    #[test]
+    fn decide_maps_suppressed_verdict_to_allow_downgraded() {
+        let cfg = crate::config::PolicyConfig {
+            rules: vec![],
+            allow: vec![crate::config::PolicyAllowConfig {
+                pattern: r"^git push --force origin main-backup$".into(),
+                suppresses: "git_push_force".into(),
+                reason: "release flow".into(),
+            }],
+            disabled: vec![],
+        };
+        let p = Policy::compile(&cfg).unwrap();
+        match decide("git push --force origin main-backup", Some(&p)) {
+            Verdict::AllowDowngraded { marker, reason } => {
+                assert_eq!(marker, "allow_exception:git_push_force");
+                assert_eq!(reason, "release flow");
+            }
+            other => panic!("expected AllowDowngraded, got {other:?}"),
+        }
+        // Plain allows stay plain.
+        assert!(matches!(decide("ls -la", Some(&p)), Verdict::Allow));
+    }
+
+    #[test]
+    fn test_report_shows_suppression() {
+        let cfg = crate::config::PolicyConfig {
+            rules: vec![],
+            allow: vec![crate::config::PolicyAllowConfig {
+                pattern: r"^git push --force origin main-backup$".into(),
+                suppresses: "git_push_force".into(),
+                reason: "release flow".into(),
+            }],
+            disabled: vec![],
+        };
+        let p = Policy::compile(&cfg).unwrap();
+        let (report, code) = test_report("git push --force origin main-backup", Some(&p), true);
+        assert_eq!(code, 0);
+        assert!(
+            report.contains("allow_exception:git_push_force"),
+            "{report}"
         );
     }
 }

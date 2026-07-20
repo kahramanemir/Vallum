@@ -104,6 +104,10 @@ pub fn rewrite_decision(
     match super::gate(command, policy, cfg) {
         Verdict::PassThrough => HookDecision::PassThrough,
         Verdict::Allow => HookDecision::Allow { command: wrapped },
+        Verdict::AllowDowngraded { marker, .. } => {
+            crate::policy::audit::log_allow_downgrade(&marker, command, "claude", cfg);
+            HookDecision::Allow { command: wrapped }
+        }
         Verdict::Ask { reason, rule_name } => {
             let head = command.split_whitespace().next().unwrap_or("");
             let rewrite = if super::TUI_SKIP.contains(&head) || super::is_vallum_head(head) {
