@@ -63,6 +63,19 @@ fn mac_for(cmd: &str, cwd: &str, rule: &str, ts: u64, secret: &[u8]) -> String {
     crate::approval::token_for(&format!("v1\0{cmd}\0{cwd}\0{rule}\0{ts}"), secret)
 }
 
+/// Resolve a cwd string to the canonical, symlink-free absolute form that
+/// `std::env::current_dir()` yields. The write path keys on the process
+/// getcwd (already resolved); the hook read path keys on the agent-provided
+/// cwd string, which may traverse a symlink (`/tmp`, `/var`, a symlinked home
+/// or mount). Canonicalizing both to one key stops those from becoming
+/// spurious cache misses. Falls back to the raw string when the path cannot
+/// be resolved — a fail-safe miss, never a false hit.
+fn canonical_cwd(raw: &str) -> String {
+    std::fs::canonicalize(raw)
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| raw.to_string())
+}
+
 fn ttl_secs(cfg: &AppConfig) -> u64 {
     cfg.security.approval_cache_ttl_days.saturating_mul(86_400)
 }
@@ -83,6 +96,10 @@ pub fn record(cfg: &AppConfig, cmd: &str, cwd: &str, rule: &str) {
     if !cfg.security.approval_cache || !eligible(rule) {
         return;
     }
+    // Key on the canonical cwd so a getcwd-based write and a hook-provided
+    // (possibly symlinked) read land on one entry.
+    let cwd = canonical_cwd(cwd);
+    let cwd = cwd.as_str();
     // Idempotent while a valid entry exists: the TTL is anchored at the
     // ORIGINAL human approval. Every cache hit re-runs a token-carrying
     // `vallum run` that lands back here — appending again would both
@@ -126,6 +143,10 @@ pub fn lookup(cfg: &AppConfig, cmd: &str, cwd: &str, rule: &str) -> bool {
     if !cfg.security.approval_cache || !eligible(rule) {
         return false;
     }
+    // Match on the canonical cwd (see `record`): the stored key is canonical,
+    // so the query must be too, or a symlinked read cwd would always miss.
+    let cwd = canonical_cwd(cwd);
+    let cwd = cwd.as_str();
     let Some(secret) = crate::approval::load_secret(cfg) else {
         return false;
     };
@@ -258,6 +279,58 @@ mod tests {
             "/repo",
             "git_clean_force"
         ));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn canonical_cwd_resolves_symlinks_and_falls_back() {
+        let dir = temp_dir("canon");
+        let real = dir.join("real");
+        std::fs::create_dir_all(&real).unwrap();
+        #[cfg(unix)]
+        {
+            let link = dir.join("link");
+            std::os::unix::fs::symlink(&real, &link).unwrap();
+            assert_eq!(
+                canonical_cwd(link.to_str().unwrap()),
+                canonical_cwd(real.to_str().unwrap()),
+                "a symlinked cwd must resolve to the same key as the real dir"
+            );
+        }
+        // Unresolvable path falls back to the raw string (fail-safe: at worst a miss).
+        assert_eq!(
+            canonical_cwd("/no/such/dir-xyz-9999"),
+            "/no/such/dir-xyz-9999"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn record_and_lookup_agree_across_symlinked_cwd() {
+        // The write side keys on the process getcwd (already symlink-resolved);
+        // the hook read side keys on Claude's cwd string, which may traverse a
+        // symlink. Both must canonicalize to one key so an approved command is
+        // actually remembered instead of silently re-asked.
+        let dir = temp_dir("symcwd");
+        let cfg = cfg_with_dir(&dir);
+        let real = dir.join("proj");
+        std::fs::create_dir_all(&real).unwrap();
+        let resolved = std::fs::canonicalize(&real).unwrap().display().to_string();
+        // Write with the resolved path, as a getcwd-based writer would.
+        record(&cfg, "git push --force", &resolved, "git_push_force");
+        let link = dir.join("proj-link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        // Read with the symlinked representation, as a hook cwd might arrive.
+        assert!(
+            lookup(
+                &cfg,
+                "git push --force",
+                link.to_str().unwrap(),
+                "git_push_force"
+            ),
+            "symlinked read cwd must hit the entry written from the resolved cwd"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
