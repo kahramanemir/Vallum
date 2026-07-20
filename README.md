@@ -24,7 +24,7 @@ any agent that runs shell commands.
 
 | Capability | What it does |
 |---|---|
-| **[Guardrail](docs/guardrail.md)** | Stops `rm -rf /`, `curl … \| sh`, force-push, and other dangerous commands *before they run* — prompts (`Ask`) or blocks (`Deny`), on by default. |
+| **[Guardrail](docs/guardrail.md)** | Stops `rm -rf /`, `curl … \| sh`, force-push, and other dangerous commands *before they run* — prompts (`Ask`) or blocks (`Deny`), on by default. On Claude Code it also gates the native `Write`/`Edit`/`Read` tools against sensitive paths. |
 | **Secret redaction** | Masks known key/token formats (OpenAI, AWS, GitHub, Stripe, and more) plus high-entropy credentials before output ever reaches the model. |
 | **Injection defense** | Neutralizes "ignore previous instructions"-style text in fourteen languages, then wraps the output in untrusted-data markers so it can't hijack the agent. |
 | **[Config scanning](docs/scanning.md)** | Statically scans MCP server configs, skill packages, and agent context files for embedded secrets, injection, and risky commands. |
@@ -111,7 +111,7 @@ and audited. Pipeline stages, the security model, and the module map:
 
 | Doc | What's inside |
 |---|---|
-| [Guardrail & policy](docs/guardrail.md) | The 24 built-in rules, custom rules, circuit breaker, tamper-evident `policy.log` |
+| [Guardrail & policy](docs/guardrail.md) | The 26 built-in rules, Claude Code file-tool gating, custom rules, circuit breaker, tamper-evident `policy.log` |
 | [Agent integrations](docs/agents.md) | Claude Code, Cursor, Gemini CLI, Codex CLI — hook points, Ask behavior, limitations |
 | [CLI reference](docs/cli.md) | Every command, examples, JSON output, exit codes, all install channels |
 | [Configuration](docs/configuration.md) | `~/.vallum/config.toml` — every setting with its default |
