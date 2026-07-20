@@ -12,6 +12,10 @@ struct HookInput {
     tool_name: String,
     #[serde(default)]
     tool_input: HookToolInput,
+    /// Claude Code reports the tool call's working directory; used as the
+    /// approval-cache key (empty → fall back to the hook process cwd).
+    #[serde(default)]
+    cwd: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -79,6 +83,7 @@ pub fn rewrite_decision(
     policy: Option<&Policy>,
     cfg: &AppConfig,
     secret: Option<&[u8]>,
+    cwd: Option<&str>,
 ) -> HookDecision {
     if !tool_name.eq_ignore_ascii_case("Bash") {
         return HookDecision::PassThrough;
@@ -101,9 +106,13 @@ pub fn rewrite_decision(
         // a bypass).
         None => format!("vallum run -- bash -c {}", super::shell_escape(command)),
     };
-    match super::gate(command, policy, cfg) {
+    match super::gate_cached(command, policy, cfg, cwd) {
         Verdict::PassThrough => HookDecision::PassThrough,
         Verdict::Allow => HookDecision::Allow { command: wrapped },
+        Verdict::AllowDowngraded { marker, .. } => {
+            crate::policy::audit::log_allow_downgrade(&marker, command, "claude", cfg);
+            HookDecision::Allow { command: wrapped }
+        }
         Verdict::Ask { reason, rule_name } => {
             let head = command.split_whitespace().next().unwrap_or("");
             let rewrite = if super::TUI_SKIP.contains(&head) || super::is_vallum_head(head) {
@@ -177,12 +186,20 @@ pub fn run() -> i32 {
 
     let is_bash = input.tool_name.eq_ignore_ascii_case("Bash");
     let decision = if is_bash {
+        let cwd = if input.cwd.trim().is_empty() {
+            std::env::current_dir()
+                .ok()
+                .map(|p| p.display().to_string())
+        } else {
+            Some(input.cwd.clone())
+        };
         rewrite_decision(
             &input.tool_name,
             &input.tool_input.command,
             policy.as_ref(),
             &config,
             secret.as_deref(),
+            cwd.as_deref(),
         )
     } else {
         file_decision(
@@ -308,6 +325,7 @@ mod tests {
             Some(&guardrail()),
             &isolated_cfg(),
             Some(TEST_SECRET),
+            None,
         );
         match d {
             HookDecision::Allow { command } => assert_valid_wrap(&command, "git status"),
@@ -325,6 +343,7 @@ mod tests {
             Some(&guardrail()),
             &isolated_cfg(),
             Some(TEST_SECRET),
+            None,
         ) {
             HookDecision::Ask { .. } => {}
             other => panic!("expected Ask for lowercase tool name, got {other:?}"),
@@ -339,6 +358,7 @@ mod tests {
             Some(&guardrail()),
             &isolated_cfg(),
             Some(TEST_SECRET),
+            None,
         );
         match d {
             HookDecision::Ask {
@@ -359,6 +379,7 @@ mod tests {
                 action: "deny".into(),
                 reason: "denied in test".into(),
             }],
+            allow: vec![],
             disabled: vec![],
         })
         .unwrap()
@@ -372,6 +393,7 @@ mod tests {
             Some(&guardrail_with_deny()),
             &isolated_cfg(),
             Some(TEST_SECRET),
+            None,
         );
         match d {
             HookDecision::Deny { reason, .. } => assert!(reason.contains("denied in test")),
@@ -381,7 +403,14 @@ mod tests {
 
     #[test]
     fn guardrail_off_always_allows() {
-        let d = rewrite_decision("Bash", "rm -rf /", None, &isolated_cfg(), Some(TEST_SECRET));
+        let d = rewrite_decision(
+            "Bash",
+            "rm -rf /",
+            None,
+            &isolated_cfg(),
+            Some(TEST_SECRET),
+            None,
+        );
         match d {
             HookDecision::Allow { command } => assert_valid_wrap(&command, "rm -rf /"),
             other => panic!("expected Allow, got {other:?}"),
@@ -395,6 +424,7 @@ mod tests {
             "git status",
             Some(&guardrail()),
             &isolated_cfg(),
+            None,
             None,
         );
         match d {
@@ -413,7 +443,8 @@ mod tests {
                 "git status",
                 None,
                 &isolated_cfg(),
-                Some(TEST_SECRET)
+                Some(TEST_SECRET),
+                None,
             ),
             HookDecision::PassThrough
         ));
@@ -423,7 +454,8 @@ mod tests {
                 "vim foo",
                 Some(&guardrail()),
                 &isolated_cfg(),
-                Some(TEST_SECRET)
+                Some(TEST_SECRET),
+                None,
             ),
             HookDecision::PassThrough
         ));
@@ -433,12 +465,13 @@ mod tests {
                 "vallum run x",
                 None,
                 &isolated_cfg(),
-                Some(TEST_SECRET)
+                Some(TEST_SECRET),
+                None,
             ),
             HookDecision::PassThrough
         ));
         assert!(matches!(
-            rewrite_decision("Bash", "", None, &isolated_cfg(), Some(TEST_SECRET)),
+            rewrite_decision("Bash", "", None, &isolated_cfg(), Some(TEST_SECRET), None),
             HookDecision::PassThrough
         ));
     }
@@ -451,6 +484,7 @@ mod tests {
             Some(&guardrail()),
             &isolated_cfg(),
             Some(TEST_SECRET),
+            None,
         );
         match d {
             HookDecision::Ask {
@@ -473,6 +507,7 @@ mod tests {
             Some(&guardrail()),
             &isolated_cfg(),
             Some(TEST_SECRET),
+            None,
         );
         match d {
             HookDecision::Ask {
@@ -497,6 +532,7 @@ mod tests {
             Some(&guardrail()),
             &cfg,
             Some(TEST_SECRET),
+            None,
         ) {
             HookDecision::Deny { rule_name, reason } => {
                 assert_eq!(rule_name, "circuit_breaker");
@@ -583,5 +619,90 @@ mod tests {
             HookDecision::Deny { rule_name, .. } => assert_eq!(rule_name, "circuit_breaker"),
             other => panic!("expected Deny, got {other:?}"),
         }
+    }
+
+    /// Seed a valid cache entry for `cmd` in `cwd` under this cfg's log dir.
+    fn seed_approval(cfg: &crate::config::AppConfig, cmd: &str, cwd: &str, rule: &str) {
+        crate::approvals::record(cfg, cmd, cwd, rule);
+    }
+
+    #[test]
+    fn cached_approval_downgrades_ask_to_allow_with_wrap() {
+        let cfg = isolated_cfg();
+        seed_approval(&cfg, "git push --force", "/repo", "git_push_force");
+        let secret = crate::approval::load_secret(&cfg).expect("record minted the secret");
+        let d = rewrite_decision(
+            "Bash",
+            "git push --force",
+            Some(&guardrail()),
+            &cfg,
+            Some(&secret),
+            Some("/repo"),
+        );
+        match d {
+            HookDecision::Allow { command } => {
+                let prefix = "vallum run --approval-token ";
+                assert!(command.starts_with(prefix), "{command}");
+            }
+            other => panic!("expected Allow from cache hit, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cache_miss_wrong_cwd_still_asks() {
+        let cfg = isolated_cfg();
+        seed_approval(&cfg, "git push --force", "/repo", "git_push_force");
+        let secret = crate::approval::load_secret(&cfg).unwrap();
+        let d = rewrite_decision(
+            "Bash",
+            "git push --force",
+            Some(&guardrail()),
+            &cfg,
+            Some(&secret),
+            Some("/other"),
+        );
+        assert!(
+            matches!(d, HookDecision::Ask { .. }),
+            "cwd mismatch must re-ask"
+        );
+    }
+
+    #[test]
+    fn cache_disabled_still_asks() {
+        let mut cfg = isolated_cfg();
+        seed_approval(&cfg, "git push --force", "/repo", "git_push_force");
+        cfg.security.approval_cache = false;
+        let secret = crate::approval::load_secret(&cfg).unwrap();
+        let d = rewrite_decision(
+            "Bash",
+            "git push --force",
+            Some(&guardrail()),
+            &cfg,
+            Some(&secret),
+            Some("/repo"),
+        );
+        assert!(matches!(d, HookDecision::Ask { .. }));
+    }
+
+    #[test]
+    fn tripped_breaker_denies_before_cache() {
+        let cfg = isolated_cfg();
+        seed_approval(&cfg, "git push --force", "/repo", "git_push_force");
+        let dir = cfg.audit.log_dir.clone().unwrap();
+        let until = (chrono::Local::now() + chrono::Duration::seconds(300)).to_rfc3339();
+        std::fs::write(dir.join("breaker.state"), format!("locked {until}\n")).unwrap();
+        let secret = crate::approval::load_secret(&cfg).unwrap();
+        match rewrite_decision(
+            "Bash",
+            "git push --force",
+            Some(&guardrail()),
+            &cfg,
+            Some(&secret),
+            Some("/repo"),
+        ) {
+            HookDecision::Deny { rule_name, .. } => assert_eq!(rule_name, "circuit_breaker"),
+            other => panic!("breaker must precede cache, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

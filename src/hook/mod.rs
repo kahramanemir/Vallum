@@ -24,6 +24,10 @@ pub enum Verdict {
     PassThrough,
     /// Vallum has no objection.
     Allow,
+    /// Allow produced by downgrading a matched rule (scoped allow exception or
+    /// approval cache). `marker` — `allow_exception:<rule>` /
+    /// `approval_cache:<rule>` — feeds the audit trail; behavior is Allow.
+    AllowDowngraded { marker: String, reason: String },
     /// Policy wants explicit user confirmation.
     Ask { reason: String, rule_name: String },
     /// Policy refuses the command.
@@ -146,7 +150,19 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
                     rule_name: v.rule_name,
                 }
             }
-            PolicyAction::Allow => {}
+            PolicyAction::Allow => {
+                if !v.rule_name.is_empty() {
+                    // A scoped allow exception fired. TUI heads keep their
+                    // PassThrough shape (no rewrite either way; the downgrade
+                    // note is dropped for them).
+                    if !is_tui {
+                        return Verdict::AllowDowngraded {
+                            marker: v.rule_name,
+                            reason: v.reason,
+                        };
+                    }
+                }
+            }
         }
     }
     if is_tui {
@@ -162,6 +178,20 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
 /// skips the rewrite — the executed binary is Vallum itself, and a wrapped
 /// `vallum run` re-enters this gate in the child process).
 pub fn gate(command: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Verdict {
+    gate_cached(command, policy, cfg, None)
+}
+
+/// `gate` plus the approval-cache downgrade. `cache_cwd` is Some only for the
+/// Claude hook (the one hook surface with approval evidence); verdict-only
+/// codecs pass None and never consult the cache. Layer order: breaker →
+/// policy (allow exceptions inside) → cache downgrade of Ask. A cache hit is
+/// an Allow and is NOT recorded against the circuit breaker.
+pub(crate) fn gate_cached(
+    command: &str,
+    policy: Option<&Policy>,
+    cfg: &AppConfig,
+    cache_cwd: Option<&str>,
+) -> Verdict {
     let trimmed = command.trim_start();
     let head = trimmed.split_whitespace().next().unwrap_or("");
     if trimmed.is_empty() || is_vallum_head(head) {
@@ -174,6 +204,17 @@ pub fn gate(command: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Verdict 
         };
     }
     let verdict = decide(command, policy);
+    if let (Verdict::Ask { rule_name, .. }, Some(cwd)) = (&verdict, cache_cwd) {
+        // TUI-headed Asks carry no rewrite, produce no token runs, and are
+        // excluded from both ends of the cache.
+        let is_tui = tui_head(trimmed).is_some_and(|h| TUI_SKIP.contains(&h));
+        if !is_tui && crate::approvals::lookup(cfg, command, cwd, rule_name) {
+            return Verdict::AllowDowngraded {
+                marker: format!("approval_cache:{rule_name}"),
+                reason: format!("cached human approval ({rule_name})"),
+            };
+        }
+    }
     if matches!(verdict, Verdict::Ask { .. } | Verdict::Deny { .. }) {
         crate::breaker::record_and_check(cfg);
     }
@@ -311,6 +352,10 @@ pub fn test_report(command: &str, policy: Option<&Policy>, guardrail_on: bool) -
             (format!("{label}{suffix}\n"), 0)
         }
         Verdict::Allow => (format!("ALLOW{suffix}\n"), 0),
+        Verdict::AllowDowngraded { marker, reason } => (
+            format!("ALLOW [{marker}]{suffix}\n  downgraded: {reason}\n"),
+            0,
+        ),
         Verdict::Ask { reason, rule_name } => (
             format!(
                 "ASK [{rule_name}] ({})\n  {reason}\n",
@@ -566,6 +611,7 @@ mod tests {
                 action: "deny".into(),
                 reason: "denied in test".into(),
             }],
+            allow: vec![],
             disabled: vec![],
         })
         .unwrap();
@@ -672,6 +718,7 @@ mod tests {
                 action: "deny".into(),
                 reason: "blocked in test".into(),
             }],
+            allow: vec![],
             disabled: vec![],
         })
         .unwrap();
@@ -695,6 +742,49 @@ mod tests {
         assert_eq!(
             (s.as_str(), c),
             ("ALLOW (guardrail off — security.guardrail = false)\n", 0)
+        );
+    }
+
+    #[test]
+    fn decide_maps_suppressed_verdict_to_allow_downgraded() {
+        let cfg = crate::config::PolicyConfig {
+            rules: vec![],
+            allow: vec![crate::config::PolicyAllowConfig {
+                pattern: r"^git push --force origin main-backup$".into(),
+                suppresses: "git_push_force".into(),
+                reason: "release flow".into(),
+            }],
+            disabled: vec![],
+        };
+        let p = Policy::compile(&cfg).unwrap();
+        match decide("git push --force origin main-backup", Some(&p)) {
+            Verdict::AllowDowngraded { marker, reason } => {
+                assert_eq!(marker, "allow_exception:git_push_force");
+                assert_eq!(reason, "release flow");
+            }
+            other => panic!("expected AllowDowngraded, got {other:?}"),
+        }
+        // Plain allows stay plain.
+        assert!(matches!(decide("ls -la", Some(&p)), Verdict::Allow));
+    }
+
+    #[test]
+    fn test_report_shows_suppression() {
+        let cfg = crate::config::PolicyConfig {
+            rules: vec![],
+            allow: vec![crate::config::PolicyAllowConfig {
+                pattern: r"^git push --force origin main-backup$".into(),
+                suppresses: "git_push_force".into(),
+                reason: "release flow".into(),
+            }],
+            disabled: vec![],
+        };
+        let p = Policy::compile(&cfg).unwrap();
+        let (report, code) = test_report("git push --force origin main-backup", Some(&p), true);
+        assert_eq!(code, 0);
+        assert!(
+            report.contains("allow_exception:git_push_force"),
+            "{report}"
         );
     }
 }

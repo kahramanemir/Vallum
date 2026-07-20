@@ -81,6 +81,11 @@ pub struct SecurityConfig {
     pub breaker_window_secs: u64,
     /// Lock duration in seconds once tripped (≥ 1).
     pub breaker_cooldown_secs: u64,
+    /// Remember human-approved Asks (exact command + cwd) for a narrow,
+    /// hard-coded rule set, for `approval_cache_ttl_days`. Default on.
+    pub approval_cache: bool,
+    /// Days a cached approval stays valid (1–90).
+    pub approval_cache_ttl_days: u64,
 }
 
 impl Default for SecurityConfig {
@@ -93,6 +98,8 @@ impl Default for SecurityConfig {
             breaker_threshold: 5,
             breaker_window_secs: 60,
             breaker_cooldown_secs: 300,
+            approval_cache: true,
+            approval_cache_ttl_days: 14,
         }
     }
 }
@@ -171,6 +178,10 @@ impl<'de> Deserialize<'de> for RedactionRule {
 pub struct PolicyConfig {
     /// Extra user rules, evaluated together with the built-ins.
     pub rules: Vec<PolicyRuleConfig>,
+    /// Scoped allow exceptions: each suppresses ONE named built-in for
+    /// commands matching `pattern` (raw command line only). Narrower than
+    /// disabling the built-in via `disabled`.
+    pub allow: Vec<PolicyAllowConfig>,
     /// Built-in rule names to disable. `vallum doctor` warns on unknown names.
     pub disabled: Vec<String>,
 }
@@ -180,6 +191,14 @@ pub struct PolicyRuleConfig {
     pub pattern: String,
     /// "ask" | "deny" ("allow" is rejected — use [policy] disabled to suppress a built-in).
     pub action: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyAllowConfig {
+    pub pattern: String,
+    /// Name of the single shell built-in this exception suppresses.
+    pub suppresses: String,
     pub reason: String,
 }
 
@@ -236,8 +255,8 @@ impl AppConfig {
                 "allow" => {
                     return Err(format!(
                         "policy rule action \"allow\" is not allowed (pattern '{}'); \
-                         user rules may only \"ask\" or \"deny\" — use [policy] disabled \
-                         to suppress a built-in",
+                         user rules may only \"ask\" or \"deny\" — use [[policy.allow]] \
+                         for a scoped exception, or [policy] disabled to suppress a built-in",
                         rule.pattern
                     ))
                 }
@@ -251,6 +270,33 @@ impl AppConfig {
             Regex::new(&rule.pattern)
                 .map_err(|e| format!("invalid policy regex '{}': {}", rule.pattern, e))?;
         }
+        for rule in &self.policy.allow {
+            let re = Regex::new(&rule.pattern)
+                .map_err(|e| format!("invalid policy allow regex '{}': {}", rule.pattern, e))?;
+            if re.is_match("") {
+                return Err(format!(
+                    "policy allow pattern '{}' matches the empty string (too broad); \
+                     anchor it to the exact command shape, e.g. \
+                     '^git push --force origin main-backup$'",
+                    rule.pattern
+                ));
+            }
+            if !crate::policy::builtin_names().contains(&rule.suppresses.as_str()) {
+                return Err(format!(
+                    "policy allow 'suppresses' names unknown built-in \"{}\" (pattern '{}'); \
+                     valid names: {}",
+                    rule.suppresses,
+                    rule.pattern,
+                    crate::policy::builtin_names().join(", ")
+                ));
+            }
+            if rule.reason.trim().is_empty() {
+                return Err(format!(
+                    "policy allow entry (pattern '{}') needs a non-empty reason",
+                    rule.pattern
+                ));
+            }
+        }
         if self.security.breaker_threshold == 0 {
             return Err("breaker_threshold must be at least 1".to_string());
         }
@@ -259,6 +305,9 @@ impl AppConfig {
         }
         if self.security.breaker_cooldown_secs == 0 {
             return Err("breaker_cooldown_secs must be at least 1".to_string());
+        }
+        if !(1..=90).contains(&self.security.approval_cache_ttl_days) {
+            return Err("approval_cache_ttl_days must be between 1 and 90".to_string());
         }
         Ok(())
     }
@@ -541,5 +590,93 @@ extra_secret_patterns = [ { pattern = "token-[0-9]+" } ]
         );
         let err = AppConfig::from_path(&p).unwrap_err();
         assert!(err.contains("warn") || err.contains("action"), "got: {err}");
+    }
+
+    #[test]
+    fn policy_allow_parses_and_validates() {
+        let p = write_tmp(
+            "allow_ok",
+            "[[policy.allow]]\npattern = '^git push --force origin main-backup$'\nsuppresses = \"git_push_force\"\nreason = \"release flow\"\n",
+        );
+        let cfg = AppConfig::from_path(&p).unwrap();
+        assert_eq!(cfg.policy.allow.len(), 1);
+        assert_eq!(cfg.policy.allow[0].suppresses, "git_push_force");
+    }
+
+    #[test]
+    fn policy_allow_unknown_suppresses_is_error() {
+        let p = write_tmp(
+            "allow_unknown",
+            "[[policy.allow]]\npattern = '^x$'\nsuppresses = \"no_such_rule\"\nreason = \"r\"\n",
+        );
+        let err = AppConfig::from_path(&p).unwrap_err();
+        assert!(err.contains("no_such_rule"), "got: {err}");
+        assert!(
+            err.contains("git_push_force"),
+            "must list valid names: {err}"
+        );
+    }
+
+    #[test]
+    fn policy_allow_empty_matching_pattern_is_error() {
+        for pat in [".*", "a*", "x?"] {
+            let p = write_tmp(
+                "allow_broad",
+                &format!(
+                    "[[policy.allow]]\npattern = '{pat}'\nsuppresses = \"git_push_force\"\nreason = \"r\"\n"
+                ),
+            );
+            let err = AppConfig::from_path(&p).unwrap_err();
+            assert!(err.contains("empty string"), "pattern {pat}: {err}");
+        }
+    }
+
+    #[test]
+    fn policy_allow_bad_regex_and_empty_reason_are_errors() {
+        let p = write_tmp(
+            "allow_badre",
+            "[[policy.allow]]\npattern = '('\nsuppresses = \"git_push_force\"\nreason = \"r\"\n",
+        );
+        assert!(AppConfig::from_path(&p).is_err());
+        let p = write_tmp(
+            "allow_noreason",
+            "[[policy.allow]]\npattern = '^x$'\nsuppresses = \"git_push_force\"\nreason = \" \"\n",
+        );
+        let err = AppConfig::from_path(&p).unwrap_err();
+        assert!(err.contains("reason"), "got: {err}");
+    }
+
+    #[test]
+    fn policy_rules_allow_action_hint_mentions_policy_allow() {
+        let p = write_tmp(
+            "allow_hint",
+            "[[policy.rules]]\npattern = 'x'\naction = \"allow\"\nreason = \"r\"\n",
+        );
+        let err = AppConfig::from_path(&p).unwrap_err();
+        assert!(err.contains("policy.allow"), "got: {err}");
+    }
+
+    #[test]
+    fn approval_cache_defaults_on_14_days() {
+        let c = SecurityConfig::default();
+        assert!(c.approval_cache);
+        assert_eq!(c.approval_cache_ttl_days, 14);
+    }
+
+    #[test]
+    fn approval_cache_ttl_bounds_are_config_errors() {
+        let mut config = AppConfig::default();
+        config.security.approval_cache_ttl_days = 0;
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .contains("approval_cache_ttl_days"));
+        config.security.approval_cache_ttl_days = 91;
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .contains("approval_cache_ttl_days"));
+        config.security.approval_cache_ttl_days = 90;
+        assert!(config.validate().is_ok());
     }
 }

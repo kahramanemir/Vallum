@@ -107,6 +107,14 @@ and audited. Pipeline stages, the security model, and the module map:
 > they don't replace treating terminal output as untrusted. The full threat
 > model, mechanism by mechanism, is in [SECURITY.md](SECURITY.md).
 
+## Fewer asks over time
+
+Repeated approvals stop being asked: an approved Ask is remembered (exact
+command + directory, narrow rule set, 14-day TTL, HMAC-signed) and
+`[[policy.allow]]` lets you carve a scoped exception for one rule without
+disabling it. Every downgrade is audit-logged. See
+[docs/guardrail.md](docs/guardrail.md).
+
 ## Documentation
 
 | Doc | What's inside |

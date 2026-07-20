@@ -33,6 +33,29 @@ pub fn log_verdict(verdict: &PolicyVerdict, command_line: &str, agent: &str, cfg
     let _ = crate::logchain::append_chained(&path, &context, &safe);
 }
 
+/// Append one line for a rule downgraded to Allow (scoped allow exception or
+/// approval cache). `marker` is `allow_exception:<rule>` or
+/// `approval_cache:<rule>`. Best-effort, redacted, hash-chained — every
+/// guardrail downgrade leaves a trace.
+pub fn log_allow_downgrade(marker: &str, command_line: &str, agent: &str, cfg: &AppConfig) {
+    if !cfg.audit.sanitized_enabled {
+        return;
+    }
+    let extra = crate::scrubber::compile_rules(&cfg.scrubber.extra_secret_patterns);
+    let safe = crate::scrubber::redact(
+        command_line,
+        &extra,
+        cfg.scrubber.entropy,
+        cfg.scrubber.normalize,
+    );
+    let context = format!("ALLOW [{marker}] agent={agent}");
+    let Some(path) = crate::audit::resolve_log_path("policy.log", cfg.audit.log_dir.as_deref())
+    else {
+        return;
+    };
+    let _ = crate::logchain::append_chained(&path, &context, &safe);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -37,6 +37,10 @@ pub(crate) fn respond(raw: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Op
     let input: CursorInput = serde_json::from_str(raw).ok()?;
     match super::gate(&input.command, policy, cfg) {
         Verdict::PassThrough | Verdict::Allow => None,
+        Verdict::AllowDowngraded { marker, .. } => {
+            crate::policy::audit::log_allow_downgrade(&marker, &input.command, "cursor", cfg);
+            None
+        }
         Verdict::Ask { reason, rule_name } => {
             super::audit_verdict(
                 PolicyAction::Ask,
@@ -100,6 +104,7 @@ mod tests {
                 action: "deny".into(),
                 reason: "denied in test".into(),
             }],
+            allow: vec![],
             disabled: vec![],
         })
         .unwrap()

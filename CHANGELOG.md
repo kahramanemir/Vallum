@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scoped allow exceptions.** `[[policy.allow]]` suppresses ONE named
+  built-in for commands matching an anchored pattern (raw line only,
+  empty-matching patterns rejected); suppressions are audit-logged.
+- **Approval cache.** Human-approved Asks (Claude hook token runs and direct
+  TTY approvals) are remembered per exact command + cwd for
+  `approval_cache_ttl_days` (default 14) — hard-coded to four workflow rules,
+  HMAC-signed, fail-safe to re-asking. New `vallum approvals list|clear`;
+  doctor reports cache state.
 - **File-tool gating (Claude Code).** The `PreToolUse` hook now also gates
   Claude Code's native `Write`/`Edit`/`MultiEdit`/`NotebookEdit`/`Read` tools
   through nine lexical path rules (all `Ask`): shell startup files, `~/.ssh/`,
@@ -58,6 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skipped instead.
 
 ### Fixed
+- **Over-asking papercuts.** `write_crontab` is command-position anchored
+  (`man crontab`, `which crontab`, `grep crontab …` no longer Ask);
+  `write_git_hooks` requires hooksPath write evidence
+  (`git config --get core.hooksPath` no longer Asks) and now catches the
+  inline `git -c core.hooksPath=…` form.
 - A timed-out command can no longer hang `vallum run` indefinitely: after
   the timeout kill, output-reader threads are waited with a bounded grace,
   so a grandchild that escaped the process group (or survived the

@@ -62,6 +62,10 @@ pub(crate) fn respond(raw: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Op
     let command = &input.tool_input.command;
     match super::gate(command, policy, cfg) {
         Verdict::PassThrough | Verdict::Allow => None,
+        Verdict::AllowDowngraded { marker, .. } => {
+            crate::policy::audit::log_allow_downgrade(&marker, command, "codex", cfg);
+            None
+        }
         Verdict::Ask { reason, rule_name } => {
             let msg = super::fail_closed_ask_message(&reason, &rule_name, command);
             super::audit_verdict(PolicyAction::Ask, reason, rule_name, command, "codex", cfg);
@@ -119,6 +123,7 @@ mod tests {
                 action: "deny".into(),
                 reason: "denied in test".into(),
             }],
+            allow: vec![],
             disabled: vec![],
         })
         .unwrap()

@@ -43,7 +43,7 @@ pub fn verify(command_line: &str, token: &str, secret: &[u8]) -> bool {
 }
 
 /// Length-aware constant-time byte comparison (length is not secret here).
-fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+pub(crate) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }

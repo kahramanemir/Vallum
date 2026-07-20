@@ -39,6 +39,8 @@ extra_secret_patterns = [
 strict = false      # block the entire output when a prompt injection is detected
 guardrail = true    # pre-exec policy layer (Allow/Ask/Deny) — default true
 assume_yes = false  # auto-approve direct-mode `ask` verdicts (scripts/CI)
+approval_cache = true          # remember approved Asks (exact command+cwd; narrow rule set)
+approval_cache_ttl_days = 14   # days a cached approval stays valid (1-90)
 
 [policy]
 disabled = []       # built-in rule names to disable; all on by default
@@ -46,6 +48,10 @@ disabled = []       # built-in rule names to disable; all on by default
 # pattern = '^\s*sudo\b'
 # action = "ask"
 # reason = "Elevated privileges"
+# [[policy.allow]]   # scoped exception: suppress ONE built-in for matching commands
+# pattern = '^git push --force origin main-backup$'
+# suppresses = "git_push_force"
+# reason = "release flow"
 ```
 
 ## Every setting
@@ -66,5 +72,8 @@ disabled = []       # built-in rule names to disable; all on by default
 - `security.guardrail`: enable the pre-exec policy layer that gates dangerous commands (Allow/Ask/Deny) — **default `true`**; set `false` to bypass entirely
 - `security.assume_yes`: auto-approve direct-mode `ask` verdicts (also via `VALLUM_ASSUME_YES=1`) — **default `false`**
 - `security.circuit_breaker` / `security.breaker_threshold` / `security.breaker_window_secs` / `security.breaker_cooldown_secs`: blast-radius circuit breaker — see [Guardrail & policy](guardrail.md#circuit-breaker-blast-radius)
+- `security.approval_cache`: remember human-approved Asks (exact command + cwd; hard-coded eligible rules `git_push_force`, `git_clean_force`, `write_crontab`, `write_git_hooks`; TTL anchored at the approval, uses never renew it) — **default `true`**
+- `security.approval_cache_ttl_days`: days a cached approval stays valid (1–90) — **default `14`**
 - `policy.rules`: user policy rules — each has `pattern`, `action` (`ask` or `deny`; `allow` is rejected), and `reason`
-- `policy.disabled`: built-in rule names to disable (rm_rf_root, curl_pipe_shell, shell_download_exec, dd_to_device, redirect_to_device, mkfs_device, fork_bomb, chmod_777_recursive, read_sensitive_creds, git_push_force, find_delete_root, shred_sensitive, truncate_system, xargs_rm_force, reverse_shell, git_clean_force, chown_recursive_root, write_agent_config, write_shell_profile, write_ssh_config, write_git_hooks, write_crontab, write_launch_agents, write_systemd_user) — default none
+- `policy.allow`: scoped allow exceptions — each has `pattern`, `suppresses` (exactly one built-in rule name), `reason`; applies to the raw command line only; global config only — see [Guardrail & policy](guardrail.md#scoped-allow-exceptions)
+- `policy.disabled`: built-in rule names to disable (rm_rf_root, curl_pipe_shell, shell_download_exec, dd_to_device, redirect_to_device, mkfs_device, fork_bomb, chmod_777_recursive, read_sensitive_creds, git_push_force, find_delete_root, shred_sensitive, truncate_system, xargs_rm_force, reverse_shell, git_clean_force, chown_recursive_root, write_agent_config, vallum_self_disable, write_vallum_config, write_shell_profile, write_ssh_config, write_git_hooks, write_crontab, write_launch_agents, write_systemd_user; file-tool rules: file_write_shell_profile, file_write_ssh_config, file_write_git_hooks, file_write_crontab_dir, file_write_launch_agents, file_write_systemd_user, file_write_agent_config, file_write_vallum, file_read_sensitive) — default none

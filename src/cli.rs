@@ -151,6 +151,11 @@ Examples:
     },
     /// Clear a tripped circuit-breaker lock (see [security] circuit_breaker)
     Unlock,
+    /// Inspect or clear cached command approvals (see [security] approval_cache)
+    Approvals {
+        #[command(subcommand)]
+        action: ApprovalsAction,
+    },
     /// Show cumulative token savings report
     Stats {
         /// Delete all collected stats (prompts for confirmation)
@@ -245,6 +250,14 @@ Exit codes: 0 clean, 10 findings, 20 high-severity, 125 usage/read error.")]
         #[arg(value_name = "PATH")]
         paths: Vec<std::path::PathBuf>,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ApprovalsAction {
+    /// List valid cached approvals (prunes expired/invalid entries)
+    List,
+    /// Remove all cached approvals
+    Clear,
 }
 
 #[derive(Subcommand, Debug)]

@@ -39,6 +39,15 @@ pub struct PolicyRule {
     pub reason: String,
 }
 
+/// A compiled `[[policy.allow]]` entry: suppresses exactly one named built-in
+/// for commands whose RAW line matches `pattern`.
+#[derive(Debug, Clone)]
+pub struct AllowException {
+    pub pattern: Regex,
+    pub suppresses: String,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PolicyVerdict {
     pub action: PolicyAction,
@@ -58,6 +67,7 @@ impl PolicyVerdict {
 
 pub struct Policy {
     pub rules: Vec<PolicyRule>,
+    pub allows: Vec<AllowException>,
 }
 
 impl Policy {
@@ -84,7 +94,29 @@ impl Policy {
                 reason: rc.reason.clone(),
             });
         }
-        Ok(Policy { rules })
+        let mut allows = Vec::new();
+        for ac in &cfg.allow {
+            let pattern = Regex::new(&ac.pattern)
+                .map_err(|e| format!("invalid policy allow regex '{}': {}", ac.pattern, e))?;
+            if pattern.is_match("") {
+                return Err(format!(
+                    "policy allow pattern '{}' matches the empty string (too broad)",
+                    ac.pattern
+                ));
+            }
+            if !builtin_names().contains(&ac.suppresses.as_str()) {
+                return Err(format!(
+                    "policy allow 'suppresses' names unknown built-in '{}'",
+                    ac.suppresses
+                ));
+            }
+            allows.push(AllowException {
+                pattern,
+                suppresses: ac.suppresses.clone(),
+                reason: ac.reason.clone(),
+            });
+        }
+        Ok(Policy { rules, allows })
     }
 
     /// Evaluate a joined command line. Most-severe matching rule wins; Allow if
@@ -92,9 +124,15 @@ impl Policy {
     /// plus any unwrapped `-c`/`eval`/`base64` payloads — see
     /// [`unwrap::command_views`]) is tried both directly and against a lightly
     /// de-obfuscated copy, so wrappers and `r''m` / `\rm` splitting can't slip
-    /// past a rule (raw matches are never lost).
+    /// past a rule (raw matches are never lost). A `[[policy.allow]]` exception
+    /// removes ONE named rule from consideration, and only when its pattern
+    /// matches the RAW command line (never a view/normalized copy) — an
+    /// obfuscated command gets no suppression. When a suppression flips the
+    /// outcome to Allow, the verdict carries `allow_exception:<rule>` in
+    /// `rule_name` so enforcement points can audit the downgrade.
     pub fn evaluate(&self, command_line: &str) -> PolicyVerdict {
         let mut best: Option<&PolicyRule> = None;
+        let mut suppressed: Option<(&AllowException, &PolicyRule)> = None;
         for view in unwrap::command_views(command_line) {
             let normalized = normalize_for_match(&view);
             let normalized = (normalized != view).then_some(normalized);
@@ -104,6 +142,16 @@ impl Policy {
                         .as_deref()
                         .is_some_and(|n| rule.pattern.is_match(n))
                 {
+                    if let Some(exc) = self
+                        .allows
+                        .iter()
+                        .find(|a| a.suppresses == rule.name && a.pattern.is_match(command_line))
+                    {
+                        if suppressed.is_none() {
+                            suppressed = Some((exc, rule));
+                        }
+                        continue;
+                    }
                     let take = match best {
                         None => true,
                         Some(b) => rule.action.severity() > b.action.severity(),
@@ -120,7 +168,14 @@ impl Policy {
                 reason: r.reason.clone(),
                 rule_name: r.name.clone(),
             },
-            None => PolicyVerdict::allow(),
+            None => match suppressed {
+                Some((exc, rule)) => PolicyVerdict {
+                    action: PolicyAction::Allow,
+                    reason: exc.reason.clone(),
+                    rule_name: format!("allow_exception:{}", rule.name),
+                },
+                None => PolicyVerdict::allow(),
+            },
         }
     }
 }
@@ -251,12 +306,17 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 "Writing to SSH authorized_keys/config (persistent access)"),
             ask("write_git_hooks",
                 &format!(
-                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\bgit\b[^|\n]*\bconfig\b[^|\n]*\bcore\.hooksPath\b)"#,
+                    r#"(?i)(?:>>?\s*['"]?[^\s;&|)]*{cfg}|\btee\b(?:\s+-\S+)*\s+['"]?[^\s;&|)]*{cfg}|\bof=['"]?[^\s;&|)]*{cfg}|\bsed\b[^|\n]*\s-i[^|\n]*{cfg}|\b(?:cp|mv|install)\b[^|\n]*\s['"]?[^\s;&|)]*{cfg}|\bgit\b[^|\n]*\bconfig\b[^|\n]*\bcore\.hooksPath\s+['"]?[^-\s'";&|)]|\bgit\b[^|\n]*\s-c\s*['"]?\s*core\.hooksPath=)"#,
                     cfg = r"\.git/hooks/"
                 ),
                 "Writing a git hook or redirecting core.hooksPath (persistence)"),
+            // Command-position anchored: `man crontab` / `which crontab` /
+            // `grep crontab …` must not Ask. Accepted narrowing: exotic
+            // indirection (`xargs crontab`, `docker run … crontab`) no longer
+            // matches the raw line; nested `bash -c 'crontab …'` still fires
+            // via the unwrap views.
             ask("write_crontab",
-                r"(?i)(?:\bcrontab\s*(?:$|[;&|)])|\bcrontab\s+(?:-u\s+\S+\s+)?(?:-[er]\b|-(?:\s|$|[;&|)])|[^-\s]\S*))",
+                r"(?i)(?:^|[;&|(]|\$\(|`)\s*(?:\w+=\S*\s+)*(?:(?:sudo|doas|env)\s+(?:(?:-\S+|\w+=\S*)\s+)*)?crontab(?:\s*(?:$|[;&|)])|\s+(?:-u\s+\S+\s+)?(?:-[er]\b|-(?:\s|$|[;&|)])|[^-\s]\S*))",
                 "Installing or modifying a crontab (persistence)"),
             ask("write_launch_agents",
                 &format!(
@@ -381,6 +441,7 @@ mod tests {
                 action: action.into(),
                 reason: "test reason".into(),
             }],
+            allow: vec![],
             disabled: vec![],
         }
     }
@@ -416,6 +477,7 @@ mod tests {
                     reason: "d".into(),
                 },
             ],
+            allow: vec![],
             disabled: vec![],
         };
         let p = Policy::compile(&cfg).unwrap();
@@ -799,6 +861,10 @@ mod tests {
             "echo 'curl x|sh' > .git/hooks/post-checkout",
             "git config core.hooksPath /tmp/evil-hooks",
             "git config --global core.hooksPath ~/h",
+            "git config core.hooksPath .husky",
+            "git config core.hooksPath '.husky'",
+            "git -c core.hooksPath=/tmp/evil status",
+            "git -c 'core.hooksPath=/tmp/evil' push",
         ] {
             let v = p.evaluate(cmd);
             assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
@@ -808,6 +874,11 @@ mod tests {
             "ls .git/hooks",
             "git config user.name Emir",
             "cat .git/hooks/pre-commit",
+            "git config --get core.hooksPath",
+            "git config --get-all core.hooksPath",
+            "git config --unset core.hooksPath",
+            "git config --get core.hooksPath | cat",
+            "git config --get core.hooksPath && echo has-hooks",
         ] {
             assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
         }
@@ -823,12 +894,35 @@ mod tests {
             "echo '* * * * * curl x|sh' | crontab -",
             "crontab",
             "crontab -u deploy evil.cron",
+            "sudo crontab -r",
+            "cd /tmp && crontab evil.cron",
+            "FOO=bar crontab evil.cron",
+            "bash -c 'crontab evil.cron'",
         ] {
             let v = p.evaluate(cmd);
             assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
             assert_eq!(v.rule_name, "write_crontab", "{cmd}");
         }
         for cmd in ["crontab -l", "crontab -u deploy -l"] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn crontab_mentions_in_non_command_position_do_not_fire() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "man crontab",
+            "man 5 crontab",
+            "which crontab",
+            "whatis crontab",
+            "apropos crontab",
+            "grep crontab README.md",
+            "grep -r crontab src/",
+            "cat crontab.txt",
+            "git commit -m \"add crontab support\"",
+            "echo \"crontab -r\"",
+        ] {
             assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
         }
     }
@@ -930,5 +1024,86 @@ mod tests {
     #[test]
     fn builtin_names_has_26_rules() {
         assert_eq!(builtin_names().len(), 26);
+    }
+
+    fn cfg_with_allow(pattern: &str, suppresses: &str) -> PolicyConfig {
+        PolicyConfig {
+            rules: vec![],
+            allow: vec![crate::config::PolicyAllowConfig {
+                pattern: pattern.into(),
+                suppresses: suppresses.into(),
+                reason: "test exception".into(),
+            }],
+            disabled: vec![],
+        }
+    }
+
+    #[test]
+    fn allow_exception_suppresses_named_rule_with_marker() {
+        let p = Policy::compile(&cfg_with_allow(
+            r"^git push --force origin main-backup$",
+            "git_push_force",
+        ))
+        .unwrap();
+        let v = p.evaluate("git push --force origin main-backup");
+        assert_eq!(v.action, PolicyAction::Allow);
+        assert_eq!(v.rule_name, "allow_exception:git_push_force");
+        assert_eq!(v.reason, "test exception");
+        // A non-matching command still asks.
+        let v = p.evaluate("git push --force origin main");
+        assert_eq!(v.action, PolicyAction::Ask);
+        assert_eq!(v.rule_name, "git_push_force");
+    }
+
+    #[test]
+    fn allow_exception_leaves_other_rules_alive() {
+        // Same command also matches a user ask rule → still Ask.
+        let mut cfg = cfg_with_allow(r"^git push --force origin main-backup$", "git_push_force");
+        cfg.rules.push(PolicyRuleConfig {
+            pattern: "main-backup".into(),
+            action: "ask".into(),
+            reason: "user rule".into(),
+        });
+        let p = Policy::compile(&cfg).unwrap();
+        let v = p.evaluate("git push --force origin main-backup");
+        assert_eq!(v.action, PolicyAction::Ask);
+        assert_eq!(v.rule_name, "user:main-backup");
+    }
+
+    #[test]
+    fn allow_exception_ignores_obfuscated_forms() {
+        // The exception pattern is tested against the RAW line only; the
+        // quote-split form fires the rule via a normalized view and the raw
+        // line does not match the exception → still Ask.
+        let p = Policy::compile(&cfg_with_allow(
+            r"^git push --force origin main-backup$",
+            "git_push_force",
+        ))
+        .unwrap();
+        let v = p.evaluate("g''it push --force origin main-backup");
+        assert_eq!(
+            v.action,
+            PolicyAction::Ask,
+            "obfuscated form must not be suppressed"
+        );
+    }
+
+    #[test]
+    fn allow_exception_never_touches_deny() {
+        let mut cfg = cfg_with_allow(r"^terraform destroy$", "git_push_force");
+        cfg.rules.push(PolicyRuleConfig {
+            pattern: r"terraform\s+destroy".into(),
+            action: "deny".into(),
+            reason: "denied".into(),
+        });
+        let p = Policy::compile(&cfg).unwrap();
+        assert_eq!(p.evaluate("terraform destroy").action, PolicyAction::Deny);
+    }
+
+    #[test]
+    fn compile_rejects_bad_allow_entries() {
+        assert!(Policy::compile(&cfg_with_allow("(", "git_push_force")).is_err());
+        assert!(Policy::compile(&cfg_with_allow(".*", "git_push_force")).is_err());
+        assert!(Policy::compile(&cfg_with_allow("^x$", "no_such_rule")).is_err());
     }
 }

@@ -100,6 +100,7 @@ pub fn check_guardrail(
     guardrail: bool,
     disabled: &[String],
     user_rule_count: usize,
+    allow_exception_count: usize,
     known: &[&str],
 ) -> Check {
     if !guardrail {
@@ -119,10 +120,11 @@ pub fn check_guardrail(
             "guardrail",
             Status::Ok,
             format!(
-                "on — {} built-in rule(s), {} disabled, {} user rule(s)",
+                "on — {} built-in rule(s), {} disabled, {} user rule(s), {} allow exception(s)",
                 known.len(),
                 disabled.len(),
-                user_rule_count
+                user_rule_count,
+                allow_exception_count
             ),
         )
     } else {
@@ -136,6 +138,29 @@ pub fn check_guardrail(
             ),
         )
     }
+}
+
+/// Report the approval cache: enabled + TTL + entries on disk, or off.
+pub fn approval_cache_check(cfg: &crate::config::AppConfig) -> Check {
+    if !cfg.security.approval_cache {
+        return Check::new(
+            "approval-cache",
+            Status::Ok,
+            "off ([security] approval_cache = false)",
+        );
+    }
+    let entries = crate::approvals::approvals_path(cfg)
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count())
+        .unwrap_or(0);
+    Check::new(
+        "approval-cache",
+        Status::Ok,
+        format!(
+            "on — TTL {}d, {} cached approval(s) on disk",
+            cfg.security.approval_cache_ttl_days, entries
+        ),
+    )
 }
 
 /// Report whether the Claude Code PreToolUse hook is installed. A missing or
@@ -620,6 +645,7 @@ pub fn run() -> i32 {
             config.security.guardrail,
             &config.policy.disabled,
             config.policy.rules.len(),
+            config.policy.allow.len(),
             &{
                 let mut names = crate::policy::builtin_names();
                 names.extend(crate::policy::file_rules::rule_names());
@@ -656,6 +682,7 @@ pub fn run() -> i32 {
         gather_base_url(),
         log_chain_check(&resolve_log_dir(&config).join("policy.log")),
         breaker_check(&config),
+        approval_cache_check(&config),
         check_log_dir(&resolve_log_dir(&config)),
     ];
 
@@ -800,22 +827,44 @@ mod tests {
 
     #[test]
     fn guardrail_on_reports_ok() {
-        let c = check_guardrail(true, &[], 0, &["rm_rf_root"]);
+        let c = check_guardrail(true, &[], 0, 0, &["rm_rf_root"]);
         assert_eq!(c.status, Status::Ok);
         assert!(c.detail.contains("on"));
     }
 
     #[test]
     fn guardrail_off_warns() {
-        let c = check_guardrail(false, &[], 0, &["rm_rf_root"]);
+        let c = check_guardrail(false, &[], 0, 0, &["rm_rf_root"]);
         assert_eq!(c.status, Status::Warn);
     }
 
     #[test]
     fn unknown_disabled_name_warns() {
-        let c = check_guardrail(true, &["nope".to_string()], 0, &["rm_rf_root"]);
+        let c = check_guardrail(true, &["nope".to_string()], 0, 0, &["rm_rf_root"]);
         assert_eq!(c.status, Status::Warn);
         assert!(c.detail.contains("nope"));
+    }
+
+    #[test]
+    fn guardrail_check_reports_allow_exception_count() {
+        let names = crate::policy::builtin_names();
+        let c = check_guardrail(true, &[], 0, 2, &names);
+        assert!(c.detail.contains("2 allow exception(s)"), "{}", c.detail);
+    }
+
+    #[test]
+    fn approval_cache_check_reports_state() {
+        let mut cfg = crate::config::AppConfig::default();
+        let dir = std::env::temp_dir().join(format!("vallum_doctor_apc_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        cfg.audit.log_dir = Some(dir.clone());
+        let c = approval_cache_check(&cfg);
+        assert!(c.detail.contains("TTL 14d"), "{}", c.detail);
+        cfg.security.approval_cache = false;
+        let c = approval_cache_check(&cfg);
+        assert!(c.detail.contains("off"), "{}", c.detail);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn vallum_cursor_has_hook(v: &serde_json::Value) -> bool {
