@@ -178,6 +178,20 @@ pub fn decide(command: &str, policy: Option<&Policy>) -> Verdict {
 /// skips the rewrite — the executed binary is Vallum itself, and a wrapped
 /// `vallum run` re-enters this gate in the child process).
 pub fn gate(command: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Verdict {
+    gate_cached(command, policy, cfg, None)
+}
+
+/// `gate` plus the approval-cache downgrade. `cache_cwd` is Some only for the
+/// Claude hook (the one hook surface with approval evidence); verdict-only
+/// codecs pass None and never consult the cache. Layer order: breaker →
+/// policy (allow exceptions inside) → cache downgrade of Ask. A cache hit is
+/// an Allow and is NOT recorded against the circuit breaker.
+pub(crate) fn gate_cached(
+    command: &str,
+    policy: Option<&Policy>,
+    cfg: &AppConfig,
+    cache_cwd: Option<&str>,
+) -> Verdict {
     let trimmed = command.trim_start();
     let head = trimmed.split_whitespace().next().unwrap_or("");
     if trimmed.is_empty() || is_vallum_head(head) {
@@ -190,6 +204,17 @@ pub fn gate(command: &str, policy: Option<&Policy>, cfg: &AppConfig) -> Verdict 
         };
     }
     let verdict = decide(command, policy);
+    if let (Verdict::Ask { rule_name, .. }, Some(cwd)) = (&verdict, cache_cwd) {
+        // TUI-headed Asks carry no rewrite, produce no token runs, and are
+        // excluded from both ends of the cache.
+        let is_tui = tui_head(trimmed).is_some_and(|h| TUI_SKIP.contains(&h));
+        if !is_tui && crate::approvals::lookup(cfg, command, cwd, rule_name) {
+            return Verdict::AllowDowngraded {
+                marker: format!("approval_cache:{rule_name}"),
+                reason: format!("cached human approval ({rule_name})"),
+            };
+        }
+    }
     if matches!(verdict, Verdict::Ask { .. } | Verdict::Deny { .. }) {
         crate::breaker::record_and_check(cfg);
     }
