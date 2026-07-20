@@ -100,6 +100,7 @@ mod tests {
                 action: "deny".into(),
                 reason: "denied in test".into(),
             }],
+            allow: vec![],
             disabled: vec![],
         })
         .unwrap()

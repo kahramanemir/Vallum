@@ -386,6 +386,7 @@ mod tests {
                 action: action.into(),
                 reason: "test reason".into(),
             }],
+            allow: vec![],
             disabled: vec![],
         }
     }
@@ -421,6 +422,7 @@ mod tests {
                     reason: "d".into(),
                 },
             ],
+            allow: vec![],
             disabled: vec![],
         };
         let p = Policy::compile(&cfg).unwrap();
