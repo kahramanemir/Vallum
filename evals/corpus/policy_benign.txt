@@ -105,3 +105,9 @@ grep -rn "vallum unlock" docs/
 cat ~/.vallum/config.toml
 ls ~/.vallum/logs
 cat ~/.config/vallum-notes/unlock.md
+man crontab
+man 5 crontab
+which crontab
+grep crontab README.md
+grep -r crontab src/
+cat crontab.txt

