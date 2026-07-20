@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.13]
 
 ### Added
 - **Scoped allow exceptions.** `[[policy.allow]]` suppresses ONE named
@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   place, and `vallum doctor` warns ("re-run `vallum install-hook`") when an
   installed hook still carries the outdated matcher.
 
+### Fixed
+- **Over-asking papercuts.** `write_crontab` is command-position anchored
+  (`man crontab`, `which crontab`, `grep crontab …` no longer Ask);
+  `write_git_hooks` requires hooksPath write evidence
+  (`git config --get core.hooksPath` no longer Asks) and now catches the
+  inline `git -c core.hooksPath=…` form.
+
 ## [0.8.12]
 
 ### Added
@@ -66,11 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skipped instead.
 
 ### Fixed
-- **Over-asking papercuts.** `write_crontab` is command-position anchored
-  (`man crontab`, `which crontab`, `grep crontab …` no longer Ask);
-  `write_git_hooks` requires hooksPath write evidence
-  (`git config --get core.hooksPath` no longer Asks) and now catches the
-  inline `git -c core.hooksPath=…` form.
 - A timed-out command can no longer hang `vallum run` indefinitely: after
   the timeout kill, output-reader threads are waited with a bounded grace,
   so a grandchild that escaped the process group (or survived the
@@ -554,6 +556,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[0.8.13]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.13
 [0.8.12]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.12
 [0.8.11]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.11
 [0.8.10]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.10
