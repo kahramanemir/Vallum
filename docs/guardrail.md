@@ -149,7 +149,8 @@ assume_yes = false  # auto-approve direct-mode `ask` verdicts (for scripts/CI)
 [policy]
 disabled = []       # built-in rule names to turn off (e.g. ["git_push_force"])
 
-# Add your own rules. `action` is "ask" or "deny" (never "allow").
+# Add your own rules. `action` is "ask" or "deny" — for a scoped allow,
+# see [[policy.allow]] below.
 [[policy.rules]]
 pattern = '^\s*sudo\b'
 action = "ask"
@@ -164,6 +165,39 @@ If the config file is broken (TOML or regex error), hook mode logs a warning
 to stderr and keeps gating with the **built-in** rules; your custom rules are
 ignored until the config is fixed (`vallum doctor` pinpoints the error).
 Direct `vallum run` refuses to run at all (exit `125`) on a broken config.
+
+## Scoped allow exceptions
+
+`[[policy.allow]]` suppresses exactly ONE named built-in for commands matching
+a pattern — the narrow alternative to disabling the rule entirely:
+
+```toml
+[[policy.allow]]
+pattern = '^git push --force origin (main-backup|staging)$'
+suppresses = "git_push_force"
+reason = "release flow"
+```
+
+Rules: `suppresses` must name one of the 26 shell built-ins; the pattern must
+compile and must not match the empty string (`.*`-class patterns are rejected
+at config load); the exception applies to the raw command line only — an
+obfuscated command that fires via de-obfuscation gets no suppression; all
+other rules still evaluate. Suppressions that change the outcome are logged to
+`policy.log` as `ALLOW [allow_exception:<rule>]`.
+
+## Approval cache
+
+When you approve an Ask (Claude Code hook, or a direct `vallum run` TTY
+prompt), Vallum remembers that exact command + working directory for
+`approval_cache_ttl_days` (default 14) and stops re-asking. Hard limits, not
+configurable: only `git_push_force`, `git_clean_force`, `write_crontab`, and
+`write_git_hooks` are ever remembered — destructive commands, credential
+reads, agent-config writes, Vallum self-protection, and `curl | sh`-class
+rules always re-ask. Entries are HMAC-signed with the machine approval secret;
+any tampering, expiry, or mismatch is a cache miss that re-asks. Inspect with
+`vallum approvals list`, wipe with `vallum approvals clear`, disable with
+`[security] approval_cache = false`. Cache hits are logged as
+`ALLOW [approval_cache:<rule>]`.
 
 ## Testing a rule
 

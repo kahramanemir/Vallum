@@ -485,6 +485,34 @@ replay of the *same* token buys:
   surface a `PreToolUse` hook's `updatedInput` back to the model. Treat that as
   defense-in-depth, not a cryptographic guarantee.
 
+## Allow exceptions & approval cache (honest scope)
+
+Two mechanisms can downgrade an Ask to Allow; both are bounded and both leave
+an audit trail (`ALLOW [allow_exception:<rule>]` / `ALLOW [approval_cache:<rule>]`
+lines in the hash-chained policy.log).
+
+**Scoped allow exceptions** (`[[policy.allow]]`) suppress exactly one named
+built-in, only for commands matching a user-written pattern, evaluated against
+the raw command line only (obfuscated forms are never suppressed). Patterns
+matching the empty string are rejected. This is strictly narrower than the
+pre-existing escape hatch of disabling a built-in outright.
+
+**The approval cache** remembers a human-approved Ask (exact command + cwd)
+for a bounded TTL (default 14 days), for four hard-coded workflow rules only
+(`git_push_force`, `git_clean_force`, `write_crontab`, `write_git_hooks`).
+Rules whose payload is not pinned by the command line (`curl | sh`,
+file-copy persistence writes), destructive rules, credential reads, and
+Vallum self-protection are never cached. Entries are HMAC-signed with the
+machine approval secret and every failure mode (forged/tampered/expired
+entry, cwd mismatch, unreadable secret) degrades to re-asking — never to
+allowing. Limits: the cache learns only from the Claude Code hook and direct
+`vallum run` TTY approvals and is only consulted there (Codex/Gemini/Cursor
+produce no approval evidence and are deliberately excluded); it inherits
+`approval.secret`'s boundary — a same-user process outside a sandbox that can
+read the secret can mint entries (unchanged, see the token section above);
+there is no per-approval opt-out UI in the hook protocol — disable with
+`[security] approval_cache = false` if that trade-off is wrong for you.
+
 ## MCP configuration scanning
 
 `vallum mcp scan` is a **static, read-only** check over MCP server

@@ -767,6 +767,14 @@ normalize = true                 # strip invisible/bidi chars + fold homoglyphs 
 
 [security]
 strict = false                   # block output if a prompt injection is detected
+approval_cache = true            # remember approved Asks (exact command+cwd; narrow rule set)
+approval_cache_ttl_days = 14     # days a cached approval stays valid (1-90)
+
+# Scoped allow exception: suppress ONE built-in for commands matching pattern.
+# [[policy.allow]]
+# pattern = '^git push --force origin main-backup$'
+# suppresses = "git_push_force"
+# reason = "release flow"
 
 [optimizer]
 disabled = []                    # optimizer names to turn off (e.g. ["npm","docker"])

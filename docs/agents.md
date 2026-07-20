@@ -125,6 +125,17 @@ this command, so an approved Ask is not re-prompted, while a forged or
 replayed-onto-a-different-command token is simply re-gated (see
 [SECURITY.md](../SECURITY.md) for the trust boundary).
 
+Approved Asks for four workflow rules (`git_push_force`, `git_clean_force`,
+`write_crontab`, `write_git_hooks`) are remembered: the exact command +
+working directory is recorded (HMAC-signed with the same machine secret,
+14-day TTL anchored at your approval — re-use never extends it), and the hook
+allows the identical command silently next time, logging
+`ALLOW [approval_cache:<rule>]` to policy.log. Inspect with `vallum approvals
+list`, wipe with `vallum approvals clear`, disable with `[security]
+approval_cache = false`. Destructive rules, credential reads, agent-config
+writes, and `curl | sh`-class rules are never remembered — see
+[docs/guardrail.md](guardrail.md#approval-cache).
+
 Because the hook wraps commands as `bash -c '<original>'`, Vallum unwraps
 simple scripts (no pipes, redirects, quoting, or other shell metacharacters)
 before optimizer matching, so `bash -c 'git status'` still hits the
