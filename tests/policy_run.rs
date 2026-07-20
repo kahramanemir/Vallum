@@ -331,3 +331,48 @@ fn token_approved_run_records_eligible_command() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn approvals_list_and_clear_cli() {
+    let dir = std::env::temp_dir().join(format!("vallum_approvals_cli_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg_path = dir.join("config.toml");
+    std::fs::write(
+        &cfg_path,
+        format!("[audit]\nlog_dir = \"{}\"\n", dir.display()),
+    )
+    .unwrap();
+    let mut cfg = vallum::config::AppConfig::default();
+    cfg.audit.log_dir = Some(dir.clone());
+    vallum::approvals::record(&cfg, "git push --force", "/repo", "git_push_force");
+
+    let out = std::process::Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg_path)
+        .args(["approvals", "list"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("git_push_force"), "{stdout}");
+    assert!(stdout.contains("git push --force"), "{stdout}");
+
+    let out = std::process::Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg_path)
+        .args(["approvals", "clear"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("removed 1"),
+        "clear reports count"
+    );
+
+    let out = std::process::Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg_path)
+        .args(["approvals", "list"])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("no cached approvals"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

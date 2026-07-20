@@ -580,6 +580,47 @@ fn main() {
                 }
             }
         }
+        Commands::Approvals { action } => {
+            let config = match AppConfig::load() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Config Error: {e}");
+                    std::process::exit(125);
+                }
+            };
+            match action {
+                vallum::cli::ApprovalsAction::List => {
+                    let entries = vallum::approvals::list_and_prune(&config);
+                    if entries.is_empty() {
+                        println!("no cached approvals");
+                    } else {
+                        let extra = scrubber::compile_rules(&config.scrubber.extra_secret_patterns);
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        for e in entries {
+                            let age_days = now.saturating_sub(e.ts) / 86_400;
+                            // Stored raw for exact matching; displayed scrubbed.
+                            let safe_cmd = scrubber::redact(
+                                &e.cmd,
+                                &extra,
+                                config.scrubber.entropy,
+                                config.scrubber.normalize,
+                            );
+                            println!("{age_days:>3}d  [{}]  {}  {}", e.rule, e.cwd, safe_cmd);
+                        }
+                    }
+                }
+                vallum::cli::ApprovalsAction::Clear => match vallum::approvals::clear(&config) {
+                    Ok(n) => println!("removed {n} cached approval(s)"),
+                    Err(e) => {
+                        eprintln!("approvals clear: {e}");
+                        std::process::exit(125);
+                    }
+                },
+            }
+        }
         Commands::Doctor => {
             std::process::exit(vallum::doctor::run());
         }
