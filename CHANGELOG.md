@@ -5,6 +5,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **CI-native scanning.** New unified `vallum scan` (MCP + skills + config
+  hygiene + policy.log chain; exit 0/10/20/125), `--sarif` output for GitHub
+  code scanning (file-level locations in v1), a committed composite GitHub
+  Action (sha256-verified binary install, SARIF upload, `fail-on` policy),
+  a `.pre-commit-hooks.yaml`, and an opt-in Claude Code SessionStart quick
+  scan (`vallum install-hook --agent claude --session-scan`, advisory-only,
+  always exits 0).
+
 ## [0.8.13]
 
 ### Added
@@ -556,6 +567,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
+[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.8.13...HEAD
 [0.8.13]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.13
 [0.8.12]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.12
 [0.8.11]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.11

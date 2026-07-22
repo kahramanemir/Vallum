@@ -72,6 +72,10 @@ vallum mcp scan                      # scan discovered MCP configs for risks
 vallum mcp scan --json <path>...     # structured output / specific files
 vallum skills scan                   # scan skills + agent context files for poisoning
 vallum skills scan <dir>             # scan a downloaded skill before installing it
+vallum scan [<path>...]              # unified scan: mcp + skills + config + log chain
+vallum scan --sarif . > scan.sarif   # SARIF 2.1.0 for GitHub code scanning
+vallum scan --json | --full          # aggregate JSON | also run the doctor env checks
+vallum install-hook --agent claude --session-scan  # opt-in SessionStart quick scan
 vallum log verify                    # verify the policy.log hash chain (tamper evidence)
 vallum log verify --expect-head <hex>  # also compare against an externally stored head
 vallum unlock                        # clear a tripped circuit-breaker lock
@@ -121,5 +125,5 @@ show up on the large, noisy outputs (builds, test runs, big diffs) — see
   `Ask` prompts on `/dev/tty`; set `security.assume_yes` /
   `VALLUM_ASSUME_YES=1` to auto-approve in scripts.
 - `vallum policy test`: 0 allow, 10 ask, 20 deny, 125 config error.
-- `vallum mcp scan` / `vallum skills scan`: 0 clean, 10 findings, 20
-  high-severity, 125 usage error.
+- `vallum mcp scan` / `vallum skills scan` / `vallum scan`: 0 clean, 10
+  findings, 20 high-severity, 125 usage error (125 wins over findings).
