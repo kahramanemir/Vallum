@@ -612,6 +612,7 @@ mod tests {
                 reason: "denied in test".into(),
             }],
             allow: vec![],
+            project_rules: vec![],
             disabled: vec![],
         })
         .unwrap();
@@ -719,6 +720,7 @@ mod tests {
                 reason: "blocked in test".into(),
             }],
             allow: vec![],
+            project_rules: vec![],
             disabled: vec![],
         })
         .unwrap();
@@ -754,6 +756,7 @@ mod tests {
                 suppresses: "git_push_force".into(),
                 reason: "release flow".into(),
             }],
+            project_rules: vec![],
             disabled: vec![],
         };
         let p = Policy::compile(&cfg).unwrap();
@@ -777,6 +780,7 @@ mod tests {
                 suppresses: "git_push_force".into(),
                 reason: "release flow".into(),
             }],
+            project_rules: vec![],
             disabled: vec![],
         };
         let p = Policy::compile(&cfg).unwrap();

@@ -17,6 +17,18 @@ pub struct AppConfig {
     pub security: SecurityConfig,
     pub optimizer: OptimizerConfig,
     pub policy: PolicyConfig,
+    /// Provenance of the project-level `.vallum.toml` overlay (None when no
+    /// file was found or the kill switch is set). Never serialized.
+    #[serde(skip)]
+    pub project: Option<ProjectProvenance>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProjectProvenance {
+    pub path: PathBuf,
+    pub accepted_rules: usize,
+    /// Some(reason) when the file was rejected (and therefore ignored).
+    pub rejected: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,6 +194,10 @@ pub struct PolicyConfig {
     /// commands matching `pattern` (raw command line only). Narrower than
     /// disabling the built-in via `disabled`.
     pub allow: Vec<PolicyAllowConfig>,
+    /// Rules overlaid from the project `.vallum.toml` (tighten-only; named
+    /// `project:<pattern>` when compiled). Never serialized.
+    #[serde(skip)]
+    pub project_rules: Vec<PolicyRuleConfig>,
     /// Built-in rule names to disable. `vallum doctor` warns on unknown names.
     pub disabled: Vec<String>,
 }
@@ -228,7 +244,33 @@ impl Default for PipelineConfig {
 impl AppConfig {
     pub fn load() -> Result<Self, String> {
         let path = config_path_from_env_or_default();
-        Self::from_path(&path)
+        let mut config = Self::from_path(&path)?;
+        config.apply_project_overlay(crate::project_config::load());
+        Ok(config)
+    }
+
+    /// Apply a project-config load outcome: accepted rules are appended for
+    /// compilation; a rejection records provenance only (the file is ignored
+    /// — it can only tighten, so ignoring it never weakens).
+    pub fn apply_project_overlay(&mut self, outcome: crate::project_config::LoadOutcome) {
+        match outcome {
+            crate::project_config::LoadOutcome::None => {}
+            crate::project_config::LoadOutcome::Loaded { path, rules } => {
+                self.project = Some(ProjectProvenance {
+                    path,
+                    accepted_rules: rules.len(),
+                    rejected: None,
+                });
+                self.policy.project_rules = rules;
+            }
+            crate::project_config::LoadOutcome::Rejected { path, reason } => {
+                self.project = Some(ProjectProvenance {
+                    path,
+                    accepted_rules: 0,
+                    rejected: Some(reason),
+                });
+            }
+        }
     }
 
     pub fn from_path(path: &Path) -> Result<Self, String> {
@@ -678,5 +720,54 @@ extra_secret_patterns = [ { pattern = "token-[0-9]+" } ]
             .contains("approval_cache_ttl_days"));
         config.security.approval_cache_ttl_days = 90;
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn overlay_loaded_appends_project_rules_and_provenance() {
+        let mut cfg = AppConfig::default();
+        cfg.apply_project_overlay(crate::project_config::LoadOutcome::Loaded {
+            path: PathBuf::from("/repo/.vallum.toml"),
+            rules: vec![PolicyRuleConfig {
+                pattern: "x".into(),
+                action: "deny".into(),
+                reason: "r".into(),
+            }],
+        });
+        assert_eq!(cfg.policy.project_rules.len(), 1);
+        let p = cfg.project.as_ref().unwrap();
+        assert_eq!(p.accepted_rules, 1);
+        assert!(p.rejected.is_none());
+    }
+
+    #[test]
+    fn overlay_rejected_records_reason_and_adds_no_rules() {
+        let mut cfg = AppConfig::default();
+        cfg.apply_project_overlay(crate::project_config::LoadOutcome::Rejected {
+            path: PathBuf::from("/repo/.vallum.toml"),
+            reason: "unknown field `security`".into(),
+        });
+        assert!(
+            cfg.policy.project_rules.is_empty(),
+            "rejected file adds nothing"
+        );
+        assert_eq!(
+            cfg.project.as_ref().unwrap().rejected.as_deref(),
+            Some("unknown field `security`")
+        );
+    }
+
+    #[test]
+    fn project_fields_do_not_serialize_into_config_show() {
+        let mut cfg = AppConfig::default();
+        cfg.policy.project_rules = vec![PolicyRuleConfig {
+            pattern: "x".into(),
+            action: "deny".into(),
+            reason: "r".into(),
+        }];
+        let toml_body = toml::to_string_pretty(&cfg).unwrap();
+        assert!(
+            !toml_body.contains("project"),
+            "serde-skip must hold: {toml_body}"
+        );
     }
 }

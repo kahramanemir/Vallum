@@ -442,6 +442,7 @@ mod tests {
                 reason: "test reason".into(),
             }],
             allow: vec![],
+            project_rules: vec![],
             disabled: vec![],
         }
     }
@@ -478,6 +479,7 @@ mod tests {
                 },
             ],
             allow: vec![],
+            project_rules: vec![],
             disabled: vec![],
         };
         let p = Policy::compile(&cfg).unwrap();
@@ -1034,6 +1036,7 @@ mod tests {
                 suppresses: suppresses.into(),
                 reason: "test exception".into(),
             }],
+            project_rules: vec![],
             disabled: vec![],
         }
     }
