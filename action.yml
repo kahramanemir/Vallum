@@ -35,11 +35,16 @@ runs:
   steps:
     - name: Install vallum (sha256-verified release asset)
       shell: bash
+      # Inputs travel through env, never spliced into the script text — an
+      # ${{ }} expression in a run: block is the GitHub script-injection sink.
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
       run: |
         set -euo pipefail
-        VERSION="${{ inputs.version }}"
+        VERSION="$INPUT_VERSION"
         if [ -z "$VERSION" ]; then
-          VERSION="${{ github.action_ref }}"
+          VERSION="$ACTION_REF"
         fi
         case "$(uname -s)-$(uname -m)" in
           Linux-x86_64)  TARGET="x86_64-unknown-linux-musl" ;;
@@ -73,11 +78,15 @@ runs:
     - name: Run vallum scan
       id: scan
       shell: bash
+      env:
+        INPUT_PATHS: ${{ inputs.paths }}
       run: |
         set -uo pipefail
         SARIF_FILE="${RUNNER_TEMP}/vallum.sarif"
         set +e
-        vallum scan --sarif ${{ inputs.paths }} > "$SARIF_FILE"
+        # Unquoted on purpose: several paths in one input are word-split here.
+        # The value arrives via env, so it is data — it cannot become script.
+        vallum scan --sarif $INPUT_PATHS > "$SARIF_FILE"
         CODE=$?
         set -e
         echo "exit-code=${CODE}" >> "$GITHUB_OUTPUT"
@@ -92,10 +101,13 @@ runs:
 
     - name: Apply fail-on policy
       shell: bash
+      env:
+        SCAN_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         set -euo pipefail
-        CODE="${{ steps.scan.outputs.exit-code }}"
-        POLICY="${{ inputs.fail-on }}"
+        CODE="$SCAN_EXIT_CODE"
+        POLICY="$INPUT_FAIL_ON"
         if [ "$CODE" = "125" ]; then
           echo "::error::vallum scan usage/config error (exit 125)"; exit 1
         fi
