@@ -2,6 +2,8 @@
 //! validity + policy.log chain, one exit code, human/JSON/SARIF output.
 //! Read-only, static, no network — same posture as the underlying scanners.
 
+pub mod sarif;
+
 use crate::config::AppConfig;
 use std::path::PathBuf;
 
@@ -10,6 +12,7 @@ use std::path::PathBuf;
 pub enum OutputFormat {
     Human,
     Json,
+    Sarif,
 }
 
 /// A finding produced by the scan-level checks (not by the two content
@@ -198,6 +201,7 @@ pub fn run(paths: &[PathBuf], format: OutputFormat, full: bool, cfg: &AppConfig)
     match format {
         OutputFormat::Human => render_human(&report, cfg, full),
         OutputFormat::Json => render_json(&report),
+        OutputFormat::Sarif => println!("{}", sarif::render(&report)),
     }
     unified_exit_code(&report)
 }
