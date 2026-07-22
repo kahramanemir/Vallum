@@ -45,6 +45,7 @@ pub mod mcp;
 pub mod metrics;
 pub mod optimizer;
 pub mod policy;
+pub mod scan;
 pub mod scrubber;
 pub mod skills;
 pub mod stats;
