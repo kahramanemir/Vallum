@@ -649,7 +649,12 @@ fn gather_base_url() -> Check {
 /// return the process exit code (0 unless a check hard-failed).
 pub fn run() -> i32 {
     let config_path = crate::config::config_path_from_env_or_default();
-    let config = AppConfig::from_path(&config_path).unwrap_or_default();
+    // from_path (not load) so a broken GLOBAL config still yields a report —
+    // check_config reports that failure on its own line. The project overlay
+    // is applied by hand for the same reason: doctor must report the project
+    // file's state (active/rejected) even when the global config is broken.
+    let mut config = AppConfig::from_path(&config_path).unwrap_or_default();
+    config.apply_project_overlay(crate::project_config::load());
 
     let settings_path = crate::install_hook::settings_path(crate::install_hook::Level::User)
         .unwrap_or_else(|_| PathBuf::from(".claude/settings.json"));

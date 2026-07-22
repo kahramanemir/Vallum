@@ -166,9 +166,45 @@ fn rejected_project_file_never_blocks_and_never_weakens() {
         .args(["doctor"])
         .output()
         .unwrap();
+    // Assert on the project-config LINE itself: a bare `contains("rejected")`
+    // over the whole report can pass on unrelated output (foreign hook
+    // commands in the hook-audit line, for one).
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("project-config"), "{stdout}");
-    assert!(stdout.contains("rejected"), "{stdout}");
+    let line = stdout
+        .lines()
+        .find(|l| l.contains("project-config"))
+        .unwrap_or_else(|| panic!("no project-config check line in:\n{stdout}"));
+    assert!(line.contains("rejected"), "{line}");
+    assert!(line.contains(".vallum.toml"), "{line}");
+    // The guardrail line must also see zero project rules (nothing accepted).
+    assert!(
+        stdout.contains("0 project rule(s)"),
+        "rejected file contributes no rules: {stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn doctor_reports_an_accepted_project_file() {
+    let (dir, cfg) = temp_repo("doctorok");
+    write_project_rule(&dir);
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .current_dir(&dir)
+        .args(["doctor"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let line = stdout
+        .lines()
+        .find(|l| l.contains("project-config"))
+        .unwrap_or_else(|| panic!("no project-config check line in:\n{stdout}"));
+    assert!(line.contains("on —"), "{line}");
+    assert!(line.contains("1 rule(s)"), "{line}");
+    assert!(
+        stdout.contains("1 project rule(s)"),
+        "guardrail line must count it: {stdout}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
