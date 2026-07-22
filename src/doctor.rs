@@ -173,16 +173,26 @@ pub fn project_config_check(cfg: &crate::config::AppConfig) -> Check {
             Status::Ok,
             "off (no .vallum.toml at the git root)",
         ),
+        // The reason is already escaped at the source (project_config), but the
+        // path is rendered here — escape it too so a crafted directory name
+        // cannot forge report lines.
         Some(p) => match &p.rejected {
             None => Check::new(
                 "project-config",
                 Status::Ok,
-                format!("on — {}, {} rule(s)", p.path.display(), p.accepted_rules),
+                format!(
+                    "on — {}, {} rule(s)",
+                    escape_ctrl(&p.path.display().to_string()),
+                    p.accepted_rules
+                ),
             ),
             Some(reason) => Check::new(
                 "project-config",
                 Status::Fail,
-                format!("rejected — {}: {reason}", p.path.display()),
+                format!(
+                    "rejected — {}: {reason}",
+                    escape_ctrl(&p.path.display().to_string())
+                ),
             ),
         },
     }

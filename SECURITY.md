@@ -529,6 +529,15 @@ the git-root file is read (a subdirectory file cannot shadow it); global allow
 exceptions cannot suppress project rules (they only target built-in names);
 project-rule Asks are never approval-cached.
 
+A rejection reason is itself treated as untrusted output. A **symlinked**
+`.vallum.toml` is refused without being read — otherwise a repo could point it
+at `~/.aws/credentials` and have the TOML parse error echo a line of that file
+into stderr (the agent's context), `vallum doctor`, and `vallum scan`'s SARIF,
+which CI uploads to code scanning. For the same reason the reason string keeps
+only a TOML error's position and message, never its quoted source line, and
+every file-derived fragment in it is control-char-escaped and length-capped so
+it cannot redraw the report around it.
+
 ## MCP configuration scanning
 
 `vallum mcp scan` is a **static, read-only** check over MCP server

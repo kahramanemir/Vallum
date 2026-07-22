@@ -91,10 +91,71 @@ fn project_file_path() -> Option<PathBuf> {
     p.is_file().then_some(p)
 }
 
+/// Escape control characters and cap the length of any text that came out of
+/// the project file. A rejection reason is printed to stderr (which the agent
+/// reads), to `vallum doctor`, and into `vallum scan`'s findings and SARIF —
+/// raw escape sequences there could redraw a clean-looking report and hide the
+/// very rejection the user needs to see.
+fn safe_fragment(text: &str, max_chars: usize) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars().take(max_chars) {
+        if c.is_control() {
+            out.push_str(&format!("\\x{:02x}", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+    if text.chars().count() > max_chars {
+        out.push('…');
+    }
+    out
+}
+
+/// Keep only the position and message lines of a TOML error, dropping its
+/// quoted-source block. That block echoes a LINE OF THE FILE verbatim, and the
+/// reason travels far (stderr → agent context, doctor, scan JSON/SARIF → code
+/// scanning alerts) — no file content belongs in it.
+fn toml_error_summary(e: &toml::de::Error) -> String {
+    let text = e.to_string();
+    let kept: Vec<&str> = text
+        .lines()
+        .map(|l| l.trim_end())
+        .filter(|l| {
+            let t = l.trim_start();
+            // Gutter lines: "  |", "2 | <source>", "  | ^^^".
+            !(t.starts_with('|')
+                || t.trim_start_matches(|c: char| c.is_ascii_digit())
+                    .trim_start()
+                    .starts_with('|'))
+        })
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+    let joined = if kept.is_empty() {
+        "invalid TOML".to_string()
+    } else {
+        kept.join("; ")
+    };
+    safe_fragment(&joined, 300)
+}
+
 /// Parse and validate one project file into plain rule configs.
 pub(crate) fn parse_file(path: &Path) -> Result<Vec<PolicyRuleConfig>, String> {
+    // Never follow a symlink: a repo can commit `.vallum.toml` as a link to
+    // ~/.aws/credentials or ~/.ssh/id_rsa, and a parse error would then echo a
+    // line of that file into the reason. Same posture as the skills walker,
+    // which refuses symlinked targets outright.
+    if std::fs::symlink_metadata(path)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return Err(
+            "is a symlink — refusing to follow (a project file must not \
+                    redirect reads outside the repo)"
+                .to_string(),
+        );
+    }
     let raw = std::fs::read_to_string(path).map_err(|e| format!("read failed: {e}"))?;
-    let file: ProjectFile = toml::from_str(&raw).map_err(|e| e.to_string())?;
+    let file: ProjectFile = toml::from_str(&raw).map_err(|e| toml_error_summary(&e))?;
     if file.policy.rules.len() > MAX_RULES {
         return Err(format!(
             "{} rules exceed the {MAX_RULES}-rule cap",
@@ -103,37 +164,41 @@ pub(crate) fn parse_file(path: &Path) -> Result<Vec<PolicyRuleConfig>, String> {
     }
     let mut out = Vec::new();
     for rule in &file.policy.rules {
+        // Every fragment echoed below comes out of the project file, so it is
+        // escaped and capped on the way into a reason (see safe_fragment).
+        let shown = safe_fragment(&rule.pattern, 60);
         if rule.pattern.len() > MAX_PATTERN_BYTES {
-            // Char-safe truncation for the error message — a byte slice could
-            // split a multi-byte character and panic.
-            let head: String = rule.pattern.chars().take(40).collect();
             return Err(format!(
-                "pattern exceeds {MAX_PATTERN_BYTES} bytes: '{head}…'"
+                "pattern exceeds {MAX_PATTERN_BYTES} bytes: '{shown}'"
             ));
         }
         if rule.reason.len() > MAX_REASON_BYTES {
             return Err(format!("reason exceeds {MAX_REASON_BYTES} bytes"));
         }
         if rule.reason.trim().is_empty() {
-            return Err(format!("rule '{}' needs a non-empty reason", rule.pattern));
+            return Err(format!("rule '{shown}' needs a non-empty reason"));
         }
         match rule.action.as_str() {
             "ask" | "deny" => {}
             "allow" => {
                 return Err(format!(
-                    "action \"allow\" is not allowed in a project config (pattern '{}'); \
-                     scoped allows live in the global config only ([[policy.allow]])",
-                    rule.pattern
+                    "action \"allow\" is not allowed in a project config (pattern '{shown}'); \
+                     scoped allows live in the global config only ([[policy.allow]])"
                 ))
             }
             other => {
                 return Err(format!(
-                    "invalid action \"{other}\" (pattern '{}'); expected \"ask\" or \"deny\"",
-                    rule.pattern
+                    "invalid action \"{}\" (pattern '{shown}'); expected \"ask\" or \"deny\"",
+                    safe_fragment(other, 40)
                 ))
             }
         }
-        Regex::new(&rule.pattern).map_err(|e| format!("invalid regex '{}': {e}", rule.pattern))?;
+        Regex::new(&rule.pattern).map_err(|e| {
+            format!(
+                "invalid regex '{shown}': {}",
+                safe_fragment(&e.to_string(), 200)
+            )
+        })?;
         out.push(PolicyRuleConfig {
             pattern: rule.pattern.clone(),
             action: rule.action.clone(),
@@ -263,6 +328,61 @@ mod tests {
             &format!("[[policy.rules]]\npattern = '{long}'\naction = \"ask\"\nreason = \"r\"\n"),
         );
         assert!(parse_file(&p).unwrap_err().contains("512"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn symlinked_project_file_is_refused_without_reading_the_target() {
+        let d = temp_dir("symlink");
+        let secret = d.join("credentials");
+        std::fs::write(
+            &secret,
+            "[default]\naws_secret_access_key = TOPSECRETVALUE\n",
+        )
+        .unwrap();
+        let link = d.join(PROJECT_FILE_NAME);
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+        let err = parse_file(&link).unwrap_err();
+        assert!(err.contains("symlink"), "{err}");
+        assert!(
+            !err.contains("TOPSECRETVALUE"),
+            "the target's content must never reach the reason: {err}"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn rejection_reason_carries_no_file_content_and_no_control_chars() {
+        let d = temp_dir("noecho");
+        // The TOML error's quoted-source block echoes the offending LINE; with
+        // a symlinked file that line is somebody's credentials. The reason must
+        // name the key and carry none of its content.
+        let p = write_project(&d, "[policy]\ndisabled = \"SECRET-VALUE-XYZ\"\n");
+        let err = parse_file(&p).unwrap_err();
+        assert!(
+            err.contains("disabled"),
+            "the offending key is named: {err}"
+        );
+        assert!(
+            !err.contains("SECRET-VALUE-XYZ"),
+            "no source line in the reason: {err}"
+        );
+        // Our own messages escape file-derived fragments too (TOML spells a
+        // raw ESC as  — a literal one would not parse at all).
+        let p = write_project(
+            &d,
+            "[[policy.rules]]\npattern = \"x\\u001B[2Jy\"\naction = \"nope\"\nreason = \"r\"\n",
+        );
+        let err = parse_file(&p).unwrap_err();
+        assert!(
+            !err.chars().any(|c| c.is_control()),
+            "no raw control characters in the reason: {err:?}"
+        );
+        assert!(
+            err.contains("\\x1b"),
+            "control chars are escaped, not dropped: {err}"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 
