@@ -1,0 +1,10 @@
+# pre-commit integration: requires a locally installed `vallum`
+# (https://github.com/kahramanemir/Vallum#install). language: system is
+# deliberate — building from source on every hook run is not acceptable.
+- id: vallum-scan
+  name: vallum scan
+  description: "Static scan of agent skill/context files and MCP configs (secrets, injection, risky commands)."
+  entry: vallum scan
+  language: system
+  pass_filenames: true
+  files: '(^|/)(SKILL\.md|CLAUDE\.md|AGENTS\.md|GEMINI\.md|\.cursorrules|\.mcp\.json|mcp\.json|claude_desktop_config\.json)$|\.mdc$'

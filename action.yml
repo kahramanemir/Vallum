@@ -1,0 +1,106 @@
+name: "Vallum Scan"
+description: "Static security scan of MCP configs and agent skill/context files, with SARIF upload to GitHub code scanning."
+branding:
+  icon: "shield"
+  color: "orange"
+
+inputs:
+  version:
+    description: "Vallum release tag to install (e.g. v0.8.12). Defaults to the ref this action was pinned at."
+    required: false
+    default: ""
+  paths:
+    description: "Files or directories to scan."
+    required: false
+    default: "."
+  fail-on:
+    description: "Fail the job on findings: high | warning | never."
+    required: false
+    default: "high"
+  upload-sarif:
+    description: "Upload the SARIF result to GitHub code scanning."
+    required: false
+    default: "true"
+
+outputs:
+  sarif-file:
+    description: "Path of the generated SARIF file."
+    value: "${{ steps.scan.outputs.sarif-file }}"
+  exit-code:
+    description: "Raw vallum scan exit code (0/10/20/125)."
+    value: "${{ steps.scan.outputs.exit-code }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install vallum (sha256-verified release asset)
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ inputs.version }}"
+        if [ -z "$VERSION" ]; then
+          VERSION="${{ github.action_ref }}"
+        fi
+        case "$(uname -s)-$(uname -m)" in
+          Linux-x86_64)  TARGET="x86_64-unknown-linux-musl" ;;
+          Linux-aarch64) TARGET="aarch64-unknown-linux-musl" ;;
+          Linux-arm64)   TARGET="aarch64-unknown-linux-musl" ;;
+          Darwin-x86_64) TARGET="x86_64-apple-darwin" ;;
+          Darwin-arm64)  TARGET="aarch64-apple-darwin" ;;
+          *)             TARGET="" ;;
+        esac
+        DEST="${RUNNER_TEMP}/vallum-bin"
+        mkdir -p "$DEST"
+        if [ -n "$TARGET" ]; then
+          BASE="https://github.com/kahramanemir/Vallum/releases/download/${VERSION}"
+          ARCHIVE="vallum-${TARGET}.tar.xz"
+          curl --proto '=https' --tlsv1.2 -fsSLo "${DEST}/${ARCHIVE}" "${BASE}/${ARCHIVE}"
+          curl --proto '=https' --tlsv1.2 -fsSLo "${DEST}/${ARCHIVE}.sha256" "${BASE}/${ARCHIVE}.sha256"
+          cd "$DEST"
+          # Asset checksum files are "<hex>  <name>"; verify before extracting.
+          sha256sum -c "${ARCHIVE}.sha256" 2>/dev/null || shasum -a 256 -c "${ARCHIVE}.sha256"
+          tar -xJf "${ARCHIVE}"
+          BIN="$(find . -name vallum -type f | head -1)"
+          install -m 0755 "$BIN" "${DEST}/vallum"
+        else
+          echo "::notice::no prebuilt vallum for this runner; falling back to cargo install"
+          cargo install vallum --locked --root "$DEST"
+          mv "${DEST}/bin/vallum" "${DEST}/vallum"
+        fi
+        echo "$DEST" >> "$GITHUB_PATH"
+        "${DEST}/vallum" --version
+
+    - name: Run vallum scan
+      id: scan
+      shell: bash
+      run: |
+        set -uo pipefail
+        SARIF_FILE="${RUNNER_TEMP}/vallum.sarif"
+        set +e
+        vallum scan --sarif ${{ inputs.paths }} > "$SARIF_FILE"
+        CODE=$?
+        set -e
+        echo "exit-code=${CODE}" >> "$GITHUB_OUTPUT"
+        echo "sarif-file=${SARIF_FILE}" >> "$GITHUB_OUTPUT"
+        echo "vallum scan exited ${CODE}"
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif-file }}
+
+    - name: Apply fail-on policy
+      shell: bash
+      run: |
+        set -euo pipefail
+        CODE="${{ steps.scan.outputs.exit-code }}"
+        POLICY="${{ inputs.fail-on }}"
+        if [ "$CODE" = "125" ]; then
+          echo "::error::vallum scan usage/config error (exit 125)"; exit 1
+        fi
+        case "$POLICY" in
+          never)   exit 0 ;;
+          warning) [ "$CODE" = "0" ] || { echo "::error::findings (exit $CODE) with fail-on=warning"; exit 1; } ;;
+          high|*)  [ "$CODE" != "20" ] || { echo "::error::high-severity findings (exit 20)"; exit 1; } ;;
+        esac
