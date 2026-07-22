@@ -100,6 +100,7 @@ pub fn check_guardrail(
     guardrail: bool,
     disabled: &[String],
     user_rule_count: usize,
+    project_rule_count: usize,
     allow_exception_count: usize,
     known: &[&str],
 ) -> Check {
@@ -120,10 +121,11 @@ pub fn check_guardrail(
             "guardrail",
             Status::Ok,
             format!(
-                "on — {} built-in rule(s), {} disabled, {} user rule(s), {} allow exception(s)",
+                "on — {} built-in rule(s), {} disabled, {} user rule(s), {} project rule(s), {} allow exception(s)",
                 known.len(),
                 disabled.len(),
                 user_rule_count,
+                project_rule_count,
                 allow_exception_count
             ),
         )
@@ -161,6 +163,39 @@ pub fn approval_cache_check(cfg: &crate::config::AppConfig) -> Check {
             cfg.security.approval_cache_ttl_days, entries
         ),
     )
+}
+
+/// Report the project-level `.vallum.toml`: absent, active, or rejected.
+pub fn project_config_check(cfg: &crate::config::AppConfig) -> Check {
+    match &cfg.project {
+        None => Check::new(
+            "project-config",
+            Status::Ok,
+            "off (no .vallum.toml at the git root)",
+        ),
+        // The reason is already escaped at the source (project_config), but the
+        // path is rendered here — escape it too so a crafted directory name
+        // cannot forge report lines.
+        Some(p) => match &p.rejected {
+            None => Check::new(
+                "project-config",
+                Status::Ok,
+                format!(
+                    "on — {}, {} rule(s)",
+                    escape_ctrl(&p.path.display().to_string()),
+                    p.accepted_rules
+                ),
+            ),
+            Some(reason) => Check::new(
+                "project-config",
+                Status::Fail,
+                format!(
+                    "rejected — {}: {reason}",
+                    escape_ctrl(&p.path.display().to_string())
+                ),
+            ),
+        },
+    }
 }
 
 /// Report whether the Claude Code PreToolUse hook is installed. A missing or
@@ -624,7 +659,12 @@ fn gather_base_url() -> Check {
 /// return the process exit code (0 unless a check hard-failed).
 pub fn run() -> i32 {
     let config_path = crate::config::config_path_from_env_or_default();
-    let config = AppConfig::from_path(&config_path).unwrap_or_default();
+    // from_path (not load) so a broken GLOBAL config still yields a report —
+    // check_config reports that failure on its own line. The project overlay
+    // is applied by hand for the same reason: doctor must report the project
+    // file's state (active/rejected) even when the global config is broken.
+    let mut config = AppConfig::from_path(&config_path).unwrap_or_default();
+    config.apply_project_overlay(crate::project_config::load());
 
     let settings_path = crate::install_hook::settings_path(crate::install_hook::Level::User)
         .unwrap_or_else(|_| PathBuf::from(".claude/settings.json"));
@@ -645,6 +685,7 @@ pub fn run() -> i32 {
             config.security.guardrail,
             &config.policy.disabled,
             config.policy.rules.len(),
+            config.policy.project_rules.len(),
             config.policy.allow.len(),
             &{
                 let mut names = crate::policy::builtin_names();
@@ -652,6 +693,7 @@ pub fn run() -> i32 {
                 names
             },
         ),
+        project_config_check(&config),
         check_hook(&settings_path),
         {
             let installed = crate::install_hook::read_settings(&settings_path)
@@ -841,20 +883,20 @@ mod tests {
 
     #[test]
     fn guardrail_on_reports_ok() {
-        let c = check_guardrail(true, &[], 0, 0, &["rm_rf_root"]);
+        let c = check_guardrail(true, &[], 0, 0, 0, &["rm_rf_root"]);
         assert_eq!(c.status, Status::Ok);
         assert!(c.detail.contains("on"));
     }
 
     #[test]
     fn guardrail_off_warns() {
-        let c = check_guardrail(false, &[], 0, 0, &["rm_rf_root"]);
+        let c = check_guardrail(false, &[], 0, 0, 0, &["rm_rf_root"]);
         assert_eq!(c.status, Status::Warn);
     }
 
     #[test]
     fn unknown_disabled_name_warns() {
-        let c = check_guardrail(true, &["nope".to_string()], 0, 0, &["rm_rf_root"]);
+        let c = check_guardrail(true, &["nope".to_string()], 0, 0, 0, &["rm_rf_root"]);
         assert_eq!(c.status, Status::Warn);
         assert!(c.detail.contains("nope"));
     }
@@ -862,7 +904,7 @@ mod tests {
     #[test]
     fn guardrail_check_reports_allow_exception_count() {
         let names = crate::policy::builtin_names();
-        let c = check_guardrail(true, &[], 0, 2, &names);
+        let c = check_guardrail(true, &[], 0, 0, 2, &names);
         assert!(c.detail.contains("2 allow exception(s)"), "{}", c.detail);
     }
 
@@ -879,6 +921,36 @@ mod tests {
         let c = approval_cache_check(&cfg);
         assert!(c.detail.contains("off"), "{}", c.detail);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn project_config_check_states() {
+        let mut cfg = crate::config::AppConfig::default();
+        let c = project_config_check(&cfg);
+        assert!(c.detail.contains("off"), "{}", c.detail);
+        cfg.project = Some(crate::config::ProjectProvenance {
+            path: std::path::PathBuf::from("/repo/.vallum.toml"),
+            accepted_rules: 3,
+            rejected: None,
+        });
+        let c = project_config_check(&cfg);
+        assert!(c.detail.contains("3 rule(s)"), "{}", c.detail);
+        cfg.project = Some(crate::config::ProjectProvenance {
+            path: std::path::PathBuf::from("/repo/.vallum.toml"),
+            accepted_rules: 0,
+            rejected: Some("unknown field `security`".into()),
+        });
+        let c = project_config_check(&cfg);
+        assert!(matches!(c.status, Status::Fail), "rejected file is a Fail");
+        assert!(c.detail.contains("security"), "{}", c.detail);
+    }
+
+    #[test]
+    fn guardrail_check_reports_project_rule_count() {
+        let names = crate::policy::builtin_names();
+        let c = check_guardrail(true, &[], 1, 4, 0, &names);
+        assert!(c.detail.contains("1 user rule(s)"), "{}", c.detail);
+        assert!(c.detail.contains("4 project rule(s)"), "{}", c.detail);
     }
 
     fn vallum_cursor_has_hook(v: &serde_json::Value) -> bool {

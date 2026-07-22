@@ -93,6 +93,16 @@ fn config_findings(cfg: &AppConfig) -> Vec<ExtraFinding> {
             });
         }
     }
+    if let Some(p) = &cfg.project {
+        if let Some(reason) = &p.rejected {
+            out.push(ExtraFinding {
+                rule: "doctor/config".to_string(),
+                severity_high: false,
+                file: p.path.clone(),
+                detail: format!("project config rejected: {reason}"),
+            });
+        }
+    }
     out
 }
 
@@ -428,6 +438,26 @@ mod tests {
         assert!(f
             .iter()
             .all(|e| e.rule == "doctor/config" && !e.severity_high));
+    }
+
+    #[test]
+    fn config_findings_include_rejected_project_file() {
+        let cfg = AppConfig {
+            project: Some(crate::config::ProjectProvenance {
+                path: PathBuf::from("/repo/.vallum.toml"),
+                accepted_rules: 0,
+                rejected: Some("unknown field `security`".into()),
+            }),
+            ..Default::default()
+        };
+        let f = config_findings(&cfg);
+        assert!(
+            f.iter().any(|e| e.rule == "doctor/config"
+                && e.detail.contains("project config rejected")
+                && !e.severity_high),
+            "{:?}",
+            f.iter().map(|e| &e.detail).collect::<Vec<_>>()
+        );
     }
 
     #[test]

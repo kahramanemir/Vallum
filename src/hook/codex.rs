@@ -124,6 +124,7 @@ mod tests {
                 reason: "denied in test".into(),
             }],
             allow: vec![],
+            project_rules: vec![],
             disabled: vec![],
         })
         .unwrap()

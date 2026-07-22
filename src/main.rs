@@ -498,7 +498,7 @@ fn main() {
                     }
                 }
             }
-            ConfigAction::Init { force } => match config_init(*force) {
+            ConfigAction::Init { force, project } => match config_init(*force, *project) {
                 Ok(msg) => println!("{msg}"),
                 Err(e) => {
                     eprintln!("config init: {e}");
@@ -828,8 +828,30 @@ approval_cache_ttl_days = 14     # days a cached approval stays valid (1-90)
 disabled = []                    # optimizer names to turn off (e.g. ["npm","docker"])
 "#;
 
-fn config_init(force: bool) -> Result<String, String> {
-    let path = vallum::config::config_path_from_env_or_default();
+const PROJECT_CONFIG_TOML: &str = r#"# .vallum.toml — project policy (tighten-only). Commit this file.
+# Only [[policy.rules]] with action "ask" or "deny" is accepted here; every
+# other key ([policy] disabled, [[policy.allow]], [security], [audit], …) is
+# rejected and the whole file is ignored with a warning. Limits: 64 rules,
+# 512-byte patterns.
+
+[[policy.rules]]
+pattern = 'terraform\s+destroy'
+action = "ask"
+reason = "infra guard"
+"#;
+
+fn config_init(force: bool, project: bool) -> Result<String, String> {
+    let (path, contents) = if project {
+        (
+            std::path::PathBuf::from(".vallum.toml"),
+            PROJECT_CONFIG_TOML,
+        )
+    } else {
+        (
+            vallum::config::config_path_from_env_or_default(),
+            DEFAULT_CONFIG_TOML,
+        )
+    };
     if path.exists() && !force {
         return Ok(format!(
             "{} already exists; pass --force to overwrite.",
@@ -837,10 +859,22 @@ fn config_init(force: bool) -> Result<String, String> {
         ));
     }
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        // The bare `.vallum.toml` relative path has an empty parent.
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
     }
-    write_private(&path, DEFAULT_CONFIG_TOML)?;
-    Ok(format!("Wrote default config → {}", path.display()))
+    write_private(&path, contents)?;
+    Ok(format!(
+        "Wrote {} → {}",
+        if project {
+            "project config"
+        } else {
+            "default config"
+        },
+        path.display()
+    ))
 }
 
 #[cfg(unix)]

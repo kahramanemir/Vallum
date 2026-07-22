@@ -513,6 +513,31 @@ read the secret can mint entries (unchanged, see the token section above);
 there is no per-approval opt-out UI in the hook protocol — disable with
 `[security] approval_cache = false` if that trade-off is wrong for you.
 
+## Project-level config (honest scope)
+
+`.vallum.toml` at the git root is treated as **attacker-adjacent input** — it
+arrives with any cloned repo. It is therefore restricted to a whitelist of
+exactly one capability: additional `ask`/`deny` rules (≤ 64 rules, ≤ 512-byte
+patterns). Every other key is rejected by name — including `[policy]
+disabled`, `[[policy.allow]]`, `[security]`, `[audit]` (log redirection), and
+`[scrubber]` (whose pattern+replacement pairs would otherwise be an
+output-rewriting channel). A rejected file is loudly ignored: gating continues
+on the global config alone, which can never fail open (the file can only
+tighten) and denies a malicious repo the ability to DoS `vallum run`. Worst
+case from a hostile `.vallum.toml`: extra Asks/Denies inside that repo. Only
+the git-root file is read (a subdirectory file cannot shadow it); global allow
+exceptions cannot suppress project rules (they only target built-in names);
+project-rule Asks are never approval-cached.
+
+A rejection reason is itself treated as untrusted output. A **symlinked**
+`.vallum.toml` is refused without being read — otherwise a repo could point it
+at `~/.aws/credentials` and have the TOML parse error echo a line of that file
+into stderr (the agent's context), `vallum doctor`, and `vallum scan`'s SARIF,
+which CI uploads to code scanning. For the same reason the reason string keeps
+only a TOML error's position and message, never its quoted source line, and
+every file-derived fragment in it is control-char-escaped and length-capped so
+it cannot redraw the report around it.
+
 ## MCP configuration scanning
 
 `vallum mcp scan` is a **static, read-only** check over MCP server

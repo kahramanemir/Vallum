@@ -66,6 +66,7 @@ vallum uninstall-hook                # remove hooks (same picker; --agent to scr
 vallum hook                          # internal: invoked by the agent's hook config (don't run directly)
 vallum config show                   # print effective merged config as TOML
 vallum config init [--force]         # scaffold ~/.vallum/config.toml
+vallum config init --project         # scaffold ./.vallum.toml (tighten-only, commit it)
 vallum policy test "<command>"       # one-shot guardrail verdict (exit 0/10/20)
 vallum update                        # check for a newer release + upgrade command
 vallum mcp scan                      # scan discovered MCP configs for risks

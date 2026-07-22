@@ -9,6 +9,12 @@ per-project overrides, point `VALLUM_CONFIG` at a different file. Scaffold a
 commented default with `vallum config init`; print the effective merged config
 with `vallum config show`.
 
+A repo may also commit a **tighten-only** `.vallum.toml` at its git root, which
+adds `ask`/`deny` rules on top of this file and nothing else — see
+[Project-level rules](guardrail.md#project-level-rules-vallumtoml). It is never
+part of `config show` output (the global file is the only thing that config
+surface describes).
+
 ## Full example
 
 ```toml
