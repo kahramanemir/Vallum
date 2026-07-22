@@ -308,6 +308,8 @@ pub(crate) fn fail_closed_ask_message(reason: &str, rule_name: &str, command: &s
         "or remove the matching [[policy.rules]] entry from your Vallum config \
          (see `vallum config show`)"
             .to_string()
+    } else if rule_name.starts_with("project:") {
+        "or remove the matching [[policy.rules]] entry from the repo's .vallum.toml".to_string()
     } else {
         format!("or disable the rule (`[policy] disabled = [\"{rule_name}\"]`)")
     };
@@ -319,10 +321,13 @@ pub(crate) fn fail_closed_ask_message(reason: &str, rule_name: &str, command: &s
 }
 
 /// Source label for a rule name in `policy test` output. User rules are
-/// `user:`-prefixed (the same convention `fail_closed_ask_message` keys on).
+/// `user:`-prefixed, project rules `project:`-prefixed (the same conventions
+/// `fail_closed_ask_message` keys on).
 fn rule_source(rule_name: &str) -> &'static str {
     if rule_name.starts_with("user:") {
         "user rule"
+    } else if rule_name.starts_with("project:") {
+        "project rule"
     } else {
         "built-in"
     }
@@ -789,6 +794,17 @@ mod tests {
         assert!(
             report.contains("allow_exception:git_push_force"),
             "{report}"
+        );
+    }
+
+    #[test]
+    fn project_rule_attribution_in_report_and_fail_closed_hint() {
+        assert_eq!(rule_source("project:foo"), "project rule");
+        let msg = fail_closed_ask_message("reason", "project:foo", "foo --bar");
+        assert!(msg.contains(".vallum.toml"), "{msg}");
+        assert!(
+            !msg.contains("[policy] disabled"),
+            "must not suggest disabling built-ins: {msg}"
         );
     }
 }

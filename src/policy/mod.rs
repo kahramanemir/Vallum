@@ -94,6 +94,21 @@ impl Policy {
                 reason: rc.reason.clone(),
             });
         }
+        for rc in &cfg.project_rules {
+            let action = match rc.action.as_str() {
+                "ask" => PolicyAction::Ask,
+                "deny" => PolicyAction::Deny,
+                other => return Err(format!("invalid project policy action '{other}'")),
+            };
+            let pattern = Regex::new(&rc.pattern)
+                .map_err(|e| format!("invalid project policy regex '{}': {}", rc.pattern, e))?;
+            rules.push(PolicyRule {
+                name: format!("project:{}", rc.pattern),
+                pattern,
+                action,
+                reason: rc.reason.clone(),
+            });
+        }
         let mut allows = Vec::new();
         for ac in &cfg.allow {
             let pattern = Regex::new(&ac.pattern)
@@ -1108,5 +1123,37 @@ mod tests {
         assert!(Policy::compile(&cfg_with_allow("(", "git_push_force")).is_err());
         assert!(Policy::compile(&cfg_with_allow(".*", "git_push_force")).is_err());
         assert!(Policy::compile(&cfg_with_allow("^x$", "no_such_rule")).is_err());
+    }
+
+    #[test]
+    fn project_rules_compile_with_project_prefix() {
+        let cfg = PolicyConfig {
+            project_rules: vec![PolicyRuleConfig {
+                pattern: r"terraform\s+destroy".into(),
+                action: "deny".into(),
+                reason: "prod guard".into(),
+            }],
+            ..Default::default()
+        };
+        let p = Policy::compile(&cfg).unwrap();
+        let v = p.evaluate("terraform destroy -auto-approve");
+        assert_eq!(v.action, PolicyAction::Deny);
+        assert_eq!(v.rule_name, r"project:terraform\s+destroy");
+        assert_eq!(v.reason, "prod guard");
+    }
+
+    #[test]
+    fn allow_exception_cannot_target_project_rules() {
+        // `suppresses` is validated against builtin_names(), so a project
+        // rule name is unreachable by construction — assert the validation.
+        let cfg = PolicyConfig {
+            allow: vec![crate::config::PolicyAllowConfig {
+                pattern: "^x$".into(),
+                suppresses: "project:anything".into(),
+                reason: "r".into(),
+            }],
+            ..Default::default()
+        };
+        assert!(Policy::compile(&cfg).is_err());
     }
 }
