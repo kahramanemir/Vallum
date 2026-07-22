@@ -38,3 +38,153 @@ fn config_init_project_scaffolds_and_refuses_overwrite() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("already exists"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn write_project_rule(dir: &std::path::Path) {
+    std::fs::write(
+        dir.join(".vallum.toml"),
+        "[[policy.rules]]\npattern = 'echo BLOCKME'\naction = \"deny\"\nreason = \"project deny\"\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn project_deny_rule_fires_in_direct_run_with_attribution() {
+    let (dir, cfg) = temp_repo("deny");
+    write_project_rule(&dir);
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .current_dir(&dir)
+        .args(["run", "echo", "BLOCKME"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("project deny"));
+    // policy test attributes the source.
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .current_dir(&dir)
+        .args(["policy", "test", "echo BLOCKME"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(20));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("project:"), "{stdout}");
+    assert!(stdout.contains("project rule"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn project_rule_fires_from_subdirectory_via_git_root() {
+    let (dir, cfg) = temp_repo("subdir");
+    write_project_rule(&dir);
+    let sub = dir.join("deep").join("er");
+    std::fs::create_dir_all(&sub).unwrap();
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .current_dir(&sub)
+        .args(["policy", "test", "echo BLOCKME"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(20),
+        "git-root file applies from subdirs"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn subdirectory_vallum_toml_cannot_shadow_git_root() {
+    let (dir, cfg) = temp_repo("shadow");
+    // NO file at the git root; a crafted one sits in a subdirectory.
+    let sub = dir.join("sub");
+    std::fs::create_dir_all(&sub).unwrap();
+    write_project_rule(&sub);
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .current_dir(&sub)
+        .args(["policy", "test", "echo BLOCKME"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "subdir file must be ignored");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn kill_switch_disables_project_config() {
+    let (dir, cfg) = temp_repo("kill");
+    write_project_rule(&dir);
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .env("VALLUM_NO_PROJECT_CONFIG", "1")
+        .current_dir(&dir)
+        .args(["policy", "test", "echo BLOCKME"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn rejected_project_file_never_blocks_and_never_weakens() {
+    let (dir, cfg) = temp_repo("rejected");
+    // Forbidden key: tries to disable a built-in — the whole file is ignored.
+    std::fs::write(
+        dir.join(".vallum.toml"),
+        "[policy]\ndisabled = [\"rm_rf_root\"]\n",
+    )
+    .unwrap();
+    // 1. Never blocks: an ordinary command still runs (no DoS).
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .current_dir(&dir)
+        .args(["run", "echo", "hi"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("ignoring project config"),
+        "the rejection must be loud"
+    );
+    // 2. Never weakens: the built-in the file tried to disable still fires.
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .current_dir(&dir)
+        .args(["policy", "test", "rm -rf /"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(10), "rm_rf_root must still Ask");
+    // 3. Doctor surfaces the rejection.
+    let out = Command::new(vallum_bin())
+        .env("VALLUM_CONFIG", &cfg)
+        .current_dir(&dir)
+        .args(["doctor"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("project-config"), "{stdout}");
+    assert!(stdout.contains("rejected"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn project_rule_ask_is_never_approval_cached() {
+    // Project rules are not in CACHE_ELIGIBLE_RULES (their names are
+    // project:<pattern>), so an approved Ask must not mint a cache entry.
+    let (dir, _cfg) = temp_repo("nocache");
+    let mut cfg = vallum::config::AppConfig::default();
+    cfg.audit.log_dir = Some(dir.clone());
+    vallum::approvals::record(&cfg, "echo BLOCKME", "/repo", "project:echo BLOCKME");
+    assert!(
+        vallum::approvals::approvals_path(&cfg)
+            .map(|p| !p.exists())
+            .unwrap_or(true),
+        "project-rule approvals must never be cached"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
