@@ -216,6 +216,10 @@ pub enum ConfigAction {
         /// Overwrite an existing config file
         #[arg(long)]
         force: bool,
+        /// Write a project-level ./.vallum.toml instead (tighten-only;
+        /// commit it to the repo)
+        #[arg(long)]
+        project: bool,
     },
 }
 
