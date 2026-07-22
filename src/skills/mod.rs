@@ -48,9 +48,9 @@ pub fn exit_code(report: &ScanReport, usage_error: bool) -> i32 {
     0
 }
 
-/// Discover (or take explicit) skill/context files, scan each, render, and
-/// return the process exit code.
-pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 {
+/// Discover (or take explicit) skill/context files and scan each. Returns the
+/// accumulated report and whether a usage error occurred.
+pub fn collect(explicit_paths: &[PathBuf], cfg: &AppConfig) -> (ScanReport, bool) {
     let mut usage_error = false;
 
     let targets: Vec<discover::Target> = if explicit_paths.is_empty() {
@@ -161,12 +161,18 @@ pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 
     scan::add_combined_signatures(&mut findings);
     report.findings = findings;
 
+    (report, usage_error)
+}
+
+/// Discover (or take explicit) skill/context files, scan each, render, and
+/// return the process exit code.
+pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 {
+    let (report, usage_error) = collect(explicit_paths, cfg);
     if json {
         report::render_json(&report, usage_error);
     } else {
         report::render_human(&report, usage_error);
     }
-
     exit_code(&report, usage_error)
 }
 
@@ -246,6 +252,21 @@ mod tests {
             code, 10,
             "non-UTF8 aux = Warning finding (silent skip is an evasion)"
         );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn collect_returns_report_and_usage_flag() {
+        let d = std::env::temp_dir().join(format!("vallum_skills_collect_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("s")).unwrap();
+        std::fs::write(d.join("s").join("SKILL.md"), "clean\n").unwrap();
+        let cfg = AppConfig::default();
+        let (report, usage_error) = collect(std::slice::from_ref(&d), &cfg);
+        assert!(!usage_error);
+        assert_eq!(report.files_scanned, 1);
+        let (_, usage_error) = collect(&[PathBuf::from("/no/such/file-xyz.md")], &cfg);
+        assert!(usage_error);
         let _ = std::fs::remove_dir_all(&d);
     }
 }

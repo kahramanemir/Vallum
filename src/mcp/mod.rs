@@ -37,9 +37,10 @@ pub fn exit_code(report: &ScanReport, usage_error: bool) -> i32 {
     0
 }
 
-/// Discover (or take explicit) MCP config files, scan each, render, and return
-/// the process exit code.
-pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 {
+/// Discover (or take explicit) MCP config files and scan each. Returns the
+/// accumulated report and whether a usage error occurred (missing/unreadable/
+/// malformed explicit path).
+pub fn collect(explicit_paths: &[PathBuf], cfg: &AppConfig) -> (ScanReport, bool) {
     let mut usage_error = false;
     let targets: Vec<PathBuf> = if explicit_paths.is_empty() {
         discover::existing_config_paths()
@@ -102,13 +103,18 @@ pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 
             }
         }
     }
+    (report, usage_error)
+}
 
+/// Discover (or take explicit) MCP config files, scan each, render, and return
+/// the process exit code.
+pub fn run_scan(explicit_paths: &[PathBuf], json: bool, cfg: &AppConfig) -> i32 {
+    let (report, usage_error) = collect(explicit_paths, cfg);
     if json {
         report::render_json(&report, usage_error);
     } else {
         report::render_human(&report, usage_error);
     }
-
     exit_code(&report, usage_error)
 }
 
@@ -158,5 +164,27 @@ mod tests {
     #[test]
     fn usage_error_forces_125_over_findings() {
         assert_eq!(exit_code(&report(vec![finding(Severity::High)]), true), 125);
+    }
+
+    #[test]
+    fn collect_returns_report_and_usage_flag() {
+        let dir = std::env::temp_dir().join(format!("vallum_mcp_collect_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("mcp.json");
+        std::fs::write(
+            &p,
+            r#"{"mcpServers":{"s":{"command":"npx","args":["x"],"env":{"API_KEY":"sk-live-1234567890abcdef"}}}}"#,
+        )
+        .unwrap();
+        let cfg = AppConfig::default();
+        let (report, usage_error) = collect(&[p], &cfg);
+        assert!(!usage_error);
+        assert_eq!(report.files_scanned, 1);
+        assert!(!report.findings.is_empty(), "embedded secret must be found");
+        // Missing explicit path → usage error.
+        let (_, usage_error) = collect(&[PathBuf::from("/no/such/file.json")], &cfg);
+        assert!(usage_error);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

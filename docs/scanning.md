@@ -72,3 +72,50 @@ escalation fires **across files of one skill**: an injection in one bundled file
 plus a risky command in another surfaces as a single high-severity
 `combined_signature` at the skill's `SKILL.md` (the cross-file PhantomSkill
 pattern).
+
+## Unified scan (`vallum scan`)
+
+`vallum scan` runs both scanners in one pass and adds two repo-health checks
+(unknown names in `[policy]`/`[optimizer] disabled`, and `policy.log` hash-chain
+integrity), collapsing everything into a single exit code:
+**0** clean / **10** warnings / **20** high-severity / **125** usage or config
+error (125 wins).
+
+```bash
+vallum scan                          # everything discoverable (user + repo)
+vallum scan .                        # the current repo — the CI form
+vallum scan --json .                 # aggregate JSON (carries exit_code)
+vallum scan --sarif . > scan.sarif   # SARIF 2.1.0 for GitHub code scanning
+vallum scan --full                   # also runs the doctor environment checks
+```
+
+`--sarif` cannot be combined with `--json` or `--full` (that is a usage error,
+exit 125). SARIF locations are **file-level only** in v1 — the finding models
+carry no line spans — and paths outside the working directory stay absolute, so
+they will not map to repo alerts.
+
+### GitHub Action and pre-commit
+
+The repo ships a composite action (`action.yml`) that installs the release
+binary for the runner platform, verifies it against the published `sha256`
+asset (no pipe-to-shell), runs the scan, uploads the SARIF, and applies a
+`fail-on: high | warning | never` policy:
+
+```yaml
+- uses: kahramanemir/Vallum@v0.9.0   # pin to a release tag
+  with:
+    paths: "."
+    fail-on: high
+```
+
+`.pre-commit-hooks.yaml` exposes the same scan as `id: vallum-scan`
+(`language: system` — it uses an already-installed `vallum`).
+
+### SessionStart quick scan (Claude Code, opt-in)
+
+`vallum install-hook --agent claude --session-scan` adds a `SessionStart` entry
+running `vallum scan --hook-context`. It is advisory only: silent when clean,
+otherwise one line of `additionalContext` summarising the finding count, and it
+**always exits 0** — it never blocks session start and never executes scanned
+content. `vallum uninstall-hook --agent claude` removes it along with the
+`PreToolUse` entry; `vallum doctor` reports whether it is on.

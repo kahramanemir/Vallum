@@ -115,6 +115,31 @@ command + directory, narrow rule set, 14-day TTL, HMAC-signed) and
 disabling it. Every downgrade is audit-logged. See
 [docs/guardrail.md](docs/guardrail.md).
 
+## CI & automation
+
+One command gates a repo: `vallum scan .` (exit 0 clean / 10 warnings /
+20 high / 125 error). GitHub code scanning:
+
+```yaml
+- uses: kahramanemir/Vallum@v0.9.0   # pin to a release tag
+  with:
+    paths: "."
+    fail-on: high
+```
+
+pre-commit:
+
+```yaml
+- repo: https://github.com/kahramanemir/Vallum
+  rev: v0.9.0
+  hooks:
+    - id: vallum-scan   # requires an installed vallum
+```
+
+Optional session-start scanning for Claude Code:
+`vallum install-hook --agent claude --session-scan` injects a one-line
+warning into new sessions when a scan finds issues (never blocks startup).
+
 ## Documentation
 
 | Doc | What's inside |

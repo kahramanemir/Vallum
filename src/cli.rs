@@ -97,6 +97,10 @@ parsed as vallum's.")]
         /// Replace an existing Vallum hook entry if present
         #[arg(long)]
         force: bool,
+        /// Also install the Claude Code SessionStart quick scan (opt-in;
+        /// Claude only): runs `vallum scan --hook-context` at session start
+        #[arg(long)]
+        session_scan: bool,
     },
     /// Remove the Vallum pre-exec hook from an agent's config
     UninstallHook {
@@ -143,6 +147,33 @@ Examples:
     Skills {
         #[command(subcommand)]
         action: SkillsAction,
+    },
+    /// Unified static scan: MCP configs + skills/context files + config
+    /// validity + policy.log chain — one exit code, CI-ready
+    #[command(after_help = "\
+Examples:
+  vallum scan                    scan everything discoverable (user + repo)
+  vallum scan .                  scan the current repo (CI)
+  vallum scan --sarif . > scan.sarif   GitHub code scanning output
+  vallum scan --full             also run environment checks (local use)
+
+Exit codes: 0 clean, 10 warnings, 20 high-severity, 125 usage/config error.")]
+    Scan {
+        /// Emit aggregate JSON instead of human output
+        #[arg(long)]
+        json: bool,
+        /// Emit SARIF 2.1.0 (GitHub code scanning)
+        #[arg(long)]
+        sarif: bool,
+        /// Also run the environment half of doctor (not valid with --sarif)
+        #[arg(long)]
+        full: bool,
+        /// Internal: SessionStart quick-scan mode (always exits 0)
+        #[arg(long = "hook-context", hide = true)]
+        hook_context: bool,
+        /// Files or directories to scan; omit to auto-discover
+        #[arg(value_name = "PATH")]
+        paths: Vec<std::path::PathBuf>,
     },
     /// Inspect the audit logs
     Log {

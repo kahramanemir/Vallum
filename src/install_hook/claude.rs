@@ -111,12 +111,98 @@ pub fn remove_vallum(settings: &mut Value) -> bool {
     before != arr.len()
 }
 
+/// The SessionStart quick-scan entry (opt-in via `--session-scan`).
+fn session_scan_entry() -> Value {
+    json!({
+        "hooks": [
+            { "type": "command", "command": "vallum scan --hook-context" }
+        ]
+    })
+}
+
+fn entry_is_session_scan(entry: &Value) -> bool {
+    let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) else {
+        return false;
+    };
+    hooks.iter().any(|h| {
+        h.get("command")
+            .and_then(|c| c.as_str())
+            .map(|s| s.contains("vallum scan --hook-context"))
+            .unwrap_or(false)
+    })
+}
+
+/// True if a session-scan entry is installed under hooks.SessionStart.
+pub fn has_session_scan(settings: &Value) -> bool {
+    settings
+        .get("hooks")
+        .and_then(|h| h.get("SessionStart"))
+        .and_then(|p| p.as_array())
+        .map(|arr| arr.iter().any(entry_is_session_scan))
+        .unwrap_or(false)
+}
+
+/// Add the SessionStart quick-scan entry. No-op unless `force` when present.
+pub fn add_session_scan(settings: &mut Value, force: bool) -> Result<bool, String> {
+    if has_session_scan(settings) {
+        if !force {
+            return Ok(false);
+        }
+        remove_session_scan(settings);
+    }
+    let hooks = settings
+        .as_object_mut()
+        .ok_or_else(|| "settings root is not a JSON object".to_string())?
+        .entry("hooks")
+        .or_insert_with(|| json!({}));
+    let entry = hooks
+        .as_object_mut()
+        .ok_or_else(|| "the \"hooks\" key is not a JSON object".to_string())?
+        .entry("SessionStart")
+        .or_insert_with(|| json!([]));
+    let arr = entry
+        .as_array_mut()
+        .ok_or_else(|| "hooks.SessionStart is not a JSON array".to_string())?;
+    arr.push(session_scan_entry());
+    Ok(true)
+}
+
+/// Remove every SessionStart entry carrying the quick-scan command.
+pub fn remove_session_scan(settings: &mut Value) -> bool {
+    let Some(arr) = settings
+        .get_mut("hooks")
+        .and_then(|h| h.get_mut("SessionStart"))
+        .and_then(|p| p.as_array_mut())
+    else {
+        return false;
+    };
+    let before = arr.len();
+    arr.retain(|e| !entry_is_session_scan(e));
+    before != arr.len()
+}
+
+/// Remove both the PreToolUse entry and the SessionStart quick-scan entry.
+/// Bitwise-or on purpose: both removals must run (no short-circuit).
+pub fn remove_all_vallum(settings: &mut Value) -> bool {
+    remove_vallum(settings) | remove_session_scan(settings)
+}
+
 pub fn install(level: Level, force: bool) -> Result<String, String> {
     super::merge_install(&settings_path(level)?, force, add_vallum, "Claude Code")
 }
 
+/// Install the SessionStart quick-scan entry (used by `--session-scan`).
+pub fn install_session_scan(level: Level, force: bool) -> Result<String, String> {
+    super::merge_install(
+        &settings_path(level)?,
+        force,
+        add_session_scan,
+        "Claude Code (SessionStart scan)",
+    )
+}
+
 pub fn uninstall(level: Level) -> Result<String, String> {
-    super::merge_uninstall(&settings_path(level)?, remove_vallum, "Claude Code")
+    super::merge_uninstall(&settings_path(level)?, remove_all_vallum, "Claude Code")
 }
 
 #[cfg(test)]
@@ -254,5 +340,29 @@ mod tests {
             !add_vallum(&mut settings, false).unwrap(),
             "second run is a no-op"
         );
+    }
+
+    #[test]
+    fn session_scan_add_remove_roundtrip() {
+        let mut settings = json!({});
+        assert!(add_session_scan(&mut settings, false).unwrap());
+        assert!(has_session_scan(&settings));
+        // Second add without force is a no-op.
+        assert!(!add_session_scan(&mut settings, false).unwrap());
+        // PreToolUse entries are untouched by session-scan management.
+        assert!(!has_vallum_hook(&settings));
+        assert!(remove_session_scan(&mut settings));
+        assert!(!has_session_scan(&settings));
+        assert!(!remove_session_scan(&mut settings));
+    }
+
+    #[test]
+    fn uninstall_removes_both_entry_kinds() {
+        let mut settings = json!({});
+        add_vallum(&mut settings, false).unwrap();
+        add_session_scan(&mut settings, false).unwrap();
+        assert!(remove_all_vallum(&mut settings));
+        assert!(!has_vallum_hook(&settings));
+        assert!(!has_session_scan(&settings));
     }
 }

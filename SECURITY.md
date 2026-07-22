@@ -613,6 +613,19 @@ at the `SKILL.md`.
   measured ToxicSkills signature working as designed; review such findings in
   context rather than suppressing them.
 
+### Unified scan, SARIF, and CI (honest scope)
+
+`vallum scan` aggregates the MCP and skills scanners plus two repo-health
+checks (config hygiene, policy.log chain). SARIF output is **file-level
+only** in v1 — the finding models carry no line spans, so GitHub annotates
+the top of the file, not the offending line. Files outside the working
+directory keep absolute paths and do not map to repo alerts. The GitHub
+Action installs Vallum by downloading the release archive for the runner
+platform and verifying it against the published sha256 asset — no
+pipe-to-shell. The SessionStart quick scan is advisory only: it injects a
+one-line context warning and always exits 0; it never blocks a session and
+never executes any scanned content.
+
 ## Supply-chain integrity
 
 Release binaries are built in GitHub Actions by the `dist` pipeline. Each

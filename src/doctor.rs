@@ -653,6 +653,20 @@ pub fn run() -> i32 {
             },
         ),
         check_hook(&settings_path),
+        {
+            let installed = crate::install_hook::read_settings(&settings_path)
+                .map(|s| crate::install_hook::claude::has_session_scan(&s))
+                .unwrap_or(false);
+            Check::new(
+                "session-scan",
+                Status::Ok,
+                if installed {
+                    "on — SessionStart quick scan installed"
+                } else {
+                    "off (opt-in: vallum install-hook --agent claude --session-scan)"
+                },
+            )
+        },
         check_agent_hook_at(
             "hook (cursor)",
             crate::install_hook::cursor::config_path(),

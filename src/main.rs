@@ -399,6 +399,7 @@ fn main() {
             user,
             project,
             force,
+            session_scan,
         } => {
             let level = match resolve_level(*user, *project) {
                 Ok(l) => l,
@@ -418,7 +419,7 @@ fn main() {
                 }
             }
             #[cfg(unix)]
-            if agent.is_none() && !*project && picker_available() {
+            if agent.is_none() && !*project && !*session_scan && picker_available() {
                 interactive_install(level, *force); // exits the process
             }
             // Bare invocation without a TTY (pipes, CI, non-unix) keeps the
@@ -429,6 +430,19 @@ fn main() {
                 Err(e) => {
                     eprintln!("install-hook: {e}");
                     std::process::exit(125);
+                }
+            }
+            if *session_scan {
+                if !matches!(resolved, vallum::cli::AgentArg::Claude) {
+                    eprintln!("install-hook: --session-scan is Claude Code-only");
+                    std::process::exit(125);
+                }
+                match vallum::install_hook::claude::install_session_scan(level, *force) {
+                    Ok(msg) => println!("{msg}"),
+                    Err(e) => {
+                        eprintln!("install-hook: {e}");
+                        std::process::exit(125);
+                    }
                 }
             }
         }
@@ -546,6 +560,40 @@ fn main() {
                 std::process::exit(vallum::skills::run_scan(paths, *json, &config));
             }
         },
+        Commands::Scan {
+            json,
+            sarif,
+            full,
+            hook_context,
+            paths,
+        } => {
+            // Flag combinations are validated manually (not via clap
+            // conflicts_with) so the documented 125 contract holds instead of
+            // clap's usage-error exit 2.
+            if *sarif && (*full || *json) {
+                eprintln!("scan: --sarif cannot be combined with --full or --json");
+                std::process::exit(125);
+            }
+            if *hook_context {
+                // Degrades to silence on any problem; never breaks session start.
+                std::process::exit(vallum::scan::run_hook_context());
+            }
+            let config = match AppConfig::load() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Config Error: {e}");
+                    std::process::exit(125);
+                }
+            };
+            let format = if *sarif {
+                vallum::scan::OutputFormat::Sarif
+            } else if *json {
+                vallum::scan::OutputFormat::Json
+            } else {
+                vallum::scan::OutputFormat::Human
+            };
+            std::process::exit(vallum::scan::run(paths, format, *full, &config));
+        }
         Commands::Log { action } => match action {
             vallum::cli::LogAction::Verify { expect_head } => {
                 let config = match AppConfig::load() {
