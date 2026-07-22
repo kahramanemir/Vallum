@@ -399,6 +399,7 @@ fn main() {
             user,
             project,
             force,
+            session_scan,
         } => {
             let level = match resolve_level(*user, *project) {
                 Ok(l) => l,
@@ -418,7 +419,7 @@ fn main() {
                 }
             }
             #[cfg(unix)]
-            if agent.is_none() && !*project && picker_available() {
+            if agent.is_none() && !*project && !*session_scan && picker_available() {
                 interactive_install(level, *force); // exits the process
             }
             // Bare invocation without a TTY (pipes, CI, non-unix) keeps the
@@ -429,6 +430,19 @@ fn main() {
                 Err(e) => {
                     eprintln!("install-hook: {e}");
                     std::process::exit(125);
+                }
+            }
+            if *session_scan {
+                if !matches!(resolved, vallum::cli::AgentArg::Claude) {
+                    eprintln!("install-hook: --session-scan is Claude Code-only");
+                    std::process::exit(125);
+                }
+                match vallum::install_hook::claude::install_session_scan(level, *force) {
+                    Ok(msg) => println!("{msg}"),
+                    Err(e) => {
+                        eprintln!("install-hook: {e}");
+                        std::process::exit(125);
+                    }
                 }
             }
         }

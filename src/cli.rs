@@ -97,6 +97,10 @@ parsed as vallum's.")]
         /// Replace an existing Vallum hook entry if present
         #[arg(long)]
         force: bool,
+        /// Also install the Claude Code SessionStart quick scan (opt-in;
+        /// Claude only): runs `vallum scan --hook-context` at session start
+        #[arg(long)]
+        session_scan: bool,
     },
     /// Remove the Vallum pre-exec hook from an agent's config
     UninstallHook {
