@@ -513,6 +513,22 @@ read the secret can mint entries (unchanged, see the token section above);
 there is no per-approval opt-out UI in the hook protocol — disable with
 `[security] approval_cache = false` if that trade-off is wrong for you.
 
+## Project-level config (honest scope)
+
+`.vallum.toml` at the git root is treated as **attacker-adjacent input** — it
+arrives with any cloned repo. It is therefore restricted to a whitelist of
+exactly one capability: additional `ask`/`deny` rules (≤ 64 rules, ≤ 512-byte
+patterns). Every other key is rejected by name — including `[policy]
+disabled`, `[[policy.allow]]`, `[security]`, `[audit]` (log redirection), and
+`[scrubber]` (whose pattern+replacement pairs would otherwise be an
+output-rewriting channel). A rejected file is loudly ignored: gating continues
+on the global config alone, which can never fail open (the file can only
+tighten) and denies a malicious repo the ability to DoS `vallum run`. Worst
+case from a hostile `.vallum.toml`: extra Asks/Denies inside that repo. Only
+the git-root file is read (a subdirectory file cannot shadow it); global allow
+exceptions cannot suppress project rules (they only target built-in names);
+project-rule Asks are never approval-cached.
+
 ## MCP configuration scanning
 
 `vallum mcp scan` is a **static, read-only** check over MCP server

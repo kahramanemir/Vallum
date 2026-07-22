@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Project-level config.** A repo-committed `.vallum.toml` (git root only)
+  can add `ask`/`deny` rules — tighten-only by construction: every other key
+  is rejected by name and a broken file is loudly ignored (never blocks,
+  never weakens). Provenance in `vallum doctor` (`project-config`), rules
+  attributed as `project:<pattern>`, `vallum config init --project`
+  scaffold, `VALLUM_NO_PROJECT_CONFIG=1` kill switch.
 - **CI-native scanning.** New unified `vallum scan` (MCP + skills + config
   hygiene + policy.log chain; exit 0/10/20/125), `--sarif` output for GitHub
   code scanning (file-level locations in v1), a committed composite GitHub

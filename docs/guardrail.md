@@ -199,6 +199,16 @@ any tampering, expiry, or mismatch is a cache miss that re-asks. Inspect with
 `[security] approval_cache = false`. Cache hits are logged as
 `ALLOW [approval_cache:<rule>]`.
 
+## Project-level rules (.vallum.toml)
+
+A repo can commit additional `ask`/`deny` rules in `.vallum.toml` at the git
+root — and only that; every other key is rejected and the file ignored with a
+warning. Discovery: the nearest ancestor with `.git` (worktree `.git` files
+included); without a git repo, the current directory. Rules compile as
+`project:<pattern>` and show up in `policy test`, audit lines, and
+`vallum doctor` (`project-config` check). Scaffold: `vallum config init
+--project`. Kill switch: `VALLUM_NO_PROJECT_CONFIG=1`.
+
 ## Testing a rule
 
 Test a rule without running the command:

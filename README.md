@@ -140,6 +140,25 @@ Optional session-start scanning for Claude Code:
 `vallum install-hook --agent claude --session-scan` injects a one-line
 warning into new sessions when a scan finds issues (never blocks startup).
 
+## Commit policy with your repo
+
+Drop a `.vallum.toml` at the repo root and PR-review it like code — every
+hooked agent and `vallum scan .` in CI enforce it:
+
+```toml
+[[policy.rules]]
+pattern = 'terraform\s+destroy'
+action = "deny"
+reason = "prod guard"
+```
+
+Project config is **tighten-only**: it can add `ask`/`deny` rules and nothing
+else. It cannot disable rules, add allow exceptions, touch logging, or change
+any setting — a cloned repo can never weaken your guardrail. A file that tries
+is ignored with a warning (`vallum doctor` shows why). Scaffold one with
+`vallum config init --project`; opt out per shell with
+`VALLUM_NO_PROJECT_CONFIG=1`.
+
 ## Documentation
 
 | Doc | What's inside |
