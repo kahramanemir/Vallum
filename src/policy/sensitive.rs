@@ -22,7 +22,11 @@ pub(crate) const PATH_END: &str = r#"(?:[\s'";]|$)"#;
 pub(crate) fn hard_re() -> &'static str {
     concat!(
         r#"(?:"#,
-        r#"\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)"#,
+        // Any `id_*` under `.ssh`, at any depth, minus `.pub`. The `regex`
+        // crate has no lookahead, so the exclusion is by construction: the
+        // trailing class cannot span a `.`, so `id_rsa.pub` never reaches
+        // `PATH_END` and never matches.
+        r#"\.ssh/(?:[^\s'";]*/)?id_[a-z0-9_]+"#,
         r#"|\.aws/credentials"#,
         r#"|/etc/shadow"#,
         r#"|approval\.secret"#,
@@ -125,6 +129,10 @@ mod tests {
         // (raw form inside a command, expanded lowercase path, is hard?)
         let cases: &[(&str, &str, bool)] = &[
             ("~/.ssh/id_ed25519", "/users/x/.ssh/id_ed25519", true),
+            // A key is any `id_*` under `.ssh`, not one of four canonical
+            // names, and not only at the top level.
+            ("~/.ssh/id_rsa_backup", "/users/x/.ssh/id_rsa_backup", true),
+            ("~/.ssh/sub/id_rsa", "/users/x/.ssh/sub/id_rsa", true),
             ("~/.aws/credentials", "/users/x/.aws/credentials", true),
             ("/etc/shadow", "/etc/shadow", true),
             ("~/.netrc", "/users/x/.netrc", true),
@@ -150,6 +158,11 @@ mod tests {
             ("~/.gnupg/secring.gpg", "/users/x/.gnupg/secring.gpg", true),
             // Negatives: public key, egress-only tier, ordinary files.
             ("~/.ssh/id_rsa.pub", "/users/x/.ssh/id_rsa.pub", false),
+            (
+                "~/.ssh/id_ed25519.pub",
+                "/users/x/.ssh/id_ed25519.pub",
+                false,
+            ),
             ("~/.ssh/config", "/users/x/.ssh/config", false),
             ("./.env", "/users/x/proj/.env", false),
             ("~/.kube/config", "/users/x/.kube/config", false),
