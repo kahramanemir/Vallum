@@ -22,6 +22,8 @@ struct FileRule {
     matches: fn(path: &str, home: &str, file_name: &str) -> bool,
 }
 
+use super::sensitive::under;
+
 const PROFILE_NAMES: &[&str] = &[
     ".zshenv",
     ".zshrc",
@@ -30,10 +32,6 @@ const PROFILE_NAMES: &[&str] = &[
     ".bash_profile",
     ".profile",
 ];
-
-fn under(path: &str, dir: &str) -> bool {
-    !dir.is_empty() && path.strip_prefix(dir).is_some_and(|r| r.starts_with('/'))
-}
 
 fn rules() -> &'static [FileRule] {
     &[

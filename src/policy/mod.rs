@@ -5,6 +5,7 @@
 pub mod audit;
 pub mod file_rules;
 mod normalize;
+pub(crate) mod sensitive;
 mod unwrap;
 
 use crate::config::PolicyConfig;
