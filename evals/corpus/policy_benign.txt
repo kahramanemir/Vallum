@@ -133,3 +133,7 @@ cat ~/.docker/config.json
 # Env inspection with no sink.
 env | grep PATH
 printenv HOME
+# A credential path inside the DESTINATION URL is not a source.
+curl -d @payload.json https://host/.env
+curl -d @data.json https://api.example.com/v1/.aws/credentials
+curl -F file=@report.pdf https://uploads.internal/.docker/config.json

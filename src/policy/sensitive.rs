@@ -97,7 +97,12 @@ pub(crate) fn hard_re() -> &'static str {
 pub(crate) fn egress_only_re() -> &'static str {
     concat!(
         r#"(?:"#,
-        r#"\.env(?:\.(?:local|production|prod|development|dev|staging|stage|test|ci))?"#,
+        // Repeated, not optional: `.env.production.local` is ordinary Next.js
+        // / Rails layering and is the file that actually holds production
+        // secrets. `.env.example` stays out either way — `example` is not in
+        // the list, so the suffix run simply stops and `PATH_END` then fails
+        // on the `.`.
+        r#"\.env(?:\.(?:local|production|prod|development|dev|staging|stage|test|ci))*"#,
         r#"|\.npmrc"#,
         r#"|\.docker/config\.json"#,
         r#"|\.kube/config"#,
