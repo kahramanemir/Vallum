@@ -3,6 +3,7 @@
 //! joined command line — no shell parsing (same posture as the scrubber).
 
 pub mod audit;
+mod creds;
 pub mod file_rules;
 mod normalize;
 pub(crate) mod sensitive;
