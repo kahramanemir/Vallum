@@ -9,6 +9,7 @@ pub(crate) mod sensitive;
 mod unwrap;
 
 use crate::config::PolicyConfig;
+use crate::policy::sensitive::{anchored, hard_re};
 use regex::Regex;
 use serde::Serialize;
 use std::sync::OnceLock;
@@ -368,7 +369,10 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 r"(?i)\bchmod\s+(?:-\S+\s+)*(?:-R|--recursive)\s+(?:-\S+\s+)*0?777\b|\bchmod\s+(?:-\S+\s+)*0?777\s+(?:-\S+\s+)*(?:-R|--recursive)\b|\bchmod\s+(?:-R|--recursive)\s+a\+rwx\b",
                 "Recursively granting world-writable permissions on a broad path"),
             ask("read_sensitive_creds",
-                r#"(?i)\b(?:cat|less|more|head|tail|bat|base64|xxd|strings)\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:[\s'";]|$)|\.aws/credentials(?:[\s'";]|$)|/etc/shadow(?:[\s'";]|$)|approval\.secret(?:[\s'";]|$))"#,
+                &format!(
+                    r#"(?i)\b(?:cat|less|more|head|tail|bat|base64|xxd|strings)\b[^|\n]*{src}"#,
+                    src = anchored(hard_re()),
+                ),
                 "Reading a private key, credential file, or shadow password file"),
             ask("git_push_force",
                 r"(?i)\bgit\s+push\b[^|\n]*(?:\s--force(?:[\s;&|)`]|$)|\s-f(?:[\s;&|)`]|$)|\s\+\w)",
@@ -377,7 +381,10 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
                 r"(?i)\bfind\s+(?:-\S+\s+)*(?:/|~|\$HOME|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)(?:/\*?)?)\s+[^|\n]*?-delete\b",
                 "find -delete rooted at a root, home, or system path"),
             ask("shred_sensitive",
-                r"(?i)\bshred\b[^|\n]*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)|\.aws/credentials|/etc/(?:shadow|passwd))",
+                &format!(
+                    r#"(?i)\bshred\b[^|\n]*{src}"#,
+                    src = anchored(&format!("(?:{hard}|/etc/passwd)", hard = hard_re())),
+                ),
                 "Shredding a private key, credential file, or system password file"),
             ask("truncate_system",
                 r"(?i)\btruncate\b[^|\n]*-s\s*0\b[^|\n]*/(?:etc|bin|sbin|usr|var|lib|boot|root)(?:/|\s|$)",
@@ -1037,6 +1044,49 @@ mod tests {
         let v = p.evaluate("cat ~/.vallum/logs/approval.secret");
         assert_eq!(v.action, PolicyAction::Ask);
         assert_eq!(v.rule_name, "read_sensitive_creds");
+    }
+
+    #[test]
+    fn widened_credential_reads_ask() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "cat ~/.netrc",
+            "cat ~/.git-credentials",
+            "cat /proc/self/environ",
+            "head -c 200 /proc/1234/environ",
+            "cat ~/.claude/.credentials.json",
+            "cat ~/.codex/auth.json",
+            "cat ~/.gemini/oauth_creds.json",
+            "cat ~/.config/gh/hosts.yml",
+            "base64 ~/.gnupg/secring.gpg",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd} should Ask");
+            assert_eq!(v.rule_name, "read_sensitive_creds", "{cmd}");
+        }
+    }
+
+    #[test]
+    fn egress_only_paths_are_free_to_read() {
+        // The whole point of the two-tier split: reading these locally is
+        // ordinary development work. Only sending them is gated (Task 4).
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "cat .env",
+            "cat ~/.npmrc",
+            "cat ~/.kube/config",
+            "cat ~/.docker/config.json",
+        ] {
+            assert_eq!(p.evaluate(cmd).action, PolicyAction::Allow, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn shred_covers_widened_credentials() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        let v = p.evaluate("shred -u ~/.git-credentials");
+        assert_eq!(v.action, PolicyAction::Ask);
+        assert_eq!(v.rule_name, "shred_sensitive");
     }
 
     #[test]

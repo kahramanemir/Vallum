@@ -20,8 +20,6 @@
 /// fragment ends up anchored on one side only — the precise defect
 /// [`anchored`] exists to prevent. Go through [`anchored`]; reaching for this
 /// constant is unsupported.
-// Remove when read_sensitive_creds compiles from this.
-#[allow(dead_code)]
 pub(crate) const PATH_START: &str = r#"(?:^|[\s'";=@/])"#;
 
 /// Trailing boundary every path fragment is composed with. A sensitive path
@@ -32,8 +30,6 @@ pub(crate) const PATH_START: &str = r#"(?:^|[\s'";=@/])"#;
 /// **Not for direct use.** Same contract as [`PATH_START`]: build every
 /// matcher with [`anchored`], which supplies both boundaries around a grouped
 /// fragment. Interpolating this constant directly is unsupported.
-// Remove when read_sensitive_creds compiles from this.
-#[allow(dead_code)]
 pub(crate) const PATH_END: &str = r#"(?:[\s'";]|$)"#;
 
 /// Wrap a boundary-free fragment (or an alternation of several) in both
@@ -45,8 +41,6 @@ pub(crate) const PATH_END: &str = r#"(?:[\s'";]|$)"#;
 /// silently loses its end boundary and the right arm its start boundary.
 /// Composing several fragments into one alternation is the whole point of
 /// taking a `&str` here, so the group is not optional.
-// Remove when read_sensitive_creds compiles from this.
-#[allow(dead_code)]
 pub(crate) fn anchored(fragment: &str) -> String {
     format!("{PATH_START}(?:{fragment}){PATH_END}")
 }
@@ -61,8 +55,6 @@ pub(crate) fn anchored(fragment: &str) -> String {
 /// before calling [`is_hard_path`], which is why `file_rules.rs` carries the
 /// mirror-image assertions. The case rows in
 /// `hard_paths_agree_across_representations` pin both directions.
-// Remove when read_sensitive_creds compiles from this.
-#[allow(dead_code)]
 pub(crate) fn hard_re() -> &'static str {
     concat!(
         r#"(?:"#,
