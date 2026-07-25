@@ -8,6 +8,7 @@ mod entropy;
 mod injection;
 mod markers;
 mod normalize;
+pub mod pii;
 mod secrets;
 
 pub use injection::scrub_injections;
