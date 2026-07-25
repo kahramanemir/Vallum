@@ -33,7 +33,7 @@ interpreters).
 
 ## Built-in rules
 
-The 26 built-in rules (all default to `Ask`):
+The 28 built-in rules (all default to `Ask`):
 
 | Rule | Catches |
 |---|---|
@@ -45,13 +45,15 @@ The 26 built-in rules (all default to `Ask`):
 | `mkfs_device` | Creating a filesystem on a device (destroys existing data) |
 | `fork_bomb` | Classic `:(){ :\|:& };:` fork bomb |
 | `chmod_777_recursive` | Recursively granting world-writable permissions |
-| `read_sensitive_creds` | Reading a private key, credential file, `/etc/shadow`, or Vallum's `approval.secret` |
+| `read_sensitive_creds` | Reading a private key (`~/.ssh/id_*`), `~/.aws/credentials`, `~/.netrc`, `~/.git-credentials`, `/proc/*/environ`, an agent OAuth token (`~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.gemini/oauth_creds.json`), the `gh` CLI token, `~/.gnupg/*`, `/etc/shadow`, or Vallum's `approval.secret` |
 | `git_push_force` | Force-push that can overwrite remote history |
 | `find_delete_root` | `find -delete` rooted at a root/home/system path |
 | `shred_sensitive` | Shredding a key, credential, or system password file |
 | `truncate_system` | Truncating a system file to zero bytes |
 | `xargs_rm_force` | Piping into a recursive force-delete via `xargs rm` |
 | `reverse_shell` | Reverse shell (`/dev/tcp`, `nc -e`, `socat exec:`) |
+| `egress_sensitive_file` | Sending a credential file, key, or secret directory to a network destination (`curl -d/-F/-T`, `wget --post-file`, `scp`/`rsync` to a remote, `nc`/`ssh` with a stdin redirect) |
+| `egress_env_dump` | Piping the environment (`env`, `printenv`, `export -p`) into a network sink |
 | `git_clean_force` | `git clean -f` permanently deletes untracked files |
 | `chown_recursive_root` | Recursive `chown` on a root/home/system path |
 | `write_agent_config` | A shell command writing to an agent config/hook file (`.claude/settings.json` and friends) — possible hook injection |
@@ -92,7 +94,7 @@ The nine file rules (all `Ask`, like the shell built-ins):
 | `file_write_systemd_user` | Write | Under `~/.config/systemd/user/` |
 | `file_write_agent_config` | Write | An agent config/hook file (`.claude/settings(.local).json`, `.cursor/hooks.json`, `.codex/hooks.json`/`config.toml`, `.gemini/settings.json`, `.mcp.json`) |
 | `file_write_vallum` | Write | Anything under `~/.vallum/` — Vallum's own config/state (guardrail self-disable) |
-| `file_read_sensitive` | Read | A private key (`~/.ssh/id_*`, not `.pub`), `~/.aws/credentials`, `/etc/shadow`, or an `approval.secret` |
+| `file_read_sensitive` | Read | The same set as `read_sensitive_creds`: a private key (`~/.ssh/id_*`, not `.pub`), `~/.aws/credentials`, `~/.netrc`, `~/.git-credentials`, `/proc/*/environ`, an agent OAuth token, the `gh` CLI token, `~/.gnupg/*`, `/etc/shadow`, or an `approval.secret` |
 
 Path matching is **lexical**: `~`/`$HOME` are expanded and `.`/`..` are
 resolved textually, but the filesystem is never touched — symlinks are **not**
@@ -178,7 +180,7 @@ suppresses = "git_push_force"
 reason = "release flow"
 ```
 
-Rules: `suppresses` must name one of the 26 shell built-ins; the pattern must
+Rules: `suppresses` must name one of the 28 shell built-ins; the pattern must
 compile and must not match the empty string (`.*`-class patterns are rejected
 at config load); the exception applies to the raw command line only — an
 obfuscated command that fires via de-obfuscation gets no suppression; all
