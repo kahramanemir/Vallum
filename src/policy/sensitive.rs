@@ -140,8 +140,6 @@ fn is_proc_environ(path: &str) -> bool {
 /// `path` and `home` are expanded, absolute and ASCII-lowercased by
 /// `file_rules::evaluate`. Never touches the filesystem, never resolves
 /// symlinks — the posture `file_rules.rs` already documents.
-// Remove when file_read_sensitive delegates to this.
-#[allow(dead_code)]
 pub(crate) fn is_hard_path(path: &str, home: &str, file_name: &str) -> bool {
     let at_home = |suffix: &str| !home.is_empty() && path == format!("{home}/{suffix}");
     (under(path, &format!("{home}/.ssh"))

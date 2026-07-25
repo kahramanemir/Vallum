@@ -111,14 +111,11 @@ fn rules() -> &'static [FileRule] {
             name: "file_read_sensitive",
             op: FileOp::Read,
             reason: "Reading a private key, credential file, or shadow password file",
-            matches: |path, home, file_name| {
-                (under(path, &format!("{home}/.ssh"))
-                    && file_name.starts_with("id_")
-                    && !file_name.ends_with(".pub"))
-                    || (!home.is_empty() && path == format!("{home}/.aws/credentials"))
-                    || path == "/etc/shadow"
-                    || file_name == "approval.secret"
-            },
+            // The shared vocabulary, so this rule and the shell rules that
+            // compile from `sensitive::hard_re()` can never drift apart.
+            // A plain `fn` pointer, not a forwarding closure: the latter trips
+            // `clippy::redundant_closure`, and the gate runs `-D warnings`.
+            matches: super::sensitive::is_hard_path,
         },
     ]
 }
@@ -377,6 +374,41 @@ mod tests {
         assert!(evaluate(FileOp::Write, "~/.zshenv", &disabled).is_none());
         // Other rules unaffected.
         assert!(evaluate(FileOp::Write, "~/.ssh/config", &disabled).is_some());
+    }
+
+    #[test]
+    fn widened_file_reads_ask() {
+        let h = home();
+        for p in [
+            format!("{h}/.netrc"),
+            format!("{h}/.git-credentials"),
+            format!("{h}/.claude/.credentials.json"),
+            format!("{h}/.codex/auth.json"),
+            format!("{h}/.gemini/oauth_creds.json"),
+            format!("{h}/.config/gh/hosts.yml"),
+            format!("{h}/.gnupg/secring.gpg"),
+            "/proc/self/environ".to_string(),
+        ] {
+            assert_eq!(
+                read_hit(&p),
+                Some("file_read_sensitive"),
+                "{p} should be gated"
+            );
+        }
+    }
+
+    #[test]
+    fn egress_only_files_are_free_to_read_via_file_tool() {
+        // Two-tier split, lexical side: reading these is ordinary development
+        // work. Only sending them over the network is gated.
+        let h = home();
+        for p in [
+            format!("{h}/proj/.env"),
+            format!("{h}/.npmrc"),
+            format!("{h}/.kube/config"),
+        ] {
+            assert_eq!(read_hit(&p), None, "{p}");
+        }
     }
 
     #[test]
