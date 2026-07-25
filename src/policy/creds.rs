@@ -15,10 +15,6 @@
 //! Not a shell parser — same posture as the rest of `policy`. Variable
 //! indirection still gets through; this is defense-in-depth, not a sandbox.
 
-// Removed in the commit that attaches this guard to `read_sensitive_creds`;
-// until then nothing outside the tests calls into the module.
-#![allow(dead_code)]
-
 use crate::policy::sensitive::{anchored, hard_re};
 use regex::Regex;
 use std::sync::OnceLock;
