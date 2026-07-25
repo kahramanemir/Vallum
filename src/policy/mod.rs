@@ -39,6 +39,20 @@ pub struct PolicyRule {
     pub pattern: Regex,
     pub action: PolicyAction,
     pub reason: String,
+    /// Optional Rust-side predicate applied to the SAME view the pattern
+    /// matched. Exists because the `regex` crate has no lookaround: a rule
+    /// like `read_sensitive_creds` needs "a protected path is named, and the
+    /// naming command is not exempt", and only the first half is a regex.
+    /// `None` for every rule that is pure-regex — the overwhelming majority.
+    pub guard: Option<fn(&str) -> bool>,
+}
+
+impl PolicyRule {
+    /// A rule fires only when its pattern matches AND its guard accepts the
+    /// same string. Guard-less rules behave exactly as the bare pattern did.
+    fn matches(&self, s: &str) -> bool {
+        self.pattern.is_match(s) && self.guard.is_none_or(|g| g(s))
+    }
 }
 
 /// A compiled `[[policy.allow]]` entry: suppresses exactly one named built-in
@@ -94,6 +108,7 @@ impl Policy {
                 pattern,
                 action,
                 reason: rc.reason.clone(),
+                guard: None,
             });
         }
         for rc in &cfg.project_rules {
@@ -109,6 +124,7 @@ impl Policy {
                 pattern,
                 action,
                 reason: rc.reason.clone(),
+                guard: None,
             });
         }
         let mut allows = Vec::new();
@@ -154,11 +170,7 @@ impl Policy {
             let normalized = normalize_for_match(&view);
             let normalized = (normalized != view).then_some(normalized);
             for rule in &self.rules {
-                if rule.pattern.is_match(&view)
-                    || normalized
-                        .as_deref()
-                        .is_some_and(|n| rule.pattern.is_match(n))
-                {
+                if rule.matches(&view) || normalized.as_deref().is_some_and(|n| rule.matches(n)) {
                     if let Some(exc) = self
                         .allows
                         .iter()
@@ -322,7 +334,19 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
             pattern: Regex::new(pat).unwrap(),
             action: PolicyAction::Ask,
             reason: reason.to_string(),
+            guard: None,
         };
+        // Same as `ask`, plus a Rust-side predicate the view must also
+        // satisfy. Used where the dangerous-ness depends on something a
+        // lookaround-free regex cannot express.
+        let _ask_guarded =
+            |name: &str, pat: &str, guard: fn(&str) -> bool, reason: &str| PolicyRule {
+                name: name.to_string(),
+                pattern: Regex::new(pat).unwrap(),
+                action: PolicyAction::Ask,
+                reason: reason.to_string(),
+                guard: Some(guard),
+            };
         vec![
             ask("rm_rf_root",
                 r"(?i)\brm\s+(?:-\S+\s+)*(?:-\S*(?:r\S*f|f\S*r)\S*|(?:-\S*r\S*|--recursive)\s+(?:-\S+\s+)*(?:-\S*f\S*|--force)|(?:-\S*f\S*|--force)\s+(?:-\S+\s+)*(?:-\S*r\S*|--recursive)|--recursive|--force)\s+(?:-\S+\s+)*(?:(?:/|~|\$HOME)(?:/?\*?)|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)(?:/\*?)?)(?:[\s;&|)`]|$)",
@@ -525,6 +549,38 @@ mod tests {
             project_rules: vec![],
             disabled: vec![],
         }
+    }
+
+    #[test]
+    fn a_guard_that_declines_suppresses_its_rule() {
+        fn never(_: &str) -> bool {
+            false
+        }
+        fn always(_: &str) -> bool {
+            true
+        }
+        let declining = PolicyRule {
+            name: "test_guarded".to_string(),
+            pattern: Regex::new("dangerous").unwrap(),
+            action: PolicyAction::Ask,
+            reason: "test".to_string(),
+            guard: Some(never),
+        };
+        let accepting = PolicyRule {
+            guard: Some(always),
+            ..declining.clone()
+        };
+        let p = Policy {
+            rules: vec![declining],
+            allows: Vec::new(),
+        };
+        assert_eq!(p.evaluate("dangerous").action, PolicyAction::Allow);
+
+        let p = Policy {
+            rules: vec![accepting],
+            allows: Vec::new(),
+        };
+        assert_eq!(p.evaluate("dangerous").action, PolicyAction::Ask);
     }
 
     #[test]
