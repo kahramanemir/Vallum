@@ -8,4 +8,5 @@
 //! Off by default. See `docs/superpowers/specs/2026-07-25-pii-privacy-mode-design.md`.
 
 pub mod alias;
+pub mod span;
 pub mod validate;
