@@ -12,12 +12,8 @@ pub fn log_verdict(verdict: &PolicyVerdict, command_line: &str, agent: &str, cfg
         return;
     }
     let extra = crate::scrubber::compile_rules(&cfg.scrubber.extra_secret_patterns);
-    let safe = crate::scrubber::redact(
-        command_line,
-        &extra,
-        cfg.scrubber.entropy,
-        cfg.scrubber.normalize,
-    );
+    let opts = crate::scrubber::ScrubOptions::from_config(&extra, cfg);
+    let safe = crate::scrubber::redact(command_line, &opts);
     let action = match verdict.action {
         PolicyAction::Deny => "DENY",
         PolicyAction::Ask => "ASK",
@@ -42,12 +38,8 @@ pub fn log_allow_downgrade(marker: &str, command_line: &str, agent: &str, cfg: &
         return;
     }
     let extra = crate::scrubber::compile_rules(&cfg.scrubber.extra_secret_patterns);
-    let safe = crate::scrubber::redact(
-        command_line,
-        &extra,
-        cfg.scrubber.entropy,
-        cfg.scrubber.normalize,
-    );
+    let opts = crate::scrubber::ScrubOptions::from_config(&extra, cfg);
+    let safe = crate::scrubber::redact(command_line, &opts);
     let context = format!("ALLOW [{marker}] agent={agent}");
     let Some(path) = crate::audit::resolve_log_path("policy.log", cfg.audit.log_dir.as_deref())
     else {

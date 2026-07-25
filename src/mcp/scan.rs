@@ -40,13 +40,13 @@ pub fn scan_servers(
     cfg: &AppConfig,
 ) -> Vec<Finding> {
     let extra = scrubber::compile_rules(&cfg.scrubber.extra_secret_patterns);
+    let opts = scrubber::ScrubOptions::from_config(&extra, cfg);
     let mut findings = Vec::new();
 
     for s in servers {
         // 1. Embedded secrets in env values (highest static yield).
         for (k, v) in &s.env {
-            let redacted =
-                scrubber::redact(v, &extra, cfg.scrubber.entropy, cfg.scrubber.normalize);
+            let redacted = scrubber::redact(v, &opts);
             if redacted != *v {
                 findings.push(Finding {
                     file: s.source.clone(),

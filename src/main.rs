@@ -267,15 +267,10 @@ fn main() {
                 }
             };
 
-            let strict = *strict || config.security.strict;
             let extra = scrubber::compile_rules(&config.scrubber.extra_secret_patterns);
-            let entropy = config.scrubber.entropy;
-            let normalize = config.scrubber.normalize;
-            let safe_cmd = scrubber::redact(cmd, &extra, entropy, normalize);
-            let safe_args: Vec<String> = args
-                .iter()
-                .map(|a| scrubber::redact(a, &extra, entropy, normalize))
-                .collect();
+            let opts = scrubber::ScrubOptions::from_config(&extra, &config).with_strict(*strict);
+            let safe_cmd = scrubber::redact(cmd, &opts);
+            let safe_args: Vec<String> = args.iter().map(|a| scrubber::redact(a, &opts)).collect();
             let cmd_context = format!("{} {:?}", safe_cmd, safe_args);
 
             let tokens_before = metrics::estimate_tokens(&raw_output);
@@ -317,7 +312,7 @@ fn main() {
                 )
             };
 
-            let sanitized = scrubber::sanitize(&processed, &extra, strict, entropy, normalize);
+            let sanitized = scrubber::sanitize(&processed, &opts);
 
             let tokens_after = metrics::estimate_tokens(&sanitized);
 
@@ -643,6 +638,7 @@ fn main() {
                         println!("no cached approvals");
                     } else {
                         let extra = scrubber::compile_rules(&config.scrubber.extra_secret_patterns);
+                        let opts = scrubber::ScrubOptions::from_config(&extra, &config);
                         let now = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .map(|d| d.as_secs())
@@ -650,12 +646,7 @@ fn main() {
                         for e in entries {
                             let age_days = now.saturating_sub(e.ts) / 86_400;
                             // Stored raw for exact matching; displayed scrubbed.
-                            let safe_cmd = scrubber::redact(
-                                &e.cmd,
-                                &extra,
-                                config.scrubber.entropy,
-                                config.scrubber.normalize,
-                            );
+                            let safe_cmd = scrubber::redact(&e.cmd, &opts);
                             println!("{age_days:>3}d  [{}]  {}  {}", e.rule, e.cwd, safe_cmd);
                         }
                     }

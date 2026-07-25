@@ -90,10 +90,7 @@ fn run_pipeline(raw: &str, cmd: &str, args: &[String], config: &AppConfig) -> St
     };
     scrubber::sanitize(
         &processed,
-        &[],
-        false,
-        config.scrubber.entropy,
-        config.scrubber.normalize,
+        &scrubber::ScrubOptions::from_config(&[], config),
     )
 }
 

@@ -136,7 +136,8 @@ fn is_injection(text: &str) -> bool {
 }
 
 fn is_redacted(text: &str, secret: &str) -> bool {
-    !crate::scrubber::redact(text, &[], true, true).contains(secret)
+    let opts = crate::scrubber::ScrubOptions::defaults(&[]);
+    !crate::scrubber::redact(text, &opts).contains(secret)
 }
 
 pub fn evaluate_injections(inj: &[InjectionRecord], ben: &[BenignRecord]) -> InjectionMetrics {
@@ -244,8 +245,9 @@ pub fn evaluate_entropy(
 
     let mut benign_fp = 0;
     let mut false_positives = Vec::new();
+    let opts = crate::scrubber::ScrubOptions::defaults(&[]);
     for r in benign {
-        if crate::scrubber::redact(&r.text, &[], true, true) != r.text {
+        if crate::scrubber::redact(&r.text, &opts) != r.text {
             benign_fp += 1;
             false_positives.push(r.text.clone());
         }
