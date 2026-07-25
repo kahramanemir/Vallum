@@ -331,6 +331,20 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
             r#"|\b(?:nc|ncat|socat)\b\s+\S+\s+\d+"#,
             r#")"#,
         );
+        // `rm` plus recursive+force in any spelling, through any interleaved
+        // flags, up to (not including) the first target. Shared by every
+        // `rm_rf_root` arm so flag obfuscation is covered once.
+        const RM_RF: &str = concat!(
+            r"\brm\s+(?:-\S+\s+)*",
+            r"(?:-\S*(?:r\S*f|f\S*r)\S*",
+            r"|(?:-\S*r\S*|--recursive)\s+(?:-\S+\s+)*(?:-\S*f\S*|--force)",
+            r"|(?:-\S*f\S*|--force)\s+(?:-\S+\s+)*(?:-\S*r\S*|--recursive)",
+            r"|--recursive|--force)",
+            r"\s+(?:-\S+\s+)*",
+        );
+        // Named system directories a delete must never reach unasked.
+        const SYSDIRS: &str =
+            r"(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)";
         let ask = |name: &str, pat: &str, reason: &str| PolicyRule {
             name: name.to_string(),
             pattern: Regex::new(pat).unwrap(),
@@ -351,8 +365,36 @@ pub fn builtin_rules() -> &'static [PolicyRule] {
             };
         vec![
             ask("rm_rf_root",
-                r"(?i)\brm\s+(?:-\S+\s+)*(?:-\S*(?:r\S*f|f\S*r)\S*|(?:-\S*r\S*|--recursive)\s+(?:-\S+\s+)*(?:-\S*f\S*|--force)|(?:-\S*f\S*|--force)\s+(?:-\S+\s+)*(?:-\S*r\S*|--recursive)|--recursive|--force)\s+(?:-\S+\s+)*(?:(?:/|~|\$HOME)(?:/?\*?)|/(?:bin|etc|usr|var|lib|lib64|boot|sbin|opt|root|sys|proc|dev|System|Library)(?:/\*?)?)(?:[\s;&|)`]|$)",
-                "Recursive force-delete targeting a root, home, or system path"),
+                &format!(
+                    concat!(
+                        r"(?i)(?:",
+                        // Absolute: the original arm, unchanged.
+                        r"{rm}(?:(?:/|~|\$HOME)(?:/?\*?)|/{sys}(?:/\*?)?)(?:[\s;&|)`]|$)",
+                        // Relative traversal. A target built only from `.`,
+                        // `..`, and `/` walks to an arbitrary ancestor —
+                        // eight `../` from a deep cwd lands on `/`. A named
+                        // segment (`../build`) is a real directory and does
+                        // not match; the trailing boundary is what keeps it
+                        // out.
+                        r"|{rm}(?:\.{{1,2}}/)*\.\.(?:/)?(?:[\s;&|)`]|$)",
+                        // The same walk ending in a glob: `../*`, `../../*`.
+                        r"|{rm}(?:\.{{1,2}}/)*\.\./\*(?:[\s;&|)`]|$)",
+                        // `cd` to a root-ish directory, then delete from
+                        // there. The target is irrelevant once the cwd is
+                        // `/` — `rm -rf *` and `rm -rf tmp` are both fatal.
+                        // A bare `rm -rf *` with no `cd` prefix stays Allow:
+                        // it is the ordinary build-directory idiom and says
+                        // nothing about the cwd.
+                        // `/{sys}(?:/{sys})*` so `/usr/lib` and `/var/lib`
+                        // count, while `/usr/local/src` — a source tree that
+                        // merely lives under a system prefix — does not.
+                        r#"|\bcd\s+['"]?(?:/|~|\$HOME|/{sys}(?:/{sys})*)/?['"]?\s*(?:;|&&|\|\|)\s*{rm}\S"#,
+                        r")",
+                    ),
+                    rm = RM_RF,
+                    sys = SYSDIRS,
+                ),
+                "Recursive force-delete targeting a root, home, system, or ancestor path"),
             // Persistence-write rules (CVE-2026-55607 class). Placed before
             // curl_pipe_shell so a shell-profile / git-hook write that embeds a
             // `curl x|sh` payload is attributed to the persistence rule (the
@@ -594,6 +636,54 @@ mod tests {
             let v = p.evaluate(cmd);
             assert_eq!(v.action, PolicyAction::Ask, "{cmd} should Ask");
             assert_eq!(v.rule_name, "read_sensitive_creds", "{cmd}");
+        }
+    }
+
+    #[test]
+    fn relative_traversal_deletes_ask() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "rm -rf ..",
+            "rm -rf ../",
+            "rm -rf ../..",
+            "rm -rf ./../..",
+            "rm -rf ../../../../../../../..",
+            "rm -fr ../../..",
+            "rm --recursive --force ../..",
+            "rm -rf ../*",
+            "rm -rf ../../*",
+            "cd / && rm -rf *",
+            "cd /etc; rm -rf *",
+            "cd ~ && rm -rf *",
+            "cd $HOME && rm -rf .",
+            "cd /usr/lib && rm -rf foo",
+        ] {
+            let v = p.evaluate(cmd);
+            assert_eq!(v.action, PolicyAction::Ask, "{cmd} should Ask");
+            assert_eq!(v.rule_name, "rm_rf_root", "{cmd}");
+        }
+    }
+
+    #[test]
+    fn ordinary_recursive_deletes_stay_allowed() {
+        let p = Policy::compile(&PolicyConfig::default()).unwrap();
+        for cmd in [
+            "rm -rf ../build",
+            "rm -rf ../../vendor/cache",
+            "rm -rf ./*",
+            "rm -rf *",
+            "rm -rf node_modules",
+            "rm -rf target/debug",
+            "rm -rf dist .cache",
+            "cd /tmp && rm -rf *",
+            "cd ~/project && rm -rf build",
+            "cd ../sibling && rm -rf build",
+        ] {
+            assert_eq!(
+                p.evaluate(cmd).action,
+                PolicyAction::Allow,
+                "{cmd} should stay Allow"
+            );
         }
     }
 
