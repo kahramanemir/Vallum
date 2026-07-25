@@ -105,10 +105,7 @@ fn iban_valid_prefix(text: &str) -> Option<usize> {
         if validate::iban_mod97(cand) && validate::iban_length_ok(&country, compact_len) {
             return Some(cand.len());
         }
-        match cand.rfind(' ') {
-            Some(i) => end = i,
-            None => return None,
-        }
+        end = cand.rfind(' ')?;
     }
 }
 
