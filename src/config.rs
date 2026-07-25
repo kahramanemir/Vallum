@@ -17,6 +17,7 @@ pub struct AppConfig {
     pub security: SecurityConfig,
     pub optimizer: OptimizerConfig,
     pub policy: PolicyConfig,
+    pub privacy: PrivacyConfig,
     /// Provenance of the project-level `.vallum.toml` overlay (None when no
     /// file was found or the kill switch is set). Never serialized.
     #[serde(skip)]
@@ -69,6 +70,43 @@ impl Default for ScrubberConfig {
             entropy: true,
             normalize: true,
         }
+    }
+}
+
+/// Opt-in redaction of personal identifiers (national IDs, tax numbers,
+/// IBANs, payment cards, IMEIs, emails, phone numbers). Off by default: the
+/// detectors carry a real false-positive surface on developer output, so this
+/// is a mode you turn on for work that touches personal data.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PrivacyConfig {
+    pub enabled: bool,
+    /// Active detectors. Defaults to all; narrow it to silence one that
+    /// proves noisy in a given environment.
+    pub categories: Vec<String>,
+}
+
+impl Default for PrivacyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            categories: crate::scrubber::pii::alias::Category::ALL
+                .iter()
+                .map(|c| c.tag().to_string())
+                .collect(),
+        }
+    }
+}
+
+impl PrivacyConfig {
+    /// Configured category tags resolved to detectors. Unknown tags are
+    /// dropped here; `validate` rejects them at load time so this is only
+    /// reachable for programmatically-built configs.
+    pub fn active(&self) -> Vec<crate::scrubber::pii::alias::Category> {
+        self.categories
+            .iter()
+            .filter_map(|t| crate::scrubber::pii::alias::Category::from_tag(t))
+            .collect()
     }
 }
 
@@ -291,6 +329,19 @@ impl AppConfig {
             Regex::new(&rule.pattern)
                 .map_err(|e| format!("invalid scrubber regex '{}': {}", rule.pattern, e))?;
         }
+        for tag in &self.privacy.categories {
+            if crate::scrubber::pii::alias::Category::from_tag(tag).is_none() {
+                let known: Vec<&str> = crate::scrubber::pii::alias::Category::ALL
+                    .iter()
+                    .map(|c| c.tag())
+                    .collect();
+                return Err(format!(
+                    "unknown privacy category '{}'; known categories: {}",
+                    tag,
+                    known.join(", ")
+                ));
+            }
+        }
         for rule in &self.policy.rules {
             match rule.action.as_str() {
                 "ask" | "deny" => {}
@@ -502,6 +553,35 @@ extra_secret_patterns = [ { pattern = "token-[0-9]+" } ]
         let config = AppConfig::from_path(&path).unwrap();
         assert!(config.security.strict);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn privacy_defaults_to_off_with_all_categories() {
+        let cfg = AppConfig::default();
+        assert!(!cfg.privacy.enabled);
+        assert_eq!(cfg.privacy.categories.len(), 7);
+        assert_eq!(cfg.privacy.active().len(), 7);
+    }
+
+    #[test]
+    fn privacy_parses_and_narrows_categories() {
+        let cfg: AppConfig =
+            toml::from_str("[privacy]\nenabled = true\ncategories = [\"tckn\", \"iban\"]\n")
+                .expect("valid toml");
+        assert!(cfg.privacy.enabled);
+        let active = cfg.privacy.active();
+        assert_eq!(active.len(), 2);
+        assert!(active.contains(&crate::scrubber::pii::alias::Category::Tckn));
+        assert!(active.contains(&crate::scrubber::pii::alias::Category::Iban));
+    }
+
+    #[test]
+    fn unknown_privacy_category_is_rejected_by_name() {
+        let cfg: AppConfig =
+            toml::from_str("[privacy]\ncategories = [\"tckn\", \"ssn\"]\n").expect("valid toml");
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("ssn"), "got: {err}");
+        assert!(err.contains("privacy"), "got: {err}");
     }
 
     #[test]

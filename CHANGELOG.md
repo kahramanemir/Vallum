@@ -5,6 +5,37 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Privacy mode.** Opt-in redaction of personal identifiers in command output
+  and in the command lines written to the audit and policy logs: TCKN, VKN,
+  IBAN, payment card, IMEI, email and phone. Enable with `[privacy] enabled`,
+  `vallum run --privacy`, or `VALLUM_PRIVACY=1` — the flag and env var can only
+  turn the mode **on**, never off. Narrow the active detectors with
+  `[privacy] categories`.
+
+  Detection is checksum-based, not machine learning: TCKN and VKN check digits,
+  IBAN mod-97, Luhn plus an issued IIN prefix. Because checksums alone still
+  admit false positives on ordinary output (~1 in 100 random 11-digit runs
+  satisfies the TCKN equations), `tckn`, `vkn`, `card` and `imei` additionally
+  require an identifier-ish key name — an assignment, a JSON key, or a
+  delimited-table column header. `iban`, `email` and `phone` carry enough
+  intrinsic signal to stand alone. Free-text names, addresses and dates are out
+  of scope.
+
+  Each match is replaced by a stable pseudonym (`[TCKN_a3f9c210]`) derived by
+  HMAC from the machine-local secret, so the same value maps to the same alias
+  across commands and sessions with no personal data written to disk — an agent
+  can still count distinct records or join two outputs without seeing a value.
+
+  A `[privacy]` table in a project-level `.vallum.toml` is rejected, so a
+  checked-in file cannot switch the mode off.
+
+### Changed
+- `scrubber::sanitize` and `scrubber::redact` now take a `ScrubOptions` struct
+  instead of positional booleans. **Breaking** for library consumers.
+
 ## [0.8.14]
 
 ### Added

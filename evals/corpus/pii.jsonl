@@ -1,0 +1,11 @@
+{"text":"kimlik no 12345678950","kind":"tckn"}
+{"text":"tckn=12345678950","kind":"tckn_assignment"}
+{"text":"müşteri kimliği 10000000146 kayıtlı","kind":"tckn_utf8"}
+{"text":"iban GB82WEST12345698765432","kind":"iban"}
+{"text":"iban GB82 WEST 1234 5698 7654 32","kind":"iban_grouped"}
+{"text":"card 4111 1111 1111 1111","kind":"card"}
+{"text":"kart_no: 4111111111111111","kind":"card_assignment"}
+{"text":"contact ali@example.com","kind":"email"}
+{"text":"tel +90 555 123 45 67","kind":"phone_intl"}
+{"text":"cep 05551234567","kind":"phone_national"}
+{"text":"vergi no 4567891233","kind":"vkn"}

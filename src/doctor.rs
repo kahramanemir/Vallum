@@ -59,9 +59,14 @@ pub fn check_config(path: &Path) -> Check {
             "config",
             Status::Ok,
             format!(
-                "{} loaded ({} extra secret pattern(s))",
+                "{} loaded ({} extra secret pattern(s), privacy {})",
                 path.display(),
-                cfg.scrubber.extra_secret_patterns.len()
+                cfg.scrubber.extra_secret_patterns.len(),
+                if cfg.privacy.enabled {
+                    format!("on: {}", cfg.privacy.categories.join(","))
+                } else {
+                    "off".to_string()
+                }
             ),
         ),
         Err(e) => Check::new("config", Status::Fail, e),
@@ -442,6 +447,7 @@ pub fn audit_hook_commands(
     policy: &crate::policy::Policy,
 ) -> Vec<HookFinding> {
     let extra = crate::scrubber::compile_rules(&[]);
+    let opts = crate::scrubber::ScrubOptions::defaults(&extra);
     let mut findings = Vec::new();
     for (event, cmd) in cmds {
         if cmd.contains("vallum hook") {
@@ -454,7 +460,7 @@ pub fn audit_hook_commands(
         };
         findings.push(HookFinding {
             agent: escape_ctrl(&format!("{label} ({event})")),
-            command: escape_ctrl(&crate::scrubber::redact(cmd, &extra, true, true)),
+            command: escape_ctrl(&crate::scrubber::redact(cmd, &opts)),
             dangerous,
         });
     }
@@ -588,6 +594,7 @@ pub fn base_url_check(sources: &[(String, String)]) -> Check {
         let host = url_host(value);
         if !is_anthropic_host(&host) {
             let extra = crate::scrubber::compile_rules(&[]);
+            let opts = crate::scrubber::ScrubOptions::defaults(&extra);
             return Check::new(
                 "base-url",
                 Status::Warn,
@@ -597,7 +604,7 @@ pub fn base_url_check(sources: &[(String, String)]) -> Check {
                     // The host comes from an attacker-influenceable settings value;
                     // escape control chars so a crafted URL can't paint over the
                     // warning (same hardening as the hook-audit report output).
-                    escape_ctrl(&crate::scrubber::redact(&host, &extra, true, true))
+                    escape_ctrl(&crate::scrubber::redact(&host, &opts))
                 ),
             );
         }

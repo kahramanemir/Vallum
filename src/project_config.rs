@@ -276,6 +276,12 @@ mod tests {
             ("[security]\nguardrail = false\n", "security"),
             ("[audit]\nlog_dir = \"/tmp/x\"\n", "audit"),
             ("[scrubber]\nextra_secret_patterns = []\n", "scrubber"),
+            // A checked-in project file must not be able to switch privacy
+            // mode off — that would be a downgrade attack on a security
+            // control. ProjectFile declares only `policy` and carries
+            // deny_unknown_fields, so this is already structural; the test
+            // locks it in against a future widening.
+            ("[privacy]\nenabled = false\n", "privacy"),
             ("[optimizer]\ndisabled = [\"npm\"]\n", "optimizer"),
             ("[pipeline]\nhead_lines = 1\n", "pipeline"),
         ] {

@@ -72,7 +72,14 @@ Each command flows through these stages:
 7. **Scrub** — API tokens in 30+ known formats (OpenAI, Anthropic, GitHub,
    GitLab, Slack, AWS, Google, Stripe, Supabase, Doppler, Sentry, Databricks,
    and more), bearer/bare JWTs, connection-string passwords, and PEM private
-   keys are redacted; known injection phrases are neutralized.
+   keys are redacted; known injection phrases are neutralized. When privacy
+   mode is on (opt-in), a further pass runs **after** the secret patterns and
+   replaces checksum-validated personal identifiers — TCKN, VKN, IBAN, payment
+   card, IMEI, email, phone — with stable HMAC-derived pseudonyms. It runs
+   second so vendor token patterns consume their matches first: an API key can
+   contain a Luhn-valid digit run, and the card detector must not chew the
+   middle out of an already-masked token. See
+   [Configuration](configuration.md#privacy-mode).
 8. **Wrap** — output is enclosed in `[UNTRUSTED TERMINAL OUTPUT]` markers; any
    forged markers inside the content are defanged so output can't break out of
    the wrapper.

@@ -41,7 +41,7 @@ fn gate_secrets_all_redacted() {
     let gate: Vec<_> = rows.iter().filter(|r| r.gate).collect();
     assert!(!gate.is_empty(), "no gate==true secret rows loaded");
     for r in gate {
-        let out = scrubber::redact(&r.text, &[], true, true);
+        let out = scrubber::redact(&r.text, &scrubber::ScrubOptions::defaults(&[]));
         assert!(
             !out.contains(&r.secret),
             "secret leaked: {} -> {out}",
@@ -56,7 +56,7 @@ fn gate_entropy_secrets_all_redacted() {
     let gate: Vec<_> = rows.iter().filter(|r| r.gate).collect();
     assert!(!gate.is_empty(), "no gate==true entropy-secret rows loaded");
     for r in gate {
-        let out = scrubber::redact(&r.text, &[], true, true);
+        let out = scrubber::redact(&r.text, &scrubber::ScrubOptions::defaults(&[]));
         assert!(
             !out.contains(&r.secret),
             "entropy secret leaked: {} -> {out}",
@@ -71,7 +71,7 @@ fn gate_entropy_benign_untouched() {
     let gate: Vec<_> = rows.iter().filter(|r| r.gate).collect();
     assert!(!gate.is_empty(), "no gate==true entropy-benign rows loaded");
     for r in gate {
-        let out = scrubber::redact(&r.text, &[], true, true);
+        let out = scrubber::redact(&r.text, &scrubber::ScrubOptions::defaults(&[]));
         assert_eq!(out, r.text, "false positive on benign sample");
     }
 }
@@ -79,7 +79,7 @@ fn gate_entropy_benign_untouched() {
 #[test]
 fn benign_unicode_survives_sanitize_verbatim() {
     let s = "Café ☕ — Türkçe ığüş";
-    let out = scrubber::sanitize(s, &[], false, true, true);
+    let out = scrubber::sanitize(s, &scrubber::ScrubOptions::defaults(&[]));
     assert_eq!(
         out,
         format!("[UNTRUSTED TERMINAL OUTPUT START]\n{s}\n[UNTRUSTED TERMINAL OUTPUT END]\n")
@@ -89,7 +89,7 @@ fn benign_unicode_survives_sanitize_verbatim() {
 #[test]
 fn entropy_redaction_fires_through_sanitize() {
     let input = "db_password=0123456789abcdef0123456789abcdef";
-    let out = scrubber::sanitize(input, &[], false, true, true);
+    let out = scrubber::sanitize(input, &scrubber::ScrubOptions::defaults(&[]));
     assert!(
         !out.contains("0123456789abcdef0123456789abcdef"),
         "entropy secret must not survive sanitize: {out}"

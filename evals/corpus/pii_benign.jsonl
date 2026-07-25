@@ -1,0 +1,17 @@
+{"text":"commit a1b2c3d4e5f60718293a4b5c6d7e8f9012345678","kind":"git_sha"}
+{"text":"id 550e8400-e29b-41d4-a716-446655440000","kind":"uuid"}
+{"text":"vallum 0.8.14 (rustc 1.85.0)","kind":"version"}
+{"text":"error[E0308]: src/main.rs:320:17 mismatched types","kind":"source_position"}
+{"text":"Listening on 127.0.0.1:8080","kind":"addr_port"}
+{"text":"ts=1753401600 level=info msg=\"build finished\"","kind":"epoch"}
+{"text":"integrity sha512-7oJ2bF9Kx1mQ0aZ4vN8pL3wR6yT5uI9oP2sD4fG7hJ0kL1zX3cV5bN8mQ2wE4rT6","kind":"lockfile_integrity"}
+{"text":"Content-Length: 12345678950","kind":"header_number"}
+{"text":"processed 4111111111111111 records in 2.3s","kind":"count_luhn_collision"}
+{"text":"docker image sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","kind":"digest"}
+{"text":"npm WARN deprecated request@2.88.2: request has been deprecated","kind":"package_at"}
+{"text":"[2026-07-25T14:32:11Z] worker=12345678950 started","kind":"worker_id"}
+{"text":"PID 90551234567 not found","kind":"pid"}
+{"text":"Total: 1234567890 bytes written","kind":"byte_count"}
+{"text":"Retry-After: 12345678950","kind":"unlisted_technical_header"}
+{"text":"chunk_id=1234567890 flushed","kind":"unlisted_technical_key"}
+{"text":"seq 123456789012345 acked","kind":"sequence_number"}

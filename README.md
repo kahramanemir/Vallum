@@ -27,6 +27,7 @@ any agent that runs shell commands.
 | **[Guardrail](docs/guardrail.md)** | Stops `rm -rf /`, `curl … \| sh`, force-push, and other dangerous commands *before they run* — prompts (`Ask`) or blocks (`Deny`), on by default. On Claude Code it also gates the native `Write`/`Edit`/`Read` tools against sensitive paths. |
 | **Secret redaction** | Masks known key/token formats (OpenAI, AWS, GitHub, Stripe, and more) plus high-entropy credentials before output ever reaches the model. |
 | **Injection defense** | Neutralizes "ignore previous instructions"-style text in fourteen languages, then wraps the output in untrusted-data markers so it can't hijack the agent. |
+| **[Privacy mode](docs/configuration.md#privacy-mode)** | Opt-in. Redacts personal identifiers — national ID, tax number, IBAN, payment card, IMEI, email, phone — using checksums rather than a model, and replaces each with a stable pseudonym the agent can still correlate on. |
 | **[Config scanning](docs/scanning.md)** | Statically scans MCP server configs, skill packages, and agent context files for embedded secrets, injection, and risky commands. |
 | **[Token savings](docs/optimizers.md)** | Strips ANSI noise and compresses large build and test logs — a side benefit of routing output through the security pipeline. |
 

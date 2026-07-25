@@ -88,6 +88,7 @@ fn inline_spans(line: &str) -> Vec<String> {
 
 pub fn scan_docs(docs: &[SkillDoc], policy: Option<&Policy>, cfg: &AppConfig) -> Vec<Finding> {
     let extra = scrubber::compile_rules(&cfg.scrubber.extra_secret_patterns);
+    let opts = scrubber::ScrubOptions::from_config(&extra, cfg);
     let mut findings = Vec::new();
 
     for d in docs {
@@ -103,8 +104,7 @@ pub fn scan_docs(docs: &[SkillDoc], policy: Option<&Policy>, cfg: &AppConfig) ->
 
         // 1. Secrets — line by line so the report can point at the leak.
         for (i, line) in d.raw.lines().enumerate() {
-            let redacted =
-                scrubber::redact(line, &extra, cfg.scrubber.entropy, cfg.scrubber.normalize);
+            let redacted = scrubber::redact(line, &opts);
             if redacted != line {
                 findings.push(mk(
                     CheckKind::Secret,
