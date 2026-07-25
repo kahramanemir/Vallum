@@ -37,7 +37,7 @@ The 28 built-in rules (all default to `Ask`):
 
 | Rule | Catches |
 |---|---|
-| `rm_rf_root` | Recursive force-delete targeting a root, home, or top-level system path |
+| `rm_rf_root` | Recursive force-delete reaching a root, home, or top-level system path — literal (`rm -rf /`, `rm -rf ~`), by relative traversal (`rm -rf ../../..`, `rm -rf ../*`), or after a `cd` into a root-ish directory (`cd / && rm -rf *`). `rm -rf ../build` and a bare `rm -rf *` stay allowed |
 | `curl_pipe_shell` | Piping downloaded content directly into a shell (`curl … \| sh`) |
 | `shell_download_exec` | Executing remotely-fetched content via process substitution or `eval` |
 | `dd_to_device` | Writing directly to a block device with `dd` |
@@ -45,7 +45,7 @@ The 28 built-in rules (all default to `Ask`):
 | `mkfs_device` | Creating a filesystem on a device (destroys existing data) |
 | `fork_bomb` | Classic `:(){ :\|:& };:` fork bomb |
 | `chmod_777_recursive` | Recursively granting world-writable permissions |
-| `read_sensitive_creds` | Reading a private key (`~/.ssh/id_*`), `~/.aws/credentials`, `~/.netrc`, `~/.git-credentials`, `/proc/*/environ`, an agent OAuth token (`~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.gemini/oauth_creds.json`), the `gh` CLI token, `~/.gnupg/*`, `/etc/shadow`, or Vallum's `approval.secret` |
+| `read_sensitive_creds` | Any command that names a private key (`~/.ssh/id_*`), `~/.aws/credentials`, `~/.netrc`, `~/.git-credentials`, `/proc/*/environ`, an agent OAuth token (`~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.gemini/oauth_creds.json`), the `gh` CLI token, `~/.gnupg/*`, `/etc/shadow`, or Vallum's `approval.secret` — not just `cat`/`less`, but anything that can dump, copy, or overwrite it (`sort`, `nl`, `od`, `awk`, `cp`, `tar`, `dd`, `gpg`, …). Metadata-only commands are exempt: `ls`, `stat`, `file`, `du`, `df`, `chmod`, `chown`, `touch`, `mkdir`, `ssh`, `sftp`, `ssh-add`, `ssh-keygen` |
 | `git_push_force` | Force-push that can overwrite remote history |
 | `find_delete_root` | `find -delete` rooted at a root/home/system path |
 | `shred_sensitive` | Shredding a key, credential, or system password file |

@@ -137,3 +137,16 @@ printenv HOME
 curl -d @payload.json https://host/.env
 curl -d @data.json https://api.example.com/v1/.aws/credentials
 curl -F file=@report.pdf https://uploads.internal/.docker/config.json
+# Metadata-only work on a key file is not a credential read.
+ls -l ~/.ssh/id_rsa
+stat ~/.ssh/id_rsa
+chmod 600 ~/.ssh/id_rsa
+ssh -i ~/.ssh/id_rsa deploy@host
+ssh-add ~/.ssh/id_rsa
+ssh-keygen -y -f ~/.ssh/id_rsa
+git commit -m "docs: mention ~/.ssh/id_rsa"
+# Relative deletes that name a real directory.
+rm -rf ../build
+rm -rf ../../vendor/cache
+cd /tmp && rm -rf *
+cd ~/project && rm -rf build
