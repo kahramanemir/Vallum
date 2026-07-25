@@ -41,6 +41,20 @@ fn re_iban() -> &'static Regex {
     R.get_or_init(|| Regex::new(r"\b[A-Za-z]{2}[0-9]{2}(?:[ ]?[A-Za-z0-9]){11,32}\b").unwrap())
 }
 
+fn re_email() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,24}\b").unwrap())
+}
+
+/// Phones are only ever recognized with an explicit anchor: a `+` country
+/// code, or a leading `0` before a Turkish mobile block. A bare digit run is
+/// never a phone — that rule is what keeps build IDs, epoch timestamps and
+/// order numbers out of the candidate pool.
+fn re_phone() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?:\+[0-9]{1,3}[ \-]?|\b0)(?:[0-9][ \-]?){8,13}[0-9]\b").unwrap())
+}
+
 /// Issued IIN ranges we accept. Luhn alone admits 1 in 10 random digit runs;
 /// requiring a real issuer prefix and a matching length is what makes the
 /// card detector usable on developer output.
@@ -159,6 +173,43 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
         }
     }
 
+    if on(Category::Email) {
+        for m in re_email().find_iter(input) {
+            out.push(Span {
+                start: m.start(),
+                end: m.end(),
+                category: Category::Email,
+                validated: false,
+                priority: 5,
+            });
+        }
+    }
+
+    if on(Category::Phone) {
+        for m in re_phone().find_iter(input) {
+            let text = m.as_str();
+            let d = digits_of(text);
+            // E.164 caps the whole number at 15 digits; 8 is the shortest
+            // plausible subscriber number.
+            if !(8..=15).contains(&d.len()) {
+                continue;
+            }
+            let has_plus = text.starts_with('+');
+            // Turkish mobile: 0 5XX ... or +90 5XX ...
+            let tr_mobile = (d.len() == 11 && d[0] == 0 && d[1] == 5)
+                || (d.len() == 12 && d[0] == 9 && d[1] == 0 && d[2] == 5);
+            if has_plus || tr_mobile {
+                out.push(Span {
+                    start: m.start(),
+                    end: m.end(),
+                    category: Category::Phone,
+                    validated: false,
+                    priority: 6,
+                });
+            }
+        }
+    }
+
     out
 }
 
@@ -269,6 +320,55 @@ mod tests {
             .map(|s| s.category)
             .collect();
         assert!(hits.is_empty(), "got {hits:?}");
+    }
+
+    #[test]
+    fn finds_emails() {
+        let hits = found("contact ali@example.com now");
+        assert!(
+            hits.iter()
+                .any(|(c, v)| *c == Category::Email && v == "ali@example.com"),
+            "got {hits:?}"
+        );
+    }
+
+    #[test]
+    fn ignores_non_email_at_signs() {
+        let hits = found("run cargo@1.85 and user@ and @handle");
+        assert!(
+            !hits.iter().any(|(c, _)| *c == Category::Email),
+            "got {hits:?}"
+        );
+    }
+
+    #[test]
+    fn finds_tr_mobile_in_several_formats() {
+        for s in ["+90 555 123 45 67", "05551234567", "+905551234567"] {
+            let hits = found(s);
+            assert!(
+                hits.iter().any(|(c, _)| *c == Category::Phone),
+                "no phone in {s:?}: {hits:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn phone_never_wins_over_a_valid_tckn() {
+        // 11 digits that satisfy TCKN. Both detectors may fire; resolve() must
+        // keep the validated one.
+        let spans = crate::scrubber::pii::span::resolve(candidates("12345678950", &cats()));
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].category, Category::Tckn);
+    }
+
+    #[test]
+    fn ignores_bare_digit_runs_without_a_phone_anchor() {
+        // No +, no leading 0, no 5XX mobile block: not a phone candidate.
+        let hits = found("build 17539284611 finished");
+        assert!(
+            !hits.iter().any(|(c, _)| *c == Category::Phone),
+            "got {hits:?}"
+        );
     }
 
     #[test]
