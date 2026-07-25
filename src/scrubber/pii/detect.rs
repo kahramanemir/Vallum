@@ -13,11 +13,11 @@ use std::sync::OnceLock;
 /// Push a candidate unless the context gate rules it out — either because the
 /// span sits inside a larger technical token, or because its category needs a
 /// nearby key name and there is none.
-fn push_gated(out: &mut Vec<Span>, input: &str, span: Span) {
+fn push_gated(out: &mut Vec<Span>, input: &str, header: Option<&gate::HeaderContext>, span: Span) {
     if gate::is_suppressed(input, &span) {
         return;
     }
-    if span.category.requires_key_context() && !gate::has_positive_context(input, &span) {
+    if span.category.requires_key_context() && !gate::has_positive_context(input, &span, header) {
         return;
     }
     out.push(span);
@@ -115,6 +115,9 @@ fn iban_valid_prefix(text: &str) -> Option<usize> {
 pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
     let mut out = Vec::new();
     let on = |c: Category| active.contains(&c);
+    // Parsed once for the whole input: in tabular output the header names the
+    // columns for every row below it, not just the first.
+    let header = gate::detect_header(input);
 
     if on(Category::Tckn) {
         for m in re_digits_11().find_iter(input) {
@@ -122,6 +125,7 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
                 push_gated(
                     &mut out,
                     input,
+                    header.as_ref(),
                     Span {
                         start: m.start(),
                         end: m.end(),
@@ -140,6 +144,7 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
                 push_gated(
                     &mut out,
                     input,
+                    header.as_ref(),
                     Span {
                         start: m.start(),
                         end: m.end(),
@@ -158,6 +163,7 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
                 push_gated(
                     &mut out,
                     input,
+                    header.as_ref(),
                     Span {
                         start: m.start(),
                         end: m.start() + len,
@@ -177,6 +183,7 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
                 push_gated(
                     &mut out,
                     input,
+                    header.as_ref(),
                     Span {
                         start: m.start(),
                         end: m.end(),
@@ -195,6 +202,7 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
                 push_gated(
                     &mut out,
                     input,
+                    header.as_ref(),
                     Span {
                         start: m.start(),
                         end: m.end(),
@@ -212,6 +220,7 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
             push_gated(
                 &mut out,
                 input,
+                header.as_ref(),
                 Span {
                     start: m.start(),
                     end: m.end(),
@@ -240,6 +249,7 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
                 push_gated(
                     &mut out,
                     input,
+                    header.as_ref(),
                     Span {
                         start: m.start(),
                         end: m.end(),

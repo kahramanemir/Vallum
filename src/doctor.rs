@@ -59,9 +59,14 @@ pub fn check_config(path: &Path) -> Check {
             "config",
             Status::Ok,
             format!(
-                "{} loaded ({} extra secret pattern(s))",
+                "{} loaded ({} extra secret pattern(s), privacy {})",
                 path.display(),
-                cfg.scrubber.extra_secret_patterns.len()
+                cfg.scrubber.extra_secret_patterns.len(),
+                if cfg.privacy.enabled {
+                    format!("on: {}", cfg.privacy.categories.join(","))
+                } else {
+                    "off".to_string()
+                }
             ),
         ),
         Err(e) => Check::new("config", Status::Fail, e),

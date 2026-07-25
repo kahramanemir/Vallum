@@ -88,6 +88,7 @@ fn main() {
             json,
             strict,
             tee,
+            privacy,
             approval_token,
             cmd,
             args,
@@ -268,7 +269,19 @@ fn main() {
             };
 
             let extra = scrubber::compile_rules(&config.scrubber.extra_secret_patterns);
-            let opts = scrubber::ScrubOptions::from_config(&extra, &config).with_strict(*strict);
+            // Precedence: config, --privacy and VALLUM_PRIVACY all *enable*;
+            // none of them can disable. A security control must not be
+            // switchable off from the environment of the process being
+            // guarded — otherwise the agent could unset it itself.
+            let privacy_on = config.privacy.enabled
+                || *privacy
+                || std::env::var("VALLUM_PRIVACY")
+                    .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            let privacy_opts =
+                privacy_on.then(|| scrubber::pii::PrivacyOptions::from_config(&config));
+            let opts = scrubber::ScrubOptions::from_config(&extra, &config)
+                .with_strict(*strict)
+                .with_privacy(privacy_opts.as_ref());
             let safe_cmd = scrubber::redact(cmd, &opts);
             let safe_args: Vec<String> = args.iter().map(|a| scrubber::redact(a, &opts)).collect();
             let cmd_context = format!("{} {:?}", safe_cmd, safe_args);

@@ -109,20 +109,110 @@ pub fn is_suppressed(input: &str, span: &Span) -> bool {
     false
 }
 
-/// True when a key name near the span names an identifier. Looks back at most
-/// 40 bytes — enough for `"customer_tckn": ` without reaching the previous
-/// field.
+/// A delimited first line whose field names include identifier-ish ones, and
+/// which columns those are.
 ///
-/// The lower bound is walked forward to the next char boundary: command
-/// output is routinely UTF-8 (`müşteri kimliği 12345678950`), and slicing a
-/// `&str` at a non-boundary byte panics.
-pub fn has_positive_context(input: &str, span: &Span) -> bool {
-    let mut lo = span.start.saturating_sub(40);
+/// Byte-distance lookback alone is not enough for tabular output: in a CSV the
+/// header sits one line above the first record and many lines above the rest,
+/// so a fixed window redacts row 1 and silently leaks every row after it.
+/// Column position is the signal that actually generalizes down the table.
+pub struct HeaderContext {
+    delimiter: char,
+    /// Zero-based indices of columns whose header name looks like an
+    /// identifier.
+    columns: Vec<usize>,
+}
+
+const DELIMITERS: [char; 4] = [',', ';', '\t', '|'];
+
+/// Parse the first non-empty line as a delimited header, if it looks like one.
+///
+/// The structural proof that this is a table, rather than prose that happens
+/// to contain a comma, is that some following line splits into the same number
+/// of fields. Without that check, `no customer records found, retrying`
+/// registers as a header naming a `customer` column and poisons every line
+/// under it.
+pub fn detect_header(input: &str) -> Option<HeaderContext> {
+    let mut lines = input.lines().filter(|l| !l.trim().is_empty());
+    let first = lines.next()?;
+    let delimiter = *DELIMITERS
+        .iter()
+        .max_by_key(|d| first.matches(**d).count())?;
+    let field_count = first.matches(delimiter).count();
+    if field_count == 0 {
+        return None;
+    }
+    if !lines.any(|l| l.matches(delimiter).count() == field_count) {
+        return None; // no row matches the header's shape: not a table
+    }
+
+    let columns: Vec<usize> = first
+        .split(delimiter)
+        .enumerate()
+        .filter(|(_, name)| {
+            let lower = name.trim().trim_matches('"').to_lowercase();
+            // Column names are short. A long field is prose, not a name.
+            lower.len() <= 24 && contains_key_word(&lower)
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if columns.is_empty() {
+        return None;
+    }
+    Some(HeaderContext { delimiter, columns })
+}
+
+/// Substring match against `KEY_VOCABULARY`, except that short entries
+/// (`vkn`, `tel`, `cep`, `imei`, …) must land on a word boundary. Without
+/// that, `telemetry_id=` matches `tel` and `hotel_no=` matches it too — a
+/// three-letter substring is not evidence of anything on its own.
+fn contains_key_word(haystack: &str) -> bool {
+    KEY_VOCABULARY.iter().any(|k| {
+        if k.len() > 4 {
+            return haystack.contains(k);
+        }
+        haystack.match_indices(k).any(|(i, _)| {
+            let before_ok = i == 0 || !haystack.as_bytes()[i - 1].is_ascii_alphanumeric();
+            let after = i + k.len();
+            let after_ok =
+                after >= haystack.len() || !haystack.as_bytes()[after].is_ascii_alphanumeric();
+            before_ok && after_ok
+        })
+    })
+}
+
+/// True when the span sits in a column the header marked as an identifier.
+fn in_identifier_column(input: &str, span: &Span, hc: &HeaderContext) -> bool {
+    let line_start = input[..span.start].rfind('\n').map_or(0, |i| i + 1);
+    // The header line itself carries names, not values.
+    if line_start == 0 {
+        return false;
+    }
+    let column = input[line_start..span.start].matches(hc.delimiter).count();
+    hc.columns.contains(&column)
+}
+
+/// True when a key name identifies the span as personal data — either a key
+/// name within 40 bytes to the left (`tckn=`, `"customer_tckn": `), or a
+/// delimited-table column whose header names one.
+///
+/// The lookback's lower bound is walked forward to the next char boundary:
+/// command output is routinely UTF-8 (`müşteri kimliği 12345678950`), and
+/// slicing a `&str` at a non-boundary byte panics.
+pub fn has_positive_context(input: &str, span: &Span, header: Option<&HeaderContext>) -> bool {
+    // Clamped to the current line: a key name on the line above is not a key
+    // for this value. That relationship exists only in tabular data, and it is
+    // the column check below — not distance — that expresses it.
+    let line_start = input[..span.start].rfind('\n').map_or(0, |i| i + 1);
+    let mut lo = span.start.saturating_sub(40).max(line_start);
     while lo < span.start && !input.is_char_boundary(lo) {
         lo += 1;
     }
     let lower = input[lo..span.start].to_lowercase();
-    KEY_VOCABULARY.iter().any(|k| lower.contains(k))
+    if contains_key_word(&lower) {
+        return true;
+    }
+    header.is_some_and(|hc| in_identifier_column(input, span, hc))
 }
 
 #[cfg(test)]
@@ -171,7 +261,7 @@ mod tests {
         let spans = candidates(input, Category::ALL);
         assert!(!spans.is_empty());
         assert!(
-            has_positive_context(input, &spans[0]),
+            has_positive_context(input, &spans[0], None),
             "expected key-name context"
         );
     }
@@ -187,6 +277,41 @@ mod tests {
         // IBAN and email carry enough intrinsic signal to stand alone.
         assert!(survives("GB82WEST12345698765432"));
         assert!(survives("ali@example.com"));
+    }
+
+    #[test]
+    fn csv_header_gives_context_to_every_row_not_just_the_first() {
+        // Regression guard: a fixed byte-distance lookback reaches the header
+        // from row 1 only, which redacts the first record and silently leaks
+        // the rest. Column position has to carry down the whole table.
+        let input = "musteri,tckn\nAli,12345678950\nAyse,10000000146\nAli,12345678950\n";
+        let spans = candidates(input, Category::ALL);
+        let tckns: Vec<&str> = spans
+            .iter()
+            .filter(|s| s.category == Category::Tckn)
+            .map(|s| &input[s.start..s.end])
+            .collect();
+        assert_eq!(tckns.len(), 3, "expected every row gated in, got {tckns:?}");
+    }
+
+    #[test]
+    fn csv_context_is_scoped_to_the_named_column() {
+        // Only the `tckn` column gets context; a checksum-valid value in an
+        // unrelated column stays visible.
+        let input = "sira,tckn\n12345678950,10000000146\n";
+        let spans = candidates(input, Category::ALL);
+        let tckns: Vec<&str> = spans
+            .iter()
+            .filter(|s| s.category == Category::Tckn)
+            .map(|s| &input[s.start..s.end])
+            .collect();
+        assert_eq!(tckns, vec!["10000000146"], "got {tckns:?}");
+    }
+
+    #[test]
+    fn a_prose_line_with_a_comma_is_not_treated_as_a_header() {
+        let input = "no customer records found, retrying\nContent-Length: 12345678950\n";
+        assert!(candidates(input, Category::ALL).is_empty());
     }
 
     #[test]

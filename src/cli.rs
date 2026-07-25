@@ -71,6 +71,12 @@ parsed as vallum's.")]
         /// Mirror raw child output to ~/.vallum/live.log as lines arrive
         #[arg(long)]
         tee: bool,
+        /// Redact personal identifiers (TCKN, VKN, IBAN, card, IMEI, email,
+        /// phone) from output and logs, replacing each with a stable
+        /// pseudonym. Enables the mode; which categories are active stays a
+        /// config decision.
+        #[arg(long)]
+        privacy: bool,
         /// Internal: HMAC approval token proving the hook already ruled on this
         /// exact command (set when it re-wraps an approved command through
         /// `vallum run`), so skip re-evaluating the policy. Hidden; not a
