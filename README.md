@@ -163,7 +163,7 @@ is ignored with a warning (`vallum doctor` shows why). Scaffold one with
 
 | Doc | What's inside |
 |---|---|
-| [Guardrail & policy](docs/guardrail.md) | The 26 built-in rules, Claude Code file-tool gating, custom rules, circuit breaker, tamper-evident `policy.log` |
+| [Guardrail & policy](docs/guardrail.md) | The 28 built-in rules, Claude Code file-tool gating, custom rules, circuit breaker, tamper-evident `policy.log` |
 | [Agent integrations](docs/agents.md) | Claude Code, Cursor, Gemini CLI, Codex CLI — hook points, Ask behavior, limitations |
 | [CLI reference](docs/cli.md) | Every command, examples, JSON output, exit codes, all install channels |
 | [Configuration](docs/configuration.md) | `~/.vallum/config.toml` — every setting with its default |

@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Egress guardrail.** Two new `Ask` rules close the third leg of the lethal
+  trifecta: `egress_sensitive_file` fires when a credential file, private key,
+  or secret directory reaches a network sink (`curl -d/-F/-T`,
+  `wget --post-file`, `scp`/`rsync` to a remote, `nc`/`ssh` with a stdin
+  redirect), and `egress_env_dump` fires when the environment is piped into
+  one. A sink is a verb *plus* a payload flag, so downloads into a sensitive
+  path (`curl -sSL https://x/conf > .env`) stay `Allow`.
+- **Credential-read coverage widened** from 4 paths to 12: `~/.netrc`,
+  `~/.git-credentials`, `/proc/*/environ`, agent OAuth tokens
+  (`~/.claude/.credentials.json`, `~/.codex/auth.json`,
+  `~/.gemini/oauth_creds.json`), the `gh` CLI token, and `~/.gnupg/*` join
+  the existing ssh keys, `~/.aws/credentials`, `/etc/shadow`, and
+  `approval.secret`. Applies to both shell commands and Claude file-tool
+  reads. A second tier (`.env`, `~/.npmrc`, `~/.kube/config`,
+  `~/.docker/config.json`, `~/.pypirc`, `~/.cargo/credentials`) stays free to
+  read locally and is gated only on egress. Built-in rules: 26 → 28.
 - **Project-level config.** A repo-committed `.vallum.toml` (git root only)
   can add `ask`/`deny` rules — tighten-only by construction: every other key
   is rejected by name and a broken file is loudly ignored (never blocks,
