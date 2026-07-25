@@ -90,7 +90,7 @@ pub fn load_or_create_secret(cfg: &AppConfig) -> Option<Vec<u8>> {
 }
 
 #[cfg(unix)]
-fn random_secret() -> Option<Vec<u8>> {
+pub(crate) fn random_secret() -> Option<Vec<u8>> {
     use std::io::Read;
     let mut f = std::fs::File::open("/dev/urandom").ok()?;
     let mut buf = vec![0u8; SECRET_LEN];
@@ -99,7 +99,7 @@ fn random_secret() -> Option<Vec<u8>> {
 }
 
 #[cfg(not(unix))]
-fn random_secret() -> Option<Vec<u8>> {
+pub(crate) fn random_secret() -> Option<Vec<u8>> {
     None
 }
 
