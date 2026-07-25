@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.15]
 
 ### Added
 - **Privacy mode.** Opt-in redaction of personal identifiers in command output
@@ -620,7 +620,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
-[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.8.14...HEAD
+[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.8.15...HEAD
+[0.8.15]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.15
 [0.8.14]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.14
 [0.8.13]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.13
 [0.8.12]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.12
