@@ -115,3 +115,21 @@ git config --get core.hooksPath
 git config --get-all core.hooksPath
 git config --unset core.hooksPath
 git config --get core.hooksPath | cat
+# Outbound payloads with no sensitive source — must never be flagged.
+curl -d '{"a":1}' https://api.internal/v1
+curl -F file=@report.pdf https://upload.internal
+curl --data-binary @payload.json https://api.internal/ingest
+scp ./dist/app.tar.gz deploy@prod:/srv/
+rsync -av ./build/ deploy@prod:/srv/
+# A sensitive path with no sink: these DOWNLOAD into the file.
+curl -sSL https://api.example.com/conf > .env
+wget https://example.com/file.zip -O .env.local
+# Egress-only tier: reading locally is ordinary work.
+cat .env
+cat .env.example
+cat ~/.npmrc
+cat ~/.kube/config
+cat ~/.docker/config.json
+# Env inspection with no sink.
+env | grep PATH
+printenv HOME
