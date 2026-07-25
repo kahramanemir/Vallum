@@ -58,6 +58,29 @@ impl Category {
     pub fn from_tag(s: &str) -> Option<Category> {
         Category::ALL.iter().copied().find(|c| c.tag() == s)
     }
+
+    /// Whether a match needs a nearby identifier-ish key name before it may be
+    /// redacted, keyed to how much the detector's own check proves.
+    ///
+    /// Context-free categories carry enough intrinsic signal to stand alone:
+    /// an IBAN clears mod-97 *and* a per-country length behind a distinctive
+    /// two-letter prefix; an email has an unmistakable shape; a phone is only
+    /// ever matched behind an explicit `+` country code or a `0`+`5XX` mobile
+    /// block, which is itself the anchor.
+    ///
+    /// The rest do not. Roughly 1 in 100 random 11-digit runs satisfies the
+    /// TCKN equations, and 1 in 10 satisfies VKN or IMEI — and 10-digit runs
+    /// are everywhere in ordinary output (byte counts, epochs, IDs). Card
+    /// survives Luhn plus an issued IIN prefix and still fires on lines like
+    /// `processed 4111111111111111 records`. For these, the key name is the
+    /// only thing that separates a national ID from a `Content-Length`, so it
+    /// is required rather than merely persuasive.
+    pub fn requires_key_context(self) -> bool {
+        match self {
+            Category::Iban | Category::Email | Category::Phone => false,
+            Category::Tckn | Category::Vkn | Category::Card | Category::Imei => true,
+        }
+    }
 }
 
 pub struct AliasKey(Vec<u8>);

@@ -49,6 +49,7 @@ pub struct ScrubOptions<'a> {
     pub strict: bool,
     pub entropy: bool,
     pub normalize: bool,
+    pub privacy: Option<&'a pii::PrivacyOptions>,
 }
 
 impl<'a> ScrubOptions<'a> {
@@ -60,6 +61,7 @@ impl<'a> ScrubOptions<'a> {
             strict: cfg.security.strict,
             entropy: cfg.scrubber.entropy,
             normalize: cfg.scrubber.normalize,
+            privacy: None,
         }
     }
 
@@ -71,6 +73,7 @@ impl<'a> ScrubOptions<'a> {
             strict: false,
             entropy: true,
             normalize: true,
+            privacy: None,
         }
     }
 
@@ -78,6 +81,12 @@ impl<'a> ScrubOptions<'a> {
     /// never turns off a `true` from config.
     pub fn with_strict(mut self, strict: bool) -> Self {
         self.strict = self.strict || strict;
+        self
+    }
+
+    /// Attach privacy mode. `None` leaves the PII pass off entirely.
+    pub fn with_privacy(mut self, privacy: Option<&'a pii::PrivacyOptions>) -> Self {
+        self.privacy = privacy;
         self
     }
 }
@@ -90,7 +99,11 @@ pub fn sanitize(input: &str, opts: &ScrubOptions) -> String {
     };
     let (injection_clean, injection_detected) = injection::scrub_injections(&input, opts.normalize);
     let no_secrets = secrets::scrub_secrets(&injection_clean, opts.extra, opts.entropy);
-    let safe_text = markers::defang(&no_secrets);
+    let no_pii = match opts.privacy {
+        Some(p) => pii::scrub_pii(&no_secrets, p),
+        None => no_secrets,
+    };
+    let safe_text = markers::defang(&no_pii);
 
     let body = if opts.strict && injection_detected {
         "[OUTPUT BLOCKED: prompt injection detected]".to_string()
@@ -113,7 +126,11 @@ pub fn redact(input: &str, opts: &ScrubOptions) -> String {
     } else {
         input.to_string()
     };
-    secrets::scrub_secrets(&input, opts.extra, opts.entropy)
+    let no_secrets = secrets::scrub_secrets(&input, opts.extra, opts.entropy);
+    match opts.privacy {
+        Some(p) => pii::scrub_pii(&no_secrets, p),
+        None => no_secrets,
+    }
 }
 
 #[cfg(test)]

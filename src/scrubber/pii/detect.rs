@@ -4,10 +4,24 @@
 //! its checksum and, in `gate.rs`, the context gate.
 
 use super::alias::Category;
+use super::gate;
 use super::span::Span;
 use super::validate;
 use regex::Regex;
 use std::sync::OnceLock;
+
+/// Push a candidate unless the context gate rules it out — either because the
+/// span sits inside a larger technical token, or because its category needs a
+/// nearby key name and there is none.
+fn push_gated(out: &mut Vec<Span>, input: &str, span: Span) {
+    if gate::is_suppressed(input, &span) {
+        return;
+    }
+    if span.category.requires_key_context() && !gate::has_positive_context(input, &span) {
+        return;
+    }
+    out.push(span);
+}
 
 fn digits_of(s: &str) -> Vec<u8> {
     s.bytes()
@@ -105,13 +119,17 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
     if on(Category::Tckn) {
         for m in re_digits_11().find_iter(input) {
             if validate::tckn(&digits_of(m.as_str())) {
-                out.push(Span {
-                    start: m.start(),
-                    end: m.end(),
-                    category: Category::Tckn,
-                    validated: true,
-                    priority: 0,
-                });
+                push_gated(
+                    &mut out,
+                    input,
+                    Span {
+                        start: m.start(),
+                        end: m.end(),
+                        category: Category::Tckn,
+                        validated: true,
+                        priority: 0,
+                    },
+                );
             }
         }
     }
@@ -119,13 +137,17 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
     if on(Category::Vkn) {
         for m in re_digits_10().find_iter(input) {
             if validate::vkn(&digits_of(m.as_str())) {
-                out.push(Span {
-                    start: m.start(),
-                    end: m.end(),
-                    category: Category::Vkn,
-                    validated: true,
-                    priority: 1,
-                });
+                push_gated(
+                    &mut out,
+                    input,
+                    Span {
+                        start: m.start(),
+                        end: m.end(),
+                        category: Category::Vkn,
+                        validated: true,
+                        priority: 1,
+                    },
+                );
             }
         }
     }
@@ -133,13 +155,17 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
     if on(Category::Iban) {
         for m in re_iban().find_iter(input) {
             if let Some(len) = iban_valid_prefix(m.as_str()) {
-                out.push(Span {
-                    start: m.start(),
-                    end: m.start() + len,
-                    category: Category::Iban,
-                    validated: true,
-                    priority: 2,
-                });
+                push_gated(
+                    &mut out,
+                    input,
+                    Span {
+                        start: m.start(),
+                        end: m.start() + len,
+                        category: Category::Iban,
+                        validated: true,
+                        priority: 2,
+                    },
+                );
             }
         }
     }
@@ -148,13 +174,17 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
         for m in re_card().find_iter(input) {
             let d = digits_of(m.as_str());
             if !d.is_empty() && card_prefix_ok(&d) && validate::luhn(&d) {
-                out.push(Span {
-                    start: m.start(),
-                    end: m.end(),
-                    category: Category::Card,
-                    validated: true,
-                    priority: 3,
-                });
+                push_gated(
+                    &mut out,
+                    input,
+                    Span {
+                        start: m.start(),
+                        end: m.end(),
+                        category: Category::Card,
+                        validated: true,
+                        priority: 3,
+                    },
+                );
             }
         }
     }
@@ -162,26 +192,34 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
     if on(Category::Imei) {
         for m in re_digits_15().find_iter(input) {
             if validate::luhn(&digits_of(m.as_str())) {
-                out.push(Span {
-                    start: m.start(),
-                    end: m.end(),
-                    category: Category::Imei,
-                    validated: true,
-                    priority: 4,
-                });
+                push_gated(
+                    &mut out,
+                    input,
+                    Span {
+                        start: m.start(),
+                        end: m.end(),
+                        category: Category::Imei,
+                        validated: true,
+                        priority: 4,
+                    },
+                );
             }
         }
     }
 
     if on(Category::Email) {
         for m in re_email().find_iter(input) {
-            out.push(Span {
-                start: m.start(),
-                end: m.end(),
-                category: Category::Email,
-                validated: false,
-                priority: 5,
-            });
+            push_gated(
+                &mut out,
+                input,
+                Span {
+                    start: m.start(),
+                    end: m.end(),
+                    category: Category::Email,
+                    validated: false,
+                    priority: 5,
+                },
+            );
         }
     }
 
@@ -199,13 +237,17 @@ pub fn candidates(input: &str, active: &[Category]) -> Vec<Span> {
             let tr_mobile = (d.len() == 11 && d[0] == 0 && d[1] == 5)
                 || (d.len() == 12 && d[0] == 9 && d[1] == 0 && d[2] == 5);
             if has_plus || tr_mobile {
-                out.push(Span {
-                    start: m.start(),
-                    end: m.end(),
-                    category: Category::Phone,
-                    validated: false,
-                    priority: 6,
-                });
+                push_gated(
+                    &mut out,
+                    input,
+                    Span {
+                        start: m.start(),
+                        end: m.end(),
+                        category: Category::Phone,
+                        validated: false,
+                        priority: 6,
+                    },
+                );
             }
         }
     }
@@ -250,10 +292,20 @@ mod tests {
 
     #[test]
     fn finds_valid_card_with_and_without_spaces() {
-        assert!(found("4111111111111111")
+        assert!(found("card 4111111111111111")
             .iter()
             .any(|(c, _)| *c == Category::Card));
-        assert!(found("4111 1111 1111 1111")
+        assert!(found("card 4111 1111 1111 1111")
+            .iter()
+            .any(|(c, _)| *c == Category::Card));
+    }
+
+    #[test]
+    fn bare_card_without_a_key_name_is_not_redacted() {
+        // Deliberate recall cost of requiring key context: a Luhn-valid,
+        // Visa-prefixed run in prose is indistinguishable from a record count
+        // (`processed 4111111111111111 records`), so it is left alone.
+        assert!(!found("4111111111111111")
             .iter()
             .any(|(c, _)| *c == Category::Card));
     }
@@ -354,10 +406,12 @@ mod tests {
 
     #[test]
     fn phone_never_wins_over_a_valid_tckn() {
-        // 11 digits that satisfy TCKN. Both detectors may fire; resolve() must
-        // keep the validated one.
-        let spans = crate::scrubber::pii::span::resolve(candidates("12345678950", &cats()));
-        assert_eq!(spans.len(), 1);
+        // 11 digits that satisfy TCKN, under a key name so the TCKN candidate
+        // clears the context requirement. Both detectors may fire; resolve()
+        // must keep the validated one.
+        let input = "tckn 12345678950";
+        let spans = crate::scrubber::pii::span::resolve(candidates(input, &cats()));
+        assert_eq!(spans.len(), 1, "got {spans:?}");
         assert_eq!(spans[0].category, Category::Tckn);
     }
 
