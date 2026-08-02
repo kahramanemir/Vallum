@@ -5,6 +5,37 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.16]
+
+### Fixed
+- **Credential-read bypass via the reader allowlist.** `read_sensitive_creds`
+  matched a fixed list of reader commands, so `cat ~/.ssh/id_rsa` asked while
+  `sort`, `nl`, `od`, `cut`, `tac`, `awk`, `cp`, `tar`, `dd`, `gzip` and `gpg`
+  printed or copied the same private key with no prompt. The axis is now
+  inverted: the rule fires on the protected **path**, and only metadata-only
+  commands are exempt (`ls`, `stat`, `file`, `du`, `df`, `chmod`, `chown`,
+  `touch`, `mkdir`, `ssh`, `sftp`, `ssh-add`, `ssh-keygen`). The path family is
+  narrow and stable; the set of tools that can dump a file is not.
+
+- **`rm -rf` bypass via relative traversal.** `rm_rf_root` required a literal
+  `/`, `~`, `$HOME`, or a named system path, so `rm -rf ../../../../../../..`,
+  `rm -rf ../*`, and `cd / && rm -rf *` all ran unasked. Pure-traversal
+  targets, parent-directory globs, and `cd`-rooted chains now match.
+  `rm -rf ../build` and a bare `rm -rf *` stay `Allow`.
+
+### Changed
+- `read_sensitive_creds` is now a **touches** rule rather than a read rule, so
+  credential *planting* also asks (`cp /tmp/evil ~/.ssh/id_rsa` — a real attack
+  that had no `write_*` rule of its own). Cost: one prompt on a legitimate
+  `cp template ~/.aws/credentials` setup line.
+- `read_sensitive_creds` is now evaluated **after** the egress rules, so
+  exfiltration lines keep their more specific `egress_sensitive_file`
+  attribution.
+- `PolicyRule` gained an optional Rust-side guard, used where a rule's danger
+  depends on *which command* names a path — the `regex` crate has no
+  lookaround, so "a credential path appears AND the command is not `ls`" cannot
+  be expressed as a pattern alone.
+
 ## [0.8.15]
 
 ### Added
@@ -620,7 +651,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MVP: execute a command through the proxy, truncate, scrub secrets, and audit.
 
-[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.8.15...HEAD
+[Unreleased]: https://github.com/kahramanemir/Vallum/compare/v0.8.16...HEAD
+[0.8.16]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.16
 [0.8.15]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.15
 [0.8.14]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.14
 [0.8.13]: https://github.com/kahramanemir/Vallum/releases/tag/v0.8.13
