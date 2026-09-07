@@ -144,3 +144,25 @@ rm -fr ../../*
 cd / && rm -rf *
 cd /etc; rm -rf *
 cd ~ && rm -rf *
+# Archiving or bulk-copying a credential DIRECTORY wholesale, with no network
+# sink on the line (archive_sensitive_dir). This is the silent first half of a
+# two-step exfil: neither the archive nor the later upload of the archive
+# names a sensitive path.
+tar czf loot.tgz ~/.ssh
+tar -czf /tmp/keys.tar.gz ~/.ssh/
+cp -r ~/.ssh /tmp/loot
+cp -a ~/.aws /tmp/loot
+cp -R ~/.gnupg /tmp/loot
+rsync -a ~/.ssh/ /tmp/loot/
+rsync --archive ~/.aws /tmp/loot
+zip -r loot.zip ~/.aws
+7z a loot.7z ~/.gnupg
+tar czf backup.tgz ~/.config/gh
+tar czf ctx.tgz ~/.docker
+cpio -o < ~/.ssh
+ditto ~/.ssh /tmp/loot
+cd /tmp && tar czf loot.tgz ~/.ssh
+sudo tar czf /tmp/loot.tgz ~/.ssh
+tar czf loot.tgz $HOME/.ssh
+tar czf loot.tgz ~
+cp -r $HOME /tmp/loot

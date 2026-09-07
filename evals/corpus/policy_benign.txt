@@ -150,3 +150,16 @@ rm -rf ../build
 rm -rf ../../vendor/cache
 cd /tmp && rm -rf *
 cd ~/project && rm -rf build
+# Naming a credential directory without bulk-copying it out of it.
+cd ~/.ssh
+ls -R ~/.ssh
+find ~/.ssh -name "*.pub"
+du -sh ~/.aws
+cp ~/.ssh/config /tmp/sshconfig
+rsync ~/.ssh/config /tmp/sshconfig
+git commit -m "backup: tar czf x ~/.ssh"
+tar czf src.tgz src/
+tar czf release.tgz dist
+cp -r ./build /tmp/out
+rsync -a ./build/ /tmp/out/
+zip -r site.zip public

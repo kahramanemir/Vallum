@@ -127,6 +127,21 @@ pub(crate) fn sensitive_dir_re() -> &'static str {
     )
 }
 
+/// Targets whose wholesale archiving or recursive copying is an `Ask`:
+/// every [`sensitive_dir_re`] directory, plus the home directory itself.
+///
+/// Bare `~` / `$HOME` is here because it is the first bypass of any rule
+/// built on the directory list — `tar czf loot.tgz ~` carries `.ssh` off
+/// without naming it. Only a WHOLE argument counts; [`anchored`]'s trailing
+/// boundary rejects `~/Downloads`, so ordinary home-relative archiving is
+/// untouched.
+///
+/// Composed rather than `concat!`ed so the directory list stays written once.
+/// Same `(?i)` contract as [`hard_re`].
+pub(crate) fn bulk_target_re() -> String {
+    format!(r"{dirs}|~|\$HOME|\$\{{HOME\}}", dirs = sensitive_dir_re())
+}
+
 /// True when `path` is inside `dir`. Both are expected already normalized and
 /// ASCII-lowercased by the caller.
 pub(crate) fn under(path: &str, dir: &str) -> bool {
