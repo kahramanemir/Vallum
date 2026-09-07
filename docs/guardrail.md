@@ -33,7 +33,7 @@ interpreters).
 
 ## Built-in rules
 
-The 28 built-in rules (all default to `Ask`):
+The 29 built-in rules (all default to `Ask`):
 
 | Rule | Catches |
 |---|---|
@@ -46,6 +46,7 @@ The 28 built-in rules (all default to `Ask`):
 | `fork_bomb` | Classic `:(){ :\|:& };:` fork bomb |
 | `chmod_777_recursive` | Recursively granting world-writable permissions |
 | `read_sensitive_creds` | Any command that names a private key (`~/.ssh/id_*`), `~/.aws/credentials`, `~/.netrc`, `~/.git-credentials`, `/proc/*/environ`, an agent OAuth token (`~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.gemini/oauth_creds.json`), the `gh` CLI token, `~/.gnupg/*`, `/etc/shadow`, or Vallum's `approval.secret` — not just `cat`/`less`, but anything that can dump, copy, or overwrite it (`sort`, `nl`, `od`, `awk`, `cp`, `tar`, `dd`, `gpg`, …). Metadata-only commands are exempt: `ls`, `stat`, `file`, `du`, `df`, `chmod`, `chown`, `touch`, `mkdir`, `ssh`, `sftp`, `ssh-add`, `ssh-keygen` |
+| `archive_sensitive_dir` | Archiving or recursively copying a credential **directory** wholesale, with no network sink on the line (`tar czf loot.tgz ~/.ssh`, `cp -r ~/.aws /tmp`, `rsync -a ~/.gnupg dst/`, `zip -r x.zip ~/.config/gh`). Covers `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`, `~/.config/gh`, and the home directory itself (`tar czf loot.tgz ~`). The **verb** is the signal, not the path: archivers (`tar`, `zip`, `7z`, `cpio`, `pax`, `ditto`, `rclone`) always count, `cp`/`rsync` only with a recursive flag (`-r`, `-R`, `-a`, `--recursive`, `--archive`). Naming the directory stays allowed — `cd ~/.ssh`, `ls -R ~/.ssh`, `find ~/.ssh`, `du -sh ~/.aws`, `cp ~/.ssh/config /tmp/` |
 | `git_push_force` | Force-push that can overwrite remote history |
 | `find_delete_root` | `find -delete` rooted at a root/home/system path |
 | `shred_sensitive` | Shredding a key, credential, or system password file |

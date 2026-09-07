@@ -5,6 +5,33 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`archive_sensitive_dir` — credential directories carried off wholesale.**
+  `tar czf loot.tgz ~/.ssh`, `cp -r ~/.aws /tmp/loot` and `rsync -a ~/.gnupg
+  dst/` were `ALLOW`: `read_sensitive_creds` matches credential *files*, and
+  `egress_sensitive_file` needs a network sink on the same line, so a staged
+  exfil was silent at **both** steps — the archive names a directory and no
+  sensitive file, and the later upload of `/tmp/loot.tgz` names nothing
+  sensitive at all. This was the one case the 2026-07-24 two-step-exfil
+  carve-out did not actually cover: its premise was that step one already
+  asks, which held for the file form but not the directory form.
+
+  The new rule inverts the axis a second time. `read_sensitive_creds` makes
+  the *path* the signal because any tool can dump a key; here a bare
+  credential directory name is ordinary (`cd ~/.ssh`, `ls -R ~/.aws`,
+  `chmod 700 ~/.gnupg`), so the **verb** is the signal. Archivers (`tar`,
+  `gtar`, `bsdtar`, `zip`, `7z`, `cpio`, `pax`, `ditto`, `rclone`) count on
+  their own; `cp` and `rsync` count only with a recursive flag, which is what
+  keeps `cp ~/.ssh/config /tmp/` quiet. The home directory itself is included
+  (`tar czf loot.tgz ~`, `cp -r $HOME /tmp`) — it is the rule's own first
+  bypass — while `~/Downloads` and `$HOME/projects` are untouched.
+
+  The two-tier read/send split from 0.8.14 is unchanged: `~/.kube` and
+  `~/.docker` are still `ALLOW` to read locally. Like the other credential
+  rules, approvals for this one are never cached.
+
 ## [0.8.16]
 
 ### Fixed
